@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'teams' %}
+{% include "_ops_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">الفرق الميدانية</h2>
+      <div class="meta">إدارة فرق الطوارئ بمكتب خريص</div>
+    </div>
+  </div>
+
+  <form method="post" class="form-grid">
+    <input type="hidden" name="action" value="add">
+    <div class="field"><label>الفرقة</label><input name="name" required></div>
+    <div class="field"><label>قائد الفرقة</label><input name="leader"></div>
+    <div class="field"><label>عدد الفنيين</label><input type="number" name="technicians" value="4"></div>
+    <div class="field"><label>السائق</label><input name="driver"></div>
+    <div class="field"><label>السيارة</label><input name="vehicle"></div>
+    <div class="field"><label>المنطقة</label><input name="area" value="خريص"></div>
+    <div class="field">
+      <label>الحالة</label>
+      <select name="status">
+        <option>نشطة</option><option>متوقفة</option><option>صيانة</option>
+      </select>
+    </div>
+    <div class="field"><label>ملاحظات</label><input name="notes"></div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">إضافة فرقة</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>الفرقة</th><th>القائد</th><th>الفنيين</th><th>السائق</th><th>السيارة</th><th>المنطقة</th><th>الحالة</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for t in rows %}
+        <tr>
+          <td>{{ t.name }}</td><td>{{ t.leader or '—' }}</td><td>{{ t.technicians or 0 }}</td>
+          <td>{{ t.driver or '—' }}</td><td>{{ t.vehicle or '—' }}</td><td>{{ t.area or '—' }}</td>
+          <td><span class="badge ok">{{ t.status or '—' }}</span></td>
+          <td>
+            <form method="post" onsubmit="return confirm('حذف الفرقة؟');">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="id" value="{{ t.id }}">
+              <button class="btn danger" type="submit">حذف</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8">لا توجد فرق</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

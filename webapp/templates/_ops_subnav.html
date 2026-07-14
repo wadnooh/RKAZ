@@ -1,0 +1,15 @@
+{# شريط فرعي داخل العمليات والصيانة — محتوى ملف ركاز #}
+<div class="toolbar" style="margin-bottom:12px;">
+  <div class="actions" data-tab-strip="1" data-tab-strip-key="ops_rakaz_tabs">
+    <a class="btn ghost{% if active=='ops' %} primary{% endif %}" href="{{ url_for('ops_home') }}">لوحة العمليات</a>
+    <a class="btn ghost{% if active=='tickets' %} primary{% endif %}" href="{{ url_for('tickets_list') }}">بلاغات الأعمال</a>
+    <a class="btn ghost{% if active=='quantities' %} primary{% endif %}" href="{{ url_for('module_list', name='quantities') }}">الكميات</a>
+    <a class="btn ghost{% if active=='photos' %} primary{% endif %}" href="{{ url_for('module_list', name='photos') }}">قائمة الصور</a>
+    <a class="btn ghost{% if active=='metering' %} primary{% endif %}" href="{{ url_for('module_list', name='metering') }}">التمتير</a>
+    <a class="btn ghost{% if active=='invoices' %} primary{% endif %}" href="{{ url_for('module_list', name='invoices') }}">المستخلصات و SAP</a>
+    <a class="btn ghost{% if active=='cashflow' %} primary{% endif %}" href="{{ url_for('cashflow') }}">التدفق النقدي</a>
+    <a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">فرق المهام العاجلة</a>
+    <a class="btn ghost{% if active=='sop' %} primary{% endif %}" href="{{ url_for('sop_page') }}">إجراءات العمل</a>
+    <a class="btn ghost{% if active=='lists' %} primary{% endif %}" href="{{ url_for('lists_page') }}">القوائم</a>
+  </div>
+</div>

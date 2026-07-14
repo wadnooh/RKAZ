@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'tickets' %}
+{% include "_ops_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">معاملات البلاغات</h2>
+      <div class="meta">متابعة بلاغات الطوارئ — عرض / تعديل / طباعة تقرير المعاملة</div>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ بلاغ جديد</a>
+      <a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
+      <a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>
+    </div>
+  </div>
+
+  <form method="get" class="actions" style="margin-bottom:12px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="بحث برقم البلاغ / الحي / العطل..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+      <option value="">كل الحالات</option>
+      {% for s in lists.execution_status %}
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn ghost" type="submit">بحث</button>
+    <a class="btn ghost" href="{{ url_for('tickets_list') }}">مسح</a>
+  </form>
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>رقم البلاغ</th>
+          <th>التاريخ</th>
+          <th>الحي</th>
+          <th>المحطة</th>
+          <th>العطل</th>
+          <th>التصنيف</th>
+          <th>الفرقة</th>
+          <th>الحالة</th>
+          <th>الاستجابة (د)</th>
+          <th>القيمة النهائية</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in rows %}
+        <tr>
+          <td><strong>{{ t.ticket_no }}</strong></td>
+          <td>{{ t.receive_date or '—' }}</td>
+          <td>{{ t.district or '—' }}</td>
+          <td>{{ t.station_no or '—' }}</td>
+          <td>{{ t.fault_type or '—' }}</td>
+          <td>{{ t.classification or '—' }}</td>
+          <td>{{ t.team or '—' }}</td>
+          <td>
+            {% if t.status in ['منفذ','مغلق'] %}
+            <span class="badge ok">{{ t.status }}</span>
+            {% elif t.status in ['مرفوض/إعادة عمل'] %}
+            <span class="badge danger">{{ t.status }}</span>
+            {% elif t.status in ['قيد التنفيذ','تم التوجيه'] %}
+            <span class="badge warn">{{ t.status }}</span>
+            {% else %}
+            <span class="badge info">{{ t.status or '—' }}</span>
+            {% endif %}
+          </td>
+          <td>{{ t.response_min if t.response_min is not none else '—' }}</td>
+          <td>{{ t.final_value|money if t.final_value is not none else '—' }}</td>
+          <td class="actions">
+            <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">عرض</a>
+            <a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=t.ticket_no) }}">مراجعة</a>
+            <a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=t.id) }}">تعديل</a>
+            <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=t.id) }}" target="_blank">طباعة</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11">لا توجد بلاغات</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

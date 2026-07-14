@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'ops' %}
+{% include "_ops_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">العمليات والصيانة</h2>
+      <div class="meta ui-hint">لوحة تقرير عامة للعمليات. بلاغات الطوارئ التفصيلية تظهر داخل التبويبات التخصصية (محتوى ملف ركاز).</div>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ معاملة بلاغ جديدة</a>
+      <a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة{% if alert_summary %} ({{ alert_summary.total }}){% endif %}</a>
+      <button type="button" class="btn ghost" data-open-jump>قفز سريع</button>
+      <a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>
+    </div>
+  </div>
+
+  <div class="actions" style="margin-bottom:14px;" data-tab-strip="1">
+    {% for item in links %}
+    <a class="btn ghost" href="{{ item.href }}">{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
+    {% endfor %}
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card"><div>إجمالي البلاغات</div><strong>{{ stats.total }}</strong></div>
+    <div class="stat-card"><div>بلاغات منفذة</div><strong>{{ stats.done }}</strong></div>
+    <div class="stat-card"><div>بلاغات مغلقة</div><strong>{{ stats.closed }}</strong></div>
+    <div class="stat-card"><div>متأخرة استجابة</div><strong>{{ stats.delayed }}</strong></div>
+    <div class="stat-card"><div>صور ناقصة</div><strong>{{ stats.photos_incomplete }}</strong></div>
+    <div class="stat-card"><div>تمتير معتمد</div><strong>{{ stats.metering_approved }}</strong></div>
+    <div class="stat-card"><div>فواتير مرفوعة SAP</div><strong>{{ stats.sap_raised }}</strong></div>
+    <div class="stat-card"><div>قيمة البلاغات</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>
+    <div class="stat-card"><div>إجمالي المستخلصات</div><strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong></div>
+    <div class="stat-card"><div>المبالغ المحصلة</div><strong style="font-size:1.05rem">{{ stats.collected|money }}</strong></div>
+    <div class="stat-card"><div>المتبقي غير محصل</div><strong style="font-size:1.05rem">{{ stats.remaining|money }}</strong></div>
+    <div class="stat-card"><div>السيولة المطلوبة</div><strong style="font-size:1.05rem">{{ stats.liquidity|money }}</strong></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <h3 class="section-title" style="font-size:1.05rem;margin:0;">تبويبات العمليات</h3>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>القسم</th><th>المعاملات</th><th>إجراءات</th></tr>
+      </thead>
+      <tbody>
+        {% for item in links %}
+        <tr>
+          <td>{{ item.label }}</td>
+          <td>{{ item.count if item.count is defined else '—' }}</td>
+          <td class="actions"><a class="btn ghost" href="{{ item.href }}">فتح</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

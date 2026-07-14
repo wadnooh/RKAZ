@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'lists' %}
+{% include "_ops_subnav.html" %}
+{% set labels = {
+  'execution_status':'حالة التنفيذ',
+  'photo_status':'حالة الصور',
+  'coordination_status':'حالة التنسيقات',
+  'metering_status':'حالة التمتير',
+  'invoice_status':'حالة المستخلص',
+  'sap_status':'حالة SAP',
+  'ticket_class':'تصنيف البلاغ',
+  'teams':'الفرق',
+  'agents':'المندوبين',
+  'coordination_officers':'مسؤولي التنسيقات',
+  'invoice_officers':'مسؤولي المستخلصات',
+  'consultants':'الاستشاري',
+  'yes_no':'نعم / لا',
+  'construction_types':'أنواع أعمال الإنشاءات',
+  'clearance_status':'حالة الإخلاء',
+  'inspect_result':'نتيجة الفحص',
+  'permit_status':'حالة التصريح',
+  'incident_types':'أنواع حوادث السلامة',
+  'severity_levels':'مستويات الخطورة',
+  'warehouse_categories':'تصنيفات المستودع',
+  'warehouse_tx_types':'أنواع حركة المستودع',
+  'purchase_status':'حالة الشراء',
+  'custody_status':'حالة العهدة',
+  'vehicle_status':'حالة السيارة',
+  'equipment_status':'حالة المعدة',
+  'contract_status':'حالة العقد',
+  'user_roles':'أدوار المستخدمين'
+} %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">القوائم المرجعية</h2>
+      <div class="meta">قيم القوائم المنسدلة لكل أقسام النظام</div>
+    </div>
+  </div>
+  <form method="post">
+    <div class="stats-grid" style="grid-template-columns:repeat(2,minmax(0,1fr));">
+      {% for key, title in labels.items() %}
+      <div class="field">
+        <label>{{ title }}</label>
+        <textarea name="{{ key }}" rows="5">{% for x in lists_data.get(key, []) %}{{ x }}
+{% endfor %}</textarea>
+        <div class="meta">سطر لكل قيمة</div>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="actions" style="margin-top:12px;">
+      <button class="btn primary" type="submit">حفظ القوائم</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,15 @@
+{% if section and section_modules %}
+<div class="toolbar" style="margin-bottom:12px;">
+  <div class="actions" data-tab-strip="1">
+    {% if section_meta %}
+    <a class="btn ghost" href="{{ url_for(section_meta.home) }}">{{ section_meta.title }}</a>
+    {% endif %}
+    {% for key, mod in section_modules %}
+    <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>
+    {% endfor %}
+    {% if section == 'warehouses' %}
+    <a class="btn ghost{% if request.path.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>
+    {% endif %}
+  </div>
+</div>
+{% endif %}

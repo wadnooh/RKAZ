@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'cashflow' %}
+{% include "_ops_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">التدفق النقدي</h2>
+      <div class="meta">نموذج 12 شهراً حسب إعدادات المكتب (مثل ورقة CashFlow في ملف ركاز)</div>
+    </div>
+  </div>
+
+  <form method="post">
+    <div class="form-grid">
+      {% for r in rows %}
+      <div class="field">
+        <label>{{ r.month }} — تحصيل فعلي</label>
+        <input type="number" step="0.01" name="m{{ r.index }}" value="{{ r.raw if r.raw is not none else '' }}" placeholder="اتركه فارغاً للنموذج التقديري">
+      </div>
+      {% endfor %}
+    </div>
+    <div class="actions" style="margin-top:12px;">
+      <button class="btn primary" type="submit">حفظ التحصيل</button>
+    </div>
+  </form>
+  <p class="meta" style="margin-top:12px;">
+    الإيراد الشهري التقديري =
+    {{ (settings.teams_count * settings.daily_tickets * settings.work_days * settings.target_avg)|money }}
+    | المصاريف = {{ settings.monthly_expenses|money }}
+    | تأخير أول تدفق = {{ settings.cash_delay_months }} شهور
+  </p>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>الشهر</th><th>إيرادات معتمدة</th><th>تحصيل فعلي</th><th>مصاريف</th>
+          <th>صافي التدفق</th><th>التراكمي</th><th>حالة السيولة</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.month }}</td>
+          <td>{{ r.approved|money }}</td>
+          <td>{{ r.collection|money }}</td>
+          <td>{{ r.expenses|money }}</td>
+          <td>{{ r.net|money }}</td>
+          <td>{{ r.cumulative|money }}</td>
+          <td>
+            {% if r.status == 'آمن' %}<span class="badge ok">آمن</span>
+            {% else %}<span class="badge danger">يحتاج تمويل</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

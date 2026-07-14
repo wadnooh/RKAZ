@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'sop' %}
+{% include "_ops_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">إجراءات العمل (SOP)</h2>
+      <div class="meta">مراحل دورة البلاغ من الاستلام حتى رفع SAP</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>المرحلة</th><th>المسؤول</th><th>المدخلات</th><th>المخرجات</th><th>الزمن المستهدف</th><th>دليل الإثبات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in rows %}
+        <tr>
+          <td><strong>{{ s.stage }}</strong></td>
+          <td>{{ s.owner }}</td>
+          <td style="white-space:normal;max-width:220px">{{ s.inputs }}</td>
+          <td style="white-space:normal;max-width:220px">{{ s.outputs }}</td>
+          <td>{{ s.duration }}</td>
+          <td style="white-space:normal;max-width:220px">{{ s.evidence }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'tickets' %}
+{% include "_ops_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{% if mode=='new' %}معاملة بلاغ جديدة{% else %}تعديل معاملة بلاغ{% endif %}</h2>
+      <div class="meta">إدخال بيانات البلاغ بنفس حقول ملف ركاز</div>
+    </div>
+    <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
+  </div>
+
+  <form method="post" class="form-grid">
+    <div class="field"><label>رقم البلاغ</label><input name="ticket_no" value="{{ row.ticket_no or '' }}" required></div>
+    <div class="field"><label>تاريخ الاستلام</label><input type="date" name="receive_date" value="{{ row.receive_date or '' }}"></div>
+    <div class="field"><label>وقت الاستلام</label><input type="time" name="receive_time" value="{{ row.receive_time or '' }}"></div>
+    <div class="field"><label>الحي</label><input name="district" value="{{ row.district or '' }}"></div>
+    <div class="field">
+      <label>المندوب</label>
+      <select name="agent">
+        <option value="">—</option>
+        {% for x in lists.agents %}<option value="{{ x }}" {% if row.agent==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>رقم المحطة</label><input name="station_no" value="{{ row.station_no or '' }}"></div>
+    <div class="field"><label>رقم الفيدر</label><input name="feeder_no" value="{{ row.feeder_no or '' }}"></div>
+    <div class="field full"><label>الموقع (رابط خرائط)</label><input name="location" value="{{ row.location or '' }}"></div>
+    <div class="field"><label>نوع العطل</label><input name="fault_type" value="{{ row.fault_type or '' }}"></div>
+    <div class="field">
+      <label>تصنيف البلاغ</label>
+      <select name="classification">
+        <option value="">—</option>
+        {% for x in lists.ticket_class %}<option value="{{ x }}" {% if row.classification==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>الفرقة</label>
+      <select name="team">
+        <option value="">—</option>
+        {% for x in lists.teams %}<option value="{{ x }}" {% if row.team==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>وقت التوجيه</label><input type="time" name="dispatch_time" value="{{ row.dispatch_time or '' }}"></div>
+    <div class="field"><label>وقت الوصول</label><input type="time" name="arrival_time" value="{{ row.arrival_time or '' }}"></div>
+    <div class="field">
+      <label>حالة التنفيذ</label>
+      <select name="status">
+        {% for x in lists.execution_status %}<option value="{{ x }}" {% if row.status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>تاريخ التنفيذ</label><input type="date" name="execution_date" value="{{ row.execution_date or '' }}"></div>
+    <div class="field">
+      <label>تم التصوير</label>
+      <select name="photographed"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if row.photographed==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="field">
+      <label>الكميات مكتملة</label>
+      <select name="quantities_done"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if row.quantities_done==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="field">
+      <label>إخلاء الأسفلت</label>
+      <select name="asphalt_clearance"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if row.asphalt_clearance==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="field">
+      <label>حالة التمتير</label>
+      <select name="metering_status"><option value="">—</option>{% for x in lists.metering_status %}<option value="{{ x }}" {% if row.metering_status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="field">
+      <label>اعتماد الاستشاري</label>
+      <select name="consultant_approval">
+        <option value="">—</option>
+        {% for x in ['معتمد','مرفوض','بانتظار'] %}<option value="{{ x }}" {% if row.consultant_approval==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>حالة المستخلص</label>
+      <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if row.invoice_status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label>أمر العمل</label><input name="work_order" value="{{ row.work_order or '' }}"></div>
+    <div class="field"><label>رقم الفاتورة</label><input name="invoice_no" value="{{ row.invoice_no or '' }}"></div>
+    <div class="field">
+      <label>حالة SAP</label>
+      <select name="sap_status"><option value="">—</option>{% for x in lists.sap_status %}<option value="{{ x }}" {% if row.sap_status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+    </div>
+    <div class="field"><label>قيمة البنود</label><input type="number" step="0.01" name="items_value" value="{{ row.items_value if row.items_value is not none else '' }}"></div>
+    <div class="field full"><label>ملاحظات</label><textarea name="notes">{{ row.notes or '' }}</textarea></div>
+    <div class="actions full" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">حفظ المعاملة</button>
+      <a class="btn ghost" href="{{ url_for('tickets_list') }}">إلغاء</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

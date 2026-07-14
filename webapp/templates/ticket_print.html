@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>تقرير بلاغ {{ ticket.ticket_no }}</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: Tahoma, Arial, sans-serif;
+      margin: 0;
+      color: #16344f;
+      background: #eef3f9;
+    }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 22px; }
+    .printbar { display:flex; justify-content:flex-end; gap:10px; margin-bottom:14px; }
+    .btn {
+      border:1px solid #2f5f93; background:#fff; color:#123f69;
+      padding:9px 14px; border-radius:10px; cursor:pointer; font-weight:700;
+      text-decoration:none; display:inline-flex; align-items:center;
+    }
+    .btn.primary { background:linear-gradient(135deg,#1e6ecf,#13539d); color:#fff; border-color:#13539d; }
+    .sheet {
+      background:#fff; border:1px solid #d7e4f1; border-radius:22px; overflow:hidden;
+      box-shadow:0 18px 40px rgba(16,61,103,.08);
+    }
+    .hero {
+      display:grid; grid-template-columns:150px 1fr 150px; gap:14px; align-items:center;
+      padding:22px 24px; background:linear-gradient(135deg,#0f4f86 0%,#1d74bf 55%,#2f8fd8 100%); color:#fff;
+    }
+    .hero img {
+      width:132px; height:54px; object-fit:contain; background:rgba(255,255,255,.92);
+      border-radius:12px; padding:6px;
+    }
+    .hero .left { justify-self:start; }
+    .hero .right { justify-self:end; }
+    .hero h1 { margin:0; font-size:26px; font-weight:900; text-align:center; }
+    .hero .company { margin-top:6px; text-align:center; font-size:14px; font-weight:700; opacity:.95; }
+    .hero .subtitle { margin-top:8px; text-align:center; font-size:13px; opacity:.9; }
+    .section { padding:20px 24px; border-top:1px solid #e5edf6; }
+    .section h2 {
+      margin:0 0 12px; font-size:18px; color:#123f69; display:flex; align-items:center; gap:8px;
+    }
+    .section h2::before {
+      content:""; width:8px; height:22px; border-radius:999px;
+      background:linear-gradient(180deg,#1d74bf,#67b0ff); display:inline-block;
+    }
+    .meta-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+    .meta-item { background:#f7fbff; border:1px solid #d7e4f1; border-radius:12px; padding:10px 12px; }
+    .meta-item .k { color:#5f748a; font-size:12px; font-weight:700; }
+    .meta-item .v { margin-top:4px; font-weight:800; color:#123f69; word-break:break-word; }
+    table { width:100%; border-collapse:collapse; }
+    th, td { border:1px solid #d7e4f1; padding:8px 10px; text-align:right; font-size:13px; }
+    th { background:#f3f8ff; color:#3d5f82; }
+    .footer {
+      display:flex; justify-content:space-between; gap:12px; flex-wrap:wrap;
+      padding:16px 24px; border-top:1px solid #e5edf6; color:#5f748a; font-size:12px;
+    }
+    @media print {
+      body { background:#fff; }
+      .printbar { display:none; }
+      .sheet { box-shadow:none; border:none; border-radius:0; }
+      .wrap { padding:0; max-width:none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="printbar">
+      <button class="btn primary" onclick="window.print()">طباعة / PDF</button>
+      <a class="btn" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">رجوع</a>
+    </div>
+
+    <div class="sheet">
+      <div class="hero">
+        <img class="left" src="{{ logo_rekaz }}" alt="شركة ركاز الإنجاز للمقاولات">
+        <div>
+          <h1>عرض المعاملة — بلاغ أعمال</h1>
+          <div class="company">{{ settings.company_name or 'شركة ركاز الإنجاز للمقاولات' }}</div>
+          <div class="subtitle">{{ settings.office_name }} | تقرير تشغيلي</div>
+        </div>
+        <img class="right" src="{{ logo_sec }}" alt="SEC">
+      </div>
+
+      <div class="section">
+        <h2>بيانات البلاغ</h2>
+        <div class="meta-grid">
+          <div class="meta-item"><div class="k">رقم البلاغ</div><div class="v">{{ ticket.ticket_no }}</div></div>
+          <div class="meta-item"><div class="k">تاريخ الاستلام</div><div class="v">{{ ticket.receive_date or '—' }}</div></div>
+          <div class="meta-item"><div class="k">وقت الاستلام</div><div class="v">{{ ticket.receive_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">الحي</div><div class="v">{{ ticket.district or '—' }}</div></div>
+          <div class="meta-item"><div class="k">رقم المحطة</div><div class="v">{{ ticket.station_no or '—' }}</div></div>
+          <div class="meta-item"><div class="k">رقم الفيدر</div><div class="v">{{ ticket.feeder_no or '—' }}</div></div>
+          <div class="meta-item"><div class="k">المندوب</div><div class="v">{{ ticket.agent or '—' }}</div></div>
+          <div class="meta-item"><div class="k">الفرقة</div><div class="v">{{ ticket.team or '—' }}</div></div>
+          <div class="meta-item"><div class="k">حالة التنفيذ</div><div class="v">{{ ticket.status or '—' }}</div></div>
+          <div class="meta-item"><div class="k">نوع العطل</div><div class="v">{{ ticket.fault_type or '—' }}</div></div>
+          <div class="meta-item"><div class="k">التصنيف</div><div class="v">{{ ticket.classification or '—' }}</div></div>
+          <div class="meta-item"><div class="k">زمن الاستجابة</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
+          <div class="meta-item"><div class="k">وقت التوجيه</div><div class="v">{{ ticket.dispatch_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">وقت الوصول</div><div class="v">{{ ticket.arrival_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">القيمة النهائية</div><div class="v">{% if ticket.final_value is not none %}{{ '%.2f'|format(ticket.final_value) }} ر.س{% else %}—{% endif %}</div></div>
+          <div class="meta-item" style="grid-column:1/-1"><div class="k">الموقع</div><div class="v">{{ ticket.location or '—' }}</div></div>
+          <div class="meta-item" style="grid-column:1/-1"><div class="k">ملاحظات</div><div class="v">{{ ticket.notes or '—' }}</div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <h2>الكميات</h2>
+        <table>
+          <thead>
+            <tr><th>#</th><th>رقم البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr>
+          </thead>
+          <tbody>
+            {% for q in quantities %}
+            <tr>
+              <td>{{ loop.index }}</td>
+              <td>{{ q.item_no or '—' }}</td>
+              <td>{{ q.description or '—' }}</td>
+              <td>{{ q.unit or '—' }}</td>
+              <td>{{ q.qty or 0 }}</td>
+              <td>{{ '%.2f'|format(q.unit_price or 0) }}</td>
+              <td>{{ '%.2f'|format(q.total or 0) }}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">لا توجد بنود كميات</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>قائمة الصور / التنسيقات / التمتير</h2>
+        <div class="meta-grid">
+          <div class="meta-item"><div class="k">سجلات الصور</div><div class="v">{{ photos|length }}</div></div>
+          <div class="meta-item"><div class="k">سجلات التنسيق</div><div class="v">{{ coordination|length }}</div></div>
+          <div class="meta-item"><div class="k">سجلات التمتير</div><div class="v">{{ metering|length }}</div></div>
+        </div>
+      </div>
+
+      <div class="footer">
+        <div>استخرج بواسطة: {{ session.get('full_name', 'مستخدم المكتب') }}</div>
+        <div>وقت الاستخراج: {{ printed_at }}</div>
+        <div>{{ settings.company_name }}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

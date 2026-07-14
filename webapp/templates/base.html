@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ 'rtl' if lang == 'ar' else 'ltr' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ app_title }}</title>
+  <link rel="icon" type="image/png" href="{{ logo_rekaz }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+</head>
+<body>
+  <div class="app-watermark" aria-hidden="true">
+    <img src="{{ logo_rekaz }}" alt="">
+  </div>
+
+  <header class="topbar">
+    <div class="topbar-main">
+      <img src="{{ logo_rekaz }}" alt="شركة ركاز الإنجاز للمقاولات" class="brand-logo edge-logo edge-left brand-logo-rekaz">
+      <div class="brand">
+        {{ app_title }}
+        <small>{{ settings.company_name or 'شركة ركاز الإنجاز للمقاولات' }} — {{ settings.office_name or 'مكتب خدمات خريص' }}</small>
+      </div>
+      <img src="{{ logo_sec }}" alt="SEC" class="brand-logo edge-logo edge-right">
+    </div>
+    <div class="topbar-sub">
+      <div class="lang-switch">
+        <a href="{{ url_for('set_lang', lang='ar') }}" class="{% if lang=='ar' %}active{% endif %}">AR</a>
+        <span>/</span>
+        <a href="{{ url_for('set_lang', lang='en') }}" class="{% if lang=='en' %}active{% endif %}">EN</a>
+        {% if session.get('user_id') and not is_login_page %}
+        <span>|</span>
+        <a href="{{ url_for('global_search') }}">{{ tr('search') }}</a>
+        <span>|</span>
+        <a href="#" data-open-jump>قفز سريع</a>
+        {% endif %}
+      </div>
+      {% if session.get('user_id') and not is_login_page %}
+      <div class="actions">
+        <a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
+        <span class="meta">{{ session.get('full_name', '') }} ({{ session.get('role', '') }})</span>
+        <a class="btn ghost" href="{{ url_for('logout') }}">{{ tr('logout') }}</a>
+      </div>
+      {% endif %}
+    </div>
+  </header>
+
+  {% if session.get('user_id') and not is_login_page %}
+  {% set p = request.path or '' %}
+  <nav class="tabs">
+    <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">الإنشاءات - التنفيذ</a>
+    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/module/invoices') or p.startswith('/cashflow') or p.startswith('/teams') or p.startswith('/sop') or p.startswith('/lists') %} active{% endif %}" href="{{ url_for('ops_home') }}">العمليات والصيانة</a>
+    <a class="tab{% if p.startswith('/review') %} active{% endif %}" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
+    <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') %} active{% endif %}" href="{{ url_for('quality_home') }}">التنسيقات والجودة</a>
+    <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">السلامة</a>
+    <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouses_home') }}">المستودعات</a>
+    <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">المشتريات الخارجية والعهد</a>
+    <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">الورشة (سيارات - معدات)</a>
+    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">إدارة العقود</a>
+    <a class="tab{% if p.startswith('/users') or p.startswith('/settings') %} active{% endif %}" href="{{ url_for('users_home') }}">المستخدمون</a>
+    <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">سجل النشاط</a>
+  </nav>
+
+  <button type="button" class="jump-fab" data-open-jump title="قفز سريع Ctrl+K">⌘</button>
+
+  <div class="jump-backdrop" id="jumpBackdrop" hidden>
+    <div class="jump-modal" role="dialog" aria-modal="true" aria-label="قفز سريع">
+      <div class="jump-head">
+        <strong>نافذة القفز السريع</strong>
+        <span class="meta">Ctrl + K للفتح — Esc للإغلاق</span>
+      </div>
+      <input type="search" id="jumpInput" class="jump-input" placeholder="ابحث عن صفحة أو قسم..." autocomplete="off">
+      <div class="jump-list" id="jumpList"></div>
+    </div>
+  </div>
+  {% endif %}
+
+  <main class="container">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        <div class="flash-list">
+          {% for category, message in messages %}
+            <div class="flash {{ category }}">{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="app-footer">
+    {{ tr('footer', year=current_year) }}
+  </footer>
+
+  {% if session.get('user_id') and not is_login_page %}
+  <script>
+  (function () {
+    var backdrop = document.getElementById("jumpBackdrop");
+    var input = document.getElementById("jumpInput");
+    var list = document.getElementById("jumpList");
+    var items = [];
+    var active = 0;
+    var loaded = false;
+
+    function openJump() {
+      if (!backdrop) return;
+      backdrop.hidden = false;
+      input.value = "";
+      active = 0;
+      ensureData().then(function () { render(""); input.focus(); });
+    }
+    function closeJump() {
+      if (!backdrop) return;
+      backdrop.hidden = true;
+    }
+    function ensureData() {
+      if (loaded) return Promise.resolve();
+      return fetch("{{ url_for('api_jump_destinations') }}")
+        .then(function (r) { return r.json(); })
+        .then(function (data) { items = data || []; loaded = true; });
+    }
+    function render(q) {
+      q = (q || "").trim().toLowerCase();
+      var filtered = items.filter(function (it) {
+        var hay = (it.title + " " + it.group + " " + (it.keywords || "")).toLowerCase();
+        return !q || hay.indexOf(q) !== -1;
+      });
+      if (!filtered.length) {
+        list.innerHTML = '<div class="jump-empty">لا توجد نتائج</div>';
+        return;
+      }
+      if (active >= filtered.length) active = 0;
+      list.innerHTML = filtered.map(function (it, idx) {
+        return '<a class="jump-item' + (idx === active ? ' active' : '') + '" href="' + it.path + '" data-idx="' + idx + '">' +
+          '<span class="jump-title">' + it.title + '</span>' +
+          '<span class="jump-group">' + it.group + '</span></a>';
+      }).join("");
+      list.querySelectorAll(".jump-item").forEach(function (el) {
+        el.addEventListener("mouseenter", function () {
+          active = Number(el.getAttribute("data-idx") || 0);
+          list.querySelectorAll(".jump-item").forEach(function (x) { x.classList.remove("active"); });
+          el.classList.add("active");
+        });
+      });
+    }
+
+    document.querySelectorAll("[data-open-jump]").forEach(function (btn) {
+      btn.addEventListener("click", function (e) {
+        e.preventDefault();
+        openJump();
+      });
+    });
+    document.addEventListener("keydown", function (e) {
+      var key = e.key;
+      if ((e.ctrlKey || e.metaKey) && (key === "k" || key === "K")) {
+        e.preventDefault();
+        if (backdrop.hidden) openJump(); else closeJump();
+        return;
+      }
+      if (backdrop.hidden) return;
+      if (key === "Escape") { closeJump(); return; }
+      var nodes = list.querySelectorAll(".jump-item");
+      if (key === "ArrowDown") {
+        e.preventDefault();
+        active = Math.min(active + 1, nodes.length - 1);
+        render(input.value);
+      } else if (key === "ArrowUp") {
+        e.preventDefault();
+        active = Math.max(active - 1, 0);
+        render(input.value);
+      } else if (key === "Enter") {
+        e.preventDefault();
+        var sel = list.querySelector(".jump-item.active");
+        if (sel) window.location.href = sel.getAttribute("href");
+      }
+    });
+    if (input) input.addEventListener("input", function () { active = 0; render(input.value); });
+    if (backdrop) backdrop.addEventListener("click", function (e) {
+      if (e.target === backdrop) closeJump();
+    });
+  })();
+  </script>
+  {% endif %}
+</body>
+</html>

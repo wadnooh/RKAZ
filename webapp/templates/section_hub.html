@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block content %}
+{% if section and section != 'ops' %}
+  {% set section_modules = section_modules if section_modules is defined else [] %}
+{% endif %}
+{% if section_modules is defined and section_modules %}
+  {% set name = '' %}
+  {% include "_section_subnav.html" %}
+{% endif %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ title }}</h2>
+      <div class="meta">{{ subtitle }}</div>
+    </div>
+  </div>
+
+  {% if links %}
+  <div class="actions" style="margin-bottom:14px;" data-tab-strip="1">
+    {% for item in links %}
+    <a class="btn ghost" href="{{ item.href }}">{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
+    {% endfor %}
+  </div>
+
+  <div class="stats-grid" style="margin-top:4px;">
+    <div class="stat-card">
+      <div>الأقسام الفرعية</div>
+      <strong>{{ links|length }}</strong>
+    </div>
+    <div class="stat-card">
+      <div>المعاملات / السجلات</div>
+      <strong>{{ total_count or 0 }}</strong>
+    </div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:14px;">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr>
+          <th>القسم</th>
+          <th>العدد</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in links %}
+        <tr>
+          <td>{{ item.label }}</td>
+          <td>{{ item.count if item.count is defined else '—' }}</td>
+          <td class="actions"><a class="btn ghost" href="{{ item.href }}">فتح</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="meta" style="padding:18px 0;">لا توجد أقسام فرعية حالياً.</div>
+  {% endif %}
+</div>
+{% endblock %}

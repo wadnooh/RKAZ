@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'tickets' %}
+{% include "_ops_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">عرض المعاملة — بلاغ {{ ticket.ticket_no }}</h2>
+      <div class="meta">رحلة البلاغ وربطها بالأقسام (كميات، صور، تنسيقات، تمتير، مستودع، سلامة)</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
+      <a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=ticket.ticket_no) }}">مراجعة شاملة</a>
+      <a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=ticket.id) }}">تعديل</a>
+      <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
+      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return confirm('حذف المعاملة؟');">
+        <button class="btn danger" type="submit">حذف</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item"><div class="k">رقم البلاغ</div><div class="v">{{ ticket.ticket_no }}</div></div>
+    <div class="meta-item"><div class="k">التاريخ / الوقت</div><div class="v">{{ ticket.receive_date or '—' }} — {{ ticket.receive_time or '—' }}</div></div>
+    <div class="meta-item"><div class="k">الحالة</div><div class="v">{{ ticket.status or '—' }}</div></div>
+    <div class="meta-item"><div class="k">الحي</div><div class="v">{{ ticket.district or '—' }}</div></div>
+    <div class="meta-item"><div class="k">المحطة / الفيدر</div><div class="v">{{ ticket.station_no or '—' }} / {{ ticket.feeder_no or '—' }}</div></div>
+    <div class="meta-item"><div class="k">المندوب</div><div class="v">{{ ticket.agent or '—' }}</div></div>
+    <div class="meta-item"><div class="k">نوع العطل</div><div class="v">{{ ticket.fault_type or '—' }}</div></div>
+    <div class="meta-item"><div class="k">التصنيف</div><div class="v">{{ ticket.classification or '—' }}</div></div>
+    <div class="meta-item"><div class="k">الفرقة</div><div class="v">{{ ticket.team or '—' }}</div></div>
+    <div class="meta-item"><div class="k">التوجيه / الوصول</div><div class="v">{{ ticket.dispatch_time or '—' }} / {{ ticket.arrival_time or '—' }}</div></div>
+    <div class="meta-item"><div class="k">زمن الاستجابة</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">القيمة النهائية</div><div class="v">{% if ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">الموقع</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">ملاحظات</div><div class="v">{{ ticket.notes or '—' }}</div></div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <h3 class="section-title" style="font-size:1.05rem;">السجلات المرتبطة</h3>
+  <div class="meta" style="margin:8px 0 12px;">
+    الكميات: {{ related.quantities|length }} |
+    الصور: {{ related.photos|length }} |
+    التنسيقات: {{ related.coordination|length }} |
+    التمتير: {{ related.metering|length }}
+  </div>
+  <div class="actions">
+    <a class="btn ghost" href="{{ url_for('module_new', name='quantities', ticket_no=ticket.ticket_no) }}">+ كمية</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">+ صور</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">+ تنسيق</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">+ تمتير</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">+ مستخلص</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ حركة مستودع</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">+ تصريح سلامة</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">+ إخلاء أسفلت</a>
+  </div>
+</div>
+{% endblock %}

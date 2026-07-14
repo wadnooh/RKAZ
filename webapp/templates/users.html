@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="toolbar" style="margin-bottom:12px;">
+  <div class="actions">
+    <a class="btn primary" href="{{ url_for('users_list') }}">المستخدمون</a>
+    <a class="btn ghost" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>
+  </div>
+</div>
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">المستخدمون</h2>
+      <div class="meta">إدارة حسابات الدخول والأدوار</div>
+    </div>
+  </div>
+
+  <form method="post" class="form-grid">
+    <input type="hidden" name="action" value="add">
+    <div class="field"><label>اسم المستخدم</label><input name="username" required></div>
+    <div class="field"><label>الاسم الكامل</label><input name="full_name" required></div>
+    <div class="field">
+      <label>الدور</label>
+      <select name="role">
+        {% for x in lists.user_roles %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>كلمة المرور</label><input name="password" value="1234"></div>
+    <div class="field">
+      <label>نشط؟</label>
+      <select name="active"><option value="1">نعم</option><option value="0">لا</option></select>
+    </div>
+    <div class="field"><label>ملاحظات</label><input name="notes"></div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">إضافة مستخدم</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>ملاحظات</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for u in rows %}
+        <tr>
+          <td>{{ u.username }}</td>
+          <td>{{ u.full_name }}</td>
+          <td>{{ u.role }}</td>
+          <td>{% if u.active %}<span class="badge ok">نشط</span>{% else %}<span class="badge danger">موقوف</span>{% endif %}</td>
+          <td>{{ u.notes or '—' }}</td>
+          <td class="actions">
+            <form method="post">
+              <input type="hidden" name="action" value="toggle">
+              <input type="hidden" name="id" value="{{ u.id }}">
+              <button class="btn ghost" type="submit">تفعيل/إيقاف</button>
+            </form>
+            <form method="post" onsubmit="return confirm('حذف المستخدم؟');">
+              <input type="hidden" name="action" value="delete">
+              <input type="hidden" name="id" value="{{ u.id }}">
+              <button class="btn danger" type="submit">حذف</button>
+            </form>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6">لا يوجد مستخدمون</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

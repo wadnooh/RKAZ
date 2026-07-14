@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block content %}
+{% set name = 'balances' %}
+{% include "_section_subnav.html" %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">أرصدة المواد</h2>
+      <div class="meta">الرصيد الحالي = مجموع الوارد − المنصرف لكل مادة</div>
+    </div>
+    <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx') }}">+ حركة مستودع</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>رقم المادة</th><th>اسم المادة</th><th>الوحدة</th><th>التصنيف</th><th>حد أدنى</th><th>الرصيد</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.item_no }}</td>
+          <td>{{ r.item_name }}</td>
+          <td>{{ r.unit or '—' }}</td>
+          <td>{{ r.category or '—' }}</td>
+          <td>{{ r.min_qty or 0 }}</td>
+          <td>
+            {% if (r.balance or 0) <= (r.min_qty or 0) %}
+            <span class="badge danger">{{ r.balance }}</span>
+            {% else %}
+            <span class="badge ok">{{ r.balance }}</span>
+            {% endif %}
+          </td>
+          <td><a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx') }}">الحركات</a></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7">لا توجد أصناف</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

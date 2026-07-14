@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block content %}
+{% if section == 'ops' or name in ['quantities','photos','metering','invoices'] %}
+  {% set active = name %}
+  {% include "_ops_subnav.html" %}
+{% else %}
+  {% include "_section_subnav.html" %}
+{% endif %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{% if mode=='new' %}إضافة — {{ module.title }}{% else %}تعديل — {{ module.title }}{% endif %}</h2>
+    </div>
+    <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">رجوع</a>
+  </div>
+
+  <form method="post" class="form-grid">
+    {% for key, label, ftype in module.fields %}
+    <div class="field {% if ftype == 'textarea' %}full{% endif %}">
+      <label>{{ label }}</label>
+      {% if ftype == 'ticket' %}
+        <select name="{{ key }}">
+          <option value="">—</option>
+          {% for t in tickets %}<option value="{{ t }}" {% if row[key]==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+        </select>
+      {% elif ftype == 'yesno' %}
+        <select name="{{ key }}">
+          <option value="">—</option>
+          {% for x in lists.yes_no %}<option value="{{ x }}" {% if row[key]==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        </select>
+      {% elif ftype.startswith('list:') %}
+        {% set list_key = ftype.split(':')[1] %}
+        <select name="{{ key }}">
+          <option value="">—</option>
+          {% for x in lists[list_key] %}<option value="{{ x }}" {% if row[key]==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        </select>
+      {% elif ftype == 'textarea' %}
+        <textarea name="{{ key }}">{{ row[key] or '' }}</textarea>
+      {% elif ftype == 'number' %}
+        <input type="number" step="0.01" name="{{ key }}" value="{{ row[key] if row[key] is not none else '' }}">
+      {% elif ftype == 'date' %}
+        <input type="date" name="{{ key }}" value="{{ row[key] or '' }}">
+      {% else %}
+        <input type="text" name="{{ key }}" value="{{ row[key] or '' }}">
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">حفظ</button>
+      <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">إلغاء</a>
+    </div>
+  </form>
+</div>
+{% endblock %}
