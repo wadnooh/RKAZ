@@ -23,9 +23,10 @@ copy /y "render.yaml" "%OUT%\" >nul
 copy /y ".gitignore" "%OUT%\" >nul
 copy /y "تشغيل البرنامج.bat" "%OUT%\" >nul
 copy /y "تشغيل للشبكة.bat" "%OUT%\" >nul
-copy /y "فتح دليل النشر.bat" "%OUT%\" >nul
 copy /y "نشر_على_Render.md" "%OUT%\" >nul
+copy /y "README.md" "%OUT%\" >nul
 copy /y "للعميل\اقرأني_أولاً.md" "%OUT%\للعميل\" >nul
+copy /y "للعميل\الرابط_السحابي.md" "%OUT%\للعميل\" >nul
 
 :: كود التطبيق بدون قواعد بيانات محلية أو كاش
 robocopy "webapp" "%OUT%\webapp" /E /NFL /NDL /NJH /NJS /nc /ns /np /XD __pycache__ instance .git >nul
