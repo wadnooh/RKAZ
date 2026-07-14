@@ -9,3 +9,5 @@ instance/
 .DS_Store
 نسخة_العميل_للمراجعة/
 نسخة_العميل_للمراجعة.zip
+tools/cloudflared.exe
+tools/*.zip

@@ -5,11 +5,14 @@ services:
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python -m webapp.app
+    healthCheckPath: /health
     envVars:
       - key: SECRET_KEY
         generateValue: true
       - key: HOST
         value: "0.0.0.0"
+      - key: PORT
+        value: "10000"
       - key: USE_WAITRESS
         value: "1"
       - key: PYTHON_VERSION
