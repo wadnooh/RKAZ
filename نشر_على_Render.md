@@ -6,24 +6,23 @@
 
 - حساب على [GitHub](https://github.com)
 - حساب على [Render](https://render.com)
-- المشروع مرفوع على GitHub (مستودع Private أو Public)
+- المشروع مرفوع على GitHub: https://github.com/wadnooh/rekaz
 
 ---
 
-## 1) رفع المشروع إلى GitHub
+## 1) المستودع جاهز
 
-من مجلد المشروع على جهازك:
+الكود موجود على:
+
+https://github.com/wadnooh/rekaz
+
+إذا عدّلت محلياً ارفع التحديثات:
 
 ```bash
-git init
 git add .
-git commit -m "Deploy Rekaz app"
-git branch -M main
-git remote add origin https://github.com/USER/REPO.git
-git push -u origin main
+git commit -m "Update Rekaz app"
+git push origin main
 ```
-
-استبدل `USER/REPO` باسم مستودعك.
 
 ---
 
