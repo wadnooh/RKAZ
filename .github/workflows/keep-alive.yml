@@ -1,0 +1,24 @@
+name: Keep Render Awake
+
+on:
+  schedule:
+    # كل 10 دقائق تقريباً لإبقاء الخدمة المجانية مستيقظة
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping health endpoint
+        run: |
+          for i in 1 2 3 4 5; do
+            code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 "https://rekaz-alenjaz.onrender.com/health" || true)
+            echo "attempt=$i status=$code"
+            if [ "$code" = "200" ]; then
+              exit 0
+            fi
+            sleep 20
+          done
+          echo "Service did not respond with 200 (may be deploying)."
+          exit 0

@@ -16,6 +16,7 @@ from flask import (
     session,
     url_for,
 )
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from webapp import db
 from webapp.i18n import tr as i18n_tr
@@ -26,9 +27,12 @@ app = Flask(__name__, instance_relative_config=True)
 app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.permanent_session_lifetime = timedelta(days=30)
+app.url_map.strict_slashes = False
+# Render / reverse proxies
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 _DB_READY = False
-PUBLIC_ENDPOINTS = {"login", "forgot_password", "set_lang", "static"}
+PUBLIC_ENDPOINTS = {"login", "forgot_password", "set_lang", "static", "health"}
 
 
 def create_app():
@@ -247,7 +251,7 @@ def login():
         session["lang"] = session.get("lang") or "ar"
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
         nxt = request.args.get("next") or url_for("ops_home")
-        if not str(nxt).startswith("/"):
+        if not str(nxt).startswith("/") or nxt in {"/", "/login"}:
             nxt = url_for("ops_home")
         return redirect(nxt)
     return render_template("login.html")
@@ -290,6 +294,12 @@ def section_links(section):
             }
         )
     return links
+
+
+@app.route("/health")
+def health():
+    """فحص نبض للإبقاء على الخدمة مستيقظة على Render."""
+    return {"ok": True, "app": "rekaz"}, 200
 
 
 @app.route("/")
