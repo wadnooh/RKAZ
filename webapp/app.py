@@ -22,6 +22,7 @@ from webapp import db
 from webapp.i18n import tr as i18n_tr
 from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import review_engine
+from webapp import permissions
 
 app = Flask(__name__, instance_relative_config=True)
 app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
@@ -56,6 +57,14 @@ def _load_context():
     if request.endpoint and request.endpoint not in PUBLIC_ENDPOINTS and not session.get("user_id"):
         if request.endpoint != "static":
             return redirect(url_for("login", next=request.path))
+        return None
+    # نظام الصلاحيات لكل التطبيق
+    if session.get("user_id") and request.endpoint not in PUBLIC_ENDPOINTS:
+        session["role"] = permissions.normalize_role(session.get("role"))
+        missing = permissions.required_perm_for_request()
+        if missing:
+            label = permissions.PERM_LABELS.get(missing, missing)
+            return permissions.deny_redirect(f"ليس لديك صلاحية: {label}")
 
 
 def current_user_name():
@@ -79,6 +88,9 @@ def inject_globals():
     def tr(key, **kwargs):
         return i18n_tr(lang, key, **kwargs)
 
+    def can(*perms):
+        return permissions.can(*perms)
+
     return {
         "settings": g.get("settings") or db.get_settings(),
         "lists": g.get("lists") or db.get_lists(),
@@ -89,6 +101,9 @@ def inject_globals():
         "app_title": tr("app_title"),
         "lang": lang,
         "tr": tr,
+        "can": can,
+        "has_perm": permissions.has_perm,
+        "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
     }
 
@@ -247,7 +262,7 @@ def login():
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["full_name"] = user["full_name"]
-        session["role"] = user["role"]
+        session["role"] = permissions.normalize_role(user["role"])
         session["lang"] = session.get("lang") or "ar"
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
         nxt = request.args.get("next") or url_for("ops_home")
@@ -937,12 +952,13 @@ def users_list():
         action = request.form.get("action")
         if action == "add":
             try:
+                role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
                 conn.execute(
                     "INSERT INTO users(username, full_name, role, active, password, notes) VALUES (?,?,?,?,?,?)",
                     (
                         request.form.get("username"),
                         request.form.get("full_name"),
-                        request.form.get("role") or "مدخل بيانات",
+                        role,
                         1 if request.form.get("active") == "1" else 0,
                         request.form.get("password") or "1234",
                         request.form.get("notes"),
@@ -953,21 +969,78 @@ def users_list():
                 flash("تم إضافة المستخدم", "ok")
             except Exception as exc:
                 flash(f"تعذر الإضافة: {exc}", "danger")
+        elif action == "update":
+            uid = request.form.get("id")
+            role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
+            password = (request.form.get("password") or "").strip()
+            if password:
+                conn.execute(
+                    "UPDATE users SET full_name=?, role=?, active=?, password=?, notes=? WHERE id=?",
+                    (
+                        request.form.get("full_name"),
+                        role,
+                        1 if request.form.get("active") == "1" else 0,
+                        password,
+                        request.form.get("notes"),
+                        uid,
+                    ),
+                )
+            else:
+                conn.execute(
+                    "UPDATE users SET full_name=?, role=?, active=?, notes=? WHERE id=?",
+                    (
+                        request.form.get("full_name"),
+                        role,
+                        1 if request.form.get("active") == "1" else 0,
+                        request.form.get("notes"),
+                        uid,
+                    ),
+                )
+            conn.commit()
+            if str(session.get("user_id")) == str(uid):
+                session["full_name"] = request.form.get("full_name")
+                session["role"] = role
+            db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
+            flash("تم تحديث المستخدم", "ok")
         elif action == "delete":
-            conn.execute("DELETE FROM users WHERE id=?", (request.form.get("id"),))
-            conn.commit()
-            db.log_audit(current_user_name(), "حذف", "مستخدم", request.form.get("id"))
-            flash("تم الحذف", "ok")
+            uid = request.form.get("id")
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if target and str(session.get("user_id")) == str(uid):
+                flash("لا يمكن حذف حسابك الحالي", "danger")
+            else:
+                admins = conn.execute(
+                    "SELECT COUNT(*) FROM users WHERE lower(role)='admin' AND active=1"
+                ).fetchone()[0]
+                if target and permissions.normalize_role(target["role"]) == "admin" and admins <= 1:
+                    flash("لا يمكن حذف آخر مدير نظام نشط", "danger")
+                else:
+                    conn.execute("DELETE FROM users WHERE id=?", (uid,))
+                    conn.commit()
+                    db.log_audit(current_user_name(), "حذف", "مستخدم", uid)
+                    flash("تم الحذف", "ok")
         elif action == "toggle":
-            conn.execute(
-                "UPDATE users SET active = CASE WHEN active=1 THEN 0 ELSE 1 END WHERE id=?",
-                (request.form.get("id"),),
-            )
-            conn.commit()
-            flash("تم تحديث الحالة", "ok")
+            uid = request.form.get("id")
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if target and str(session.get("user_id")) == str(uid):
+                flash("لا يمكن إيقاف حسابك الحالي", "danger")
+            else:
+                conn.execute(
+                    "UPDATE users SET active = CASE WHEN active=1 THEN 0 ELSE 1 END WHERE id=?",
+                    (uid,),
+                )
+                conn.commit()
+                flash("تم تحديث الحالة", "ok")
     rows = db.rows_to_dicts(conn.execute("SELECT * FROM users ORDER BY id").fetchall())
     conn.close()
-    return render_template("users.html", rows=rows)
+    for row in rows:
+        row["role"] = permissions.normalize_role(row.get("role"))
+        row["perm_count"] = len(permissions.perms_for_role(row["role"]))
+    return render_template(
+        "users.html",
+        rows=rows,
+        role_matrix=permissions.role_matrix(),
+        perm_labels=permissions.PERM_LABELS,
+    )
 
 
 @app.route("/admin/audit-log/view")
@@ -1051,7 +1124,7 @@ def global_search():
 def api_jump_destinations():
     from flask import jsonify
 
-    return jsonify(review_engine.jump_destinations())
+    return jsonify(permissions.filter_jump_items(review_engine.jump_destinations()))
 
 
 @app.route("/review")

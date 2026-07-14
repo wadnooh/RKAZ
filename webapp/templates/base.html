@@ -38,7 +38,9 @@
       </div>
       {% if session.get('user_id') and not is_login_page %}
       <div class="actions">
+        {% if can('section.review') %}
         <a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
+        {% endif %}
         <span class="meta">{{ session.get('full_name', '') }} ({{ session.get('role', '') }})</span>
         <a class="btn ghost" href="{{ url_for('logout') }}">{{ tr('logout') }}</a>
       </div>
@@ -49,17 +51,39 @@
   {% if session.get('user_id') and not is_login_page %}
   {% set p = request.path or '' %}
   <nav class="tabs">
+    {% if can('section.constructions') %}
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">الإنشاءات - التنفيذ</a>
+    {% endif %}
+    {% if can('section.ops') %}
     <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/module/invoices') or p.startswith('/cashflow') or p.startswith('/teams') or p.startswith('/sop') or p.startswith('/lists') %} active{% endif %}" href="{{ url_for('ops_home') }}">العمليات والصيانة</a>
+    {% endif %}
+    {% if can('section.review') %}
     <a class="tab{% if p.startswith('/review') %} active{% endif %}" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
+    {% endif %}
+    {% if can('section.quality') %}
     <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') %} active{% endif %}" href="{{ url_for('quality_home') }}">التنسيقات والجودة</a>
+    {% endif %}
+    {% if can('section.safety') %}
     <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">السلامة</a>
+    {% endif %}
+    {% if can('section.warehouses') %}
     <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouses_home') }}">المستودعات</a>
+    {% endif %}
+    {% if can('section.external') %}
     <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">المشتريات الخارجية والعهد</a>
+    {% endif %}
+    {% if can('section.maintenance') %}
     <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">الورشة (سيارات - معدات)</a>
+    {% endif %}
+    {% if can('section.contracts') %}
     <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">إدارة العقود</a>
-    <a class="tab{% if p.startswith('/users') or p.startswith('/settings') %} active{% endif %}" href="{{ url_for('users_home') }}">المستخدمون</a>
+    {% endif %}
+    {% if can('users.manage') or can('settings.write') %}
+    <a class="tab{% if p.startswith('/users') or p.startswith('/settings') %} active{% endif %}" href="{{ url_for('users_home') if can('users.manage') else url_for('settings_page') }}">{% if can('users.manage') %}المستخدمون{% else %}الإعدادات{% endif %}</a>
+    {% endif %}
+    {% if can('audit.read') %}
     <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">سجل النشاط</a>
+    {% endif %}
   </nav>
 
   <button type="button" class="jump-fab" data-open-jump title="قفز سريع Ctrl+K">⌘</button>

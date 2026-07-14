@@ -2,7 +2,7 @@
 {% block content %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions">
-    <a class="btn ghost" href="{{ url_for('users_home') }}">المستخدمون</a>
+    {% if can('users.manage') %}<a class="btn ghost" href="{{ url_for('users_home') }}">المستخدمون</a>{% endif %}
     <a class="btn primary" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>
   </div>
 </div>

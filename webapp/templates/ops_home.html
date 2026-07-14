@@ -10,10 +10,10 @@
       <div class="meta ui-hint">لوحة تقرير عامة للعمليات. بلاغات الطوارئ التفصيلية تظهر داخل التبويبات التخصصية (محتوى ملف ركاز).</div>
     </div>
     <div class="actions">
-      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ معاملة بلاغ جديدة</a>
-      <a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة{% if alert_summary %} ({{ alert_summary.total }}){% endif %}</a>
+      {% if can('tickets.write') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">+ معاملة بلاغ جديدة</a>{% endif %}
+      {% if can('section.review') %}<a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة{% if alert_summary %} ({{ alert_summary.total }}){% endif %}</a>{% endif %}
       <button type="button" class="btn ghost" data-open-jump>قفز سريع</button>
-      <a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>
+      {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>
   </div>
 

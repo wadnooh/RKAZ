@@ -48,6 +48,7 @@
     </div>
   </div>
 
+  {% if can('tickets.write') or can('modules.write') %}
   <div class="card">
     <h3 class="section-title" style="font-size:1.05rem;">إضافة متابعة</h3>
     <form method="post" action="{{ url_for('review_followup_save') }}" class="form-grid" style="grid-template-columns:1fr; margin-top:10px;">
@@ -73,6 +74,7 @@
       <button class="btn primary" type="submit">حفظ المتابعة</button>
     </form>
   </div>
+  {% endif %}
 </div>
 
 <div class="card" style="margin-top:14px;">
@@ -111,6 +113,7 @@
             {% if f.ticket_no %}
             <a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=f.ticket_no) }}">مراجعة</a>
             {% endif %}
+            {% if can('tickets.write') or can('modules.write') %}
             <form method="post" action="{{ url_for('review_followup_save') }}">
               <input type="hidden" name="action" value="status">
               <input type="hidden" name="id" value="{{ f.id }}">
@@ -125,6 +128,7 @@
               <input type="hidden" name="id" value="{{ f.id }}">
               <button class="btn danger" type="submit">حذف</button>
             </form>
+            {% endif %}
           </td>
         </tr>
         {% else %}

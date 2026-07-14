@@ -10,6 +10,7 @@
     </div>
   </div>
 
+  {% if can('cashflow.write') %}
   <form method="post">
     <div class="form-grid">
       {% for r in rows %}
@@ -23,6 +24,9 @@
       <button class="btn primary" type="submit">حفظ التحصيل</button>
     </div>
   </form>
+  {% else %}
+  <p class="meta">عرض فقط — لا تملك صلاحية تعديل التحصيل.</p>
+  {% endif %}
   <p class="meta" style="margin-top:12px;">
     الإيراد الشهري التقديري =
     {{ (settings.teams_count * settings.daily_tickets * settings.work_days * settings.target_avg)|money }}

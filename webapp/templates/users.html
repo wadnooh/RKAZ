@@ -2,8 +2,10 @@
 {% block content %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions">
-    <a class="btn primary" href="{{ url_for('users_list') }}">المستخدمون</a>
+    <a class="btn primary" href="{{ url_for('users_list') }}">المستخدمون والصلاحيات</a>
+    {% if can('settings.write') %}
     <a class="btn ghost" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>
+    {% endif %}
   </div>
 </div>
 
@@ -11,7 +13,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">المستخدمون</h2>
-      <div class="meta">إدارة حسابات الدخول والأدوار</div>
+      <div class="meta">إدارة حسابات الدخول والأدوار — الصلاحيات تُطبَّق على كامل التطبيق</div>
     </div>
   </div>
 
@@ -41,17 +43,46 @@
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الحالة</th><th>ملاحظات</th><th></th></tr>
+        <tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الصلاحيات</th><th>الحالة</th><th>ملاحظات</th><th></th></tr>
       </thead>
       <tbody>
         {% for u in rows %}
         <tr>
           <td>{{ u.username }}</td>
           <td>{{ u.full_name }}</td>
-          <td>{{ u.role }}</td>
+          <td><span class="badge info">{{ u.role }}</span></td>
+          <td>{{ u.perm_count }} صلاحية</td>
           <td>{% if u.active %}<span class="badge ok">نشط</span>{% else %}<span class="badge danger">موقوف</span>{% endif %}</td>
           <td>{{ u.notes or '—' }}</td>
-          <td class="actions">
+          <td class="actions" style="flex-wrap:wrap;">
+            <details>
+              <summary class="btn ghost" style="cursor:pointer;list-style:none;">تعديل</summary>
+              <form method="post" class="form-grid" style="margin-top:8px;min-width:280px;">
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="id" value="{{ u.id }}">
+                <div class="field"><label>الاسم</label><input name="full_name" value="{{ u.full_name }}" required></div>
+                <div class="field">
+                  <label>الدور</label>
+                  <select name="role">
+                    {% for x in lists.user_roles %}
+                    <option value="{{ x }}" {% if u.role==x %}selected{% endif %}>{{ x }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="field"><label>كلمة مرور جديدة</label><input name="password" placeholder="اتركه فارغاً للإبقاء"></div>
+                <div class="field">
+                  <label>نشط؟</label>
+                  <select name="active">
+                    <option value="1" {% if u.active %}selected{% endif %}>نعم</option>
+                    <option value="0" {% if not u.active %}selected{% endif %}>لا</option>
+                  </select>
+                </div>
+                <div class="field"><label>ملاحظات</label><input name="notes" value="{{ u.notes or '' }}"></div>
+                <div class="actions" style="grid-column:1/-1">
+                  <button class="btn primary" type="submit">حفظ</button>
+                </div>
+              </form>
+            </details>
             <form method="post">
               <input type="hidden" name="action" value="toggle">
               <input type="hidden" name="id" value="{{ u.id }}">
@@ -65,7 +96,39 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="6">لا يوجد مستخدمون</td></tr>
+        <tr><td colspan="7">لا يوجد مستخدمون</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">مصفوفة الصلاحيات حسب الدور</h2>
+      <div class="meta">admin يملك كل الصلاحيات — المشرف تقريباً الكل عدا إدارة المستخدمين — مدخل بيانات إضافة/تعديل — مراقب عرض فقط</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>الصلاحية</th>
+          <th>admin</th>
+          <th>مشرف</th>
+          <th>مدخل بيانات</th>
+          <th>مراقب</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in role_matrix %}
+        <tr>
+          <td style="white-space:normal;">{{ row.label }}</td>
+          {% for r in ['admin','مشرف','مدخل بيانات','مراقب'] %}
+          <td>{% if row.roles[r] %}<span class="badge ok">نعم</span>{% else %}<span class="badge danger">لا</span>{% endif %}</td>
+          {% endfor %}
+        </tr>
         {% endfor %}
       </tbody>
     </table>

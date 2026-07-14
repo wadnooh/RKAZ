@@ -13,7 +13,7 @@
       <h2 class="section-title">{{ module.title }}</h2>
       <div class="meta">مرتبط بتبويب {{ section_meta.title if section_meta else 'النظام' }} — إضافة / تعديل / ربط بالبلاغات</div>
     </div>
-    <a class="btn primary" href="{{ url_for('module_new', name=name) }}">+ إضافة</a>
+    {% if can('modules.write') %}<a class="btn primary" href="{{ url_for('module_new', name=name) }}">+ إضافة</a>{% endif %}
   </div>
 
   <div class="table-wrap">
@@ -58,10 +58,14 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td><strong>{{ r.balance }}</strong></td>{% endif %}
           <td class="actions">
+            {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">تعديل</a>
+            {% endif %}
+            {% if can('modules.delete') %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" onsubmit="return confirm('حذف السجل؟');">
               <button class="btn danger" type="submit">حذف</button>
             </form>
+            {% endif %}
           </td>
         </tr>
         {% else %}

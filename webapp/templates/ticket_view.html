@@ -10,12 +10,14 @@
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
-      <a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=ticket.ticket_no) }}">مراجعة شاملة</a>
-      <a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=ticket.id) }}">تعديل</a>
+      {% if can('section.review') %}<a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=ticket.ticket_no) }}">مراجعة شاملة</a>{% endif %}
+      {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=ticket.id) }}">تعديل</a>{% endif %}
       <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
+      {% if can('tickets.delete') %}
       <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return confirm('حذف المعاملة؟');">
         <button class="btn danger" type="submit">حذف</button>
       </form>
+      {% endif %}
     </div>
   </div>
 
@@ -45,15 +47,25 @@
     التنسيقات: {{ related.coordination|length }} |
     التمتير: {{ related.metering|length }}
   </div>
+  {% if can('modules.write') %}
   <div class="actions">
+    {% if can('section.ops') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='quantities', ticket_no=ticket.ticket_no) }}">+ كمية</a>
     <a class="btn ghost" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">+ صور</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">+ تنسيق</a>
     <a class="btn ghost" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">+ تمتير</a>
     <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">+ مستخلص</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ حركة مستودع</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">+ تصريح سلامة</a>
+    {% endif %}
+    {% if can('section.quality') %}
+    <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">+ تنسيق</a>
     <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">+ إخلاء أسفلت</a>
+    {% endif %}
+    {% if can('section.warehouses') %}
+    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ حركة مستودع</a>
+    {% endif %}
+    {% if can('section.safety') %}
+    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">+ تصريح سلامة</a>
+    {% endif %}
   </div>
+  {% endif %}
 </div>
 {% endblock %}
