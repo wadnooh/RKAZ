@@ -2,7 +2,7 @@ services:
   - type: web
     name: rekaz-alenjaz
     runtime: python
-    plan: starter
+    plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python -m webapp.app
     envVars:
@@ -12,11 +12,5 @@ services:
         value: "0.0.0.0"
       - key: USE_WAITRESS
         value: "1"
-      - key: RAKAZ_DATA_DIR
-        value: /var/data
       - key: PYTHON_VERSION
         value: "3.12.8"
-    disk:
-      name: rekaz-data
-      mountPath: /var/data
-      sizeGB: 1
