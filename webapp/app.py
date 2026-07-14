@@ -23,6 +23,7 @@ from webapp.i18n import tr as i18n_tr
 from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import review_engine
 from webapp import permissions
+from webapp import warehouse_excel
 
 app = Flask(__name__, instance_relative_config=True)
 app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
@@ -716,9 +717,16 @@ def module_list(name):
     if name == "external_purchases":
         for r in rows:
             r["total"] = (float(r.get("qty") or 0) * float(r.get("unit_price") or 0))
+    item_filter = (request.args.get("item_no") or "").strip()
+    ticket_filter = (request.args.get("ticket_no") or "").strip()
     if name == "warehouse_items":
         for r in rows:
             r["balance"] = db.warehouse_balance(r.get("item_no"))
+    if name == "warehouse_tx":
+        if item_filter:
+            rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
+        if ticket_filter:
+            rows = [r for r in rows if (r.get("ticket_no") or "") == ticket_filter]
     section = module.get("section")
     return render_template(
         "module_list.html",
@@ -726,6 +734,8 @@ def module_list(name):
         module=module,
         rows=rows,
         tickets=tickets,
+        item_filter=item_filter,
+        ticket_filter=ticket_filter,
         section=section,
         section_meta=SECTION_META.get(section),
         section_modules=modules_for_section(section) if section else [],
@@ -745,6 +755,8 @@ def module_new(name):
         prefill["ticket_no"] = request.args.get("ticket_no")
     if request.method == "POST":
         data = _module_form_data(module)
+        if name == "warehouse_tx":
+            data = db.enrich_warehouse_tx_from_item(data)
         keys = [f[0] for f in module["fields"]]
         cur = conn.execute(
             f"INSERT INTO {module['table']}({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
@@ -756,6 +768,10 @@ def module_new(name):
         db.log_audit(current_user_name(), "إضافة", module["title"], new_id, str(data)[:240])
         flash("تمت الإضافة", "ok")
         return redirect(url_for("module_list", name=name))
+    warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
+    if request.args.get("item_no") and "item_no" in prefill:
+        prefill["item_no"] = request.args.get("item_no")
+        prefill = db.enrich_warehouse_tx_from_item(prefill)
     conn.close()
     section = module.get("section")
     return render_template(
@@ -764,6 +780,7 @@ def module_new(name):
         module=module,
         row=prefill,
         tickets=tickets,
+        warehouse_items=warehouse_items,
         mode="new",
         section=section,
         section_meta=SECTION_META.get(section),
@@ -786,6 +803,8 @@ def module_edit(name, row_id):
         return redirect(url_for("module_list", name=name))
     if request.method == "POST":
         data = _module_form_data(module)
+        if name == "warehouse_tx":
+            data = db.enrich_warehouse_tx_from_item(data)
         keys = [f[0] for f in module["fields"]]
         sets = ", ".join([f"{k}=?" for k in keys])
         conn.execute(
@@ -798,6 +817,7 @@ def module_edit(name, row_id):
         flash("تم الحفظ", "ok")
         return redirect(url_for("module_list", name=name))
     data = dict(row)
+    warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     conn.close()
     section = module.get("section")
     return render_template(
@@ -806,6 +826,7 @@ def module_edit(name, row_id):
         module=module,
         row=data,
         tickets=tickets,
+        warehouse_items=warehouse_items,
         mode="edit",
         section=section,
         section_meta=SECTION_META.get(section),
@@ -930,18 +951,99 @@ def sop_page():
 @app.route("/warehouses/balances")
 @login_required
 def warehouse_balances():
+    q = (request.args.get("q") or "").strip().lower()
     conn = db.connect()
     items = db.rows_to_dicts(conn.execute("SELECT * FROM warehouse_items ORDER BY item_no").fetchall())
     conn.close()
     for item in items:
-        item["balance"] = db.warehouse_balance(item.get("item_no"))
+        detail = db.warehouse_balance_detail(item.get("item_no"))
+        item.update(detail)
+    if q:
+        items = [
+            r
+            for r in items
+            if q in (r.get("item_no") or "").lower()
+            or q in (r.get("item_name") or "").lower()
+            or q in (r.get("category") or "").lower()
+        ]
     return render_template(
         "warehouse_balances.html",
         rows=items,
+        q=q,
         section="warehouses",
         section_meta=SECTION_META["warehouses"],
         section_modules=modules_for_section("warehouses"),
     )
+
+
+@app.route("/warehouses/balances/template.xlsx")
+@login_required
+def warehouse_items_template():
+    data = warehouse_excel.build_items_template()
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name="قالب_مواد_المستودع.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/warehouses/tx/template.xlsx")
+@login_required
+def warehouse_tx_template():
+    data = warehouse_excel.build_tx_template()
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name="قالب_حركات_المستودع.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/warehouses/balances/import", methods=["POST"])
+@login_required
+def warehouse_items_import():
+    if not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("اختر ملف Excel للمواد", "danger")
+        return redirect(url_for("warehouse_balances"))
+    try:
+        result = warehouse_excel.import_items_from_excel(f)
+        flash(
+            f"استيراد المواد: جديد {result['ok']} | محدّث {result['updated']} | أرصدة افتتاحية {result['opening']}",
+            "ok",
+        )
+        if result.get("errors"):
+            flash(" / ".join(result["errors"][:5]), "danger")
+        db.log_audit(current_user_name(), "استيراد Excel", "أصناف المستودع", details=str(result)[:240])
+    except Exception as exc:
+        flash(f"تعذر الاستيراد: {exc}", "danger")
+    return redirect(url_for("warehouse_balances"))
+
+
+@app.route("/warehouses/tx/import", methods=["POST"])
+@login_required
+def warehouse_tx_import():
+    if not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("اختر ملف Excel للحركات", "danger")
+        return redirect(url_for("warehouse_balances"))
+    try:
+        result = warehouse_excel.import_tx_from_excel(f)
+        flash(
+            f"استيراد الحركات: {result['ok']} حركة | مربوطة ببلاغات: {result['linked']}",
+            "ok",
+        )
+        if result.get("errors"):
+            flash(" / ".join(result["errors"][:5]), "danger")
+        db.log_audit(current_user_name(), "استيراد Excel", "معاملات المستودع", details=str(result)[:240])
+    except Exception as exc:
+        flash(f"تعذر الاستيراد: {exc}", "danger")
+    return redirect(url_for("warehouse_balances"))
 
 
 @app.route("/users/list", methods=["GET", "POST"])

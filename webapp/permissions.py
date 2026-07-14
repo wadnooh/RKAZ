@@ -316,6 +316,18 @@ def required_perm_for_request() -> str | None:
     if ep == "settings_page":
         return None if has_perm("settings.write") else "settings.write"
 
+    if ep in {
+        "warehouse_items_template",
+        "warehouse_tx_template",
+        "warehouse_items_import",
+        "warehouse_tx_import",
+    }:
+        if not has_perm("section.warehouses"):
+            return "section.warehouses"
+        if ep.endswith("_import") and not has_perm("modules.write"):
+            return "modules.write"
+        return None
+
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 

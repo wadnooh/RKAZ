@@ -16,6 +16,15 @@
     {% if can('modules.write') %}<a class="btn primary" href="{{ url_for('module_new', name=name) }}">+ إضافة</a>{% endif %}
   </div>
 
+  {% if name == 'warehouse_tx' and (item_filter or ticket_filter) %}
+  <p class="meta" style="margin-bottom:10px;">
+    تصفية:
+    {% if item_filter %}المادة <strong>{{ item_filter }}</strong>{% endif %}
+    {% if ticket_filter %}{% if item_filter %} | {% endif %}البلاغ <strong>{{ ticket_filter }}</strong>{% endif %}
+    — <a href="{{ url_for('module_list', name='warehouse_tx') }}">إظهار الكل</a>
+  </p>
+  {% endif %}
+
   <div class="table-wrap">
     <table class="table">
       <thead>

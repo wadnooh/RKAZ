@@ -24,6 +24,18 @@
           <option value="">—</option>
           {% for t in tickets %}<option value="{{ t }}" {% if row[key]==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
         </select>
+      {% elif ftype == 'warehouse_item' %}
+        <select name="{{ key }}" id="warehouseItemSelect">
+          <option value="">— اختر مادة —</option>
+          {% for it in warehouse_items or [] %}
+          <option value="{{ it.item_no }}"
+                  data-name="{{ it.item_name or '' }}"
+                  data-unit="{{ it.unit or '' }}"
+                  {% if row[key]==it.item_no %}selected{% endif %}>
+            {{ it.item_no }} — {{ it.item_name }}
+          </option>
+          {% endfor %}
+        </select>
       {% elif ftype == 'yesno' %}
         <select name="{{ key }}">
           <option value="">—</option>
@@ -52,4 +64,21 @@
     </div>
   </form>
 </div>
+{% if name == 'warehouse_tx' %}
+<script>
+(function () {
+  var sel = document.getElementById("warehouseItemSelect");
+  if (!sel) return;
+  function fill() {
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    var nameInput = document.querySelector('input[name="item_name"]');
+    var unitInput = document.querySelector('input[name="unit"]');
+    if (nameInput && opt.dataset.name) nameInput.value = opt.dataset.name;
+    if (unitInput && opt.dataset.unit) unitInput.value = opt.dataset.unit;
+  }
+  sel.addEventListener("change", fill);
+})();
+</script>
+{% endif %}
 {% endblock %}

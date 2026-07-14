@@ -194,7 +194,7 @@ MODULES = {
             ("voucher_no", "رقم السند", "text"),
             ("tx_date", "تاريخ الحركة", "date"),
             ("tx_type", "نوع الحركة", "list:warehouse_tx_types"),
-            ("item_no", "رقم المادة", "text"),
+            ("item_no", "رقم المادة", "warehouse_item"),
             ("item_name", "اسم المادة", "text"),
             ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),
@@ -203,7 +203,7 @@ MODULES = {
             ("region", "المنطقة", "text"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["voucher_no", "tx_date", "tx_type", "item_no", "item_name", "qty", "recipient"],
+        "list_cols": ["voucher_no", "tx_date", "tx_type", "item_no", "item_name", "qty", "ticket_no", "recipient"],
     },
     # ---- المشتريات والعهد ----
     "external_purchases": {

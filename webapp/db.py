@@ -51,7 +51,13 @@ DEFAULT_LISTS = {
     "incident_types": ["إصابة", "قرب حادث", "مخالفة سلامة", "أخرى"],
     "severity_levels": ["منخفض", "متوسط", "عالي"],
     "warehouse_categories": ["عهد", "مواد كهربائية", "كيابل", "عدد"],
-    "warehouse_tx_types": ["وارد من الكهرباء", "منصرف للمقاول", "إرجاع للمجمعة", "وارد من موقع العمل"],
+    "warehouse_tx_types": [
+        "وارد من الكهرباء",
+        "منصرف للمقاول",
+        "إرجاع للمجمعة",
+        "وارد من موقع العمل",
+        "رصيد افتتاحي",
+    ],
     "purchase_status": ["جديد", "معتمد", "تم الشراء", "ملغي"],
     "custody_status": ["مسلمة", "مرتجعة", "مفقودة"],
     "vehicle_status": ["عاملة", "صيانة", "متوقفة"],
@@ -521,6 +527,16 @@ def get_lists(conn=None):
             data[r["key"]] = json.loads(r["value"])
         except Exception:
             pass
+    # دمج القيم الافتراضية الجديدة (مثل رصيد افتتاحي) دون حذف تخصيص المستخدم
+    for key, defaults in DEFAULT_LISTS.items():
+        current = data.get(key) or []
+        if not isinstance(current, list):
+            continue
+        merged = list(current)
+        for val in defaults:
+            if val not in merged:
+                merged.append(val)
+        data[key] = merged
     if own:
         conn.close()
     return data
@@ -551,20 +567,69 @@ def log_audit(user_name, action, entity, entity_id="", details=""):
     conn.close()
 
 
+def warehouse_tx_sign(tx_type: str) -> int:
+    """+1 وارد، -1 منصرف، 0 غير معروف."""
+    t = tx_type or ""
+    if "وارد" in t or "افتتاح" in t:
+        return 1
+    if "منصرف" in t or "إرجاع" in t:
+        return -1
+    return 0
+
+
 def warehouse_balance(item_no):
-    """رصيد المادة = الوارد - المنصرف (تقريبي حسب نوع الحركة)."""
+    """رصيد المادة = الوارد - المنصرف حسب نوع الحركة."""
+    return warehouse_balance_detail(item_no)["balance"]
+
+
+def warehouse_balance_detail(item_no):
     conn = connect()
     rows = conn.execute(
-        "SELECT tx_type, qty FROM warehouse_tx WHERE item_no=?",
-        (item_no,),
+        "SELECT tx_type, qty, ticket_no FROM warehouse_tx WHERE lower(item_no)=lower(?)",
+        (item_no or "",),
     ).fetchall()
     conn.close()
-    bal = 0.0
+    inbound = outbound = 0.0
+    tickets = set()
     for r in rows:
         qty = float(r["qty"] or 0)
-        t = r["tx_type"] or ""
-        if "وارد" in t:
-            bal += qty
-        elif "منصرف" in t or "إرجاع" in t:
-            bal -= qty
-    return bal
+        sign = warehouse_tx_sign(r["tx_type"])
+        if sign > 0:
+            inbound += qty
+        elif sign < 0:
+            outbound += qty
+        if r["ticket_no"]:
+            tickets.add(r["ticket_no"])
+    return {
+        "balance": inbound - outbound,
+        "inbound": inbound,
+        "outbound": outbound,
+        "tx_count": len(rows),
+        "tickets": sorted(tickets),
+    }
+
+
+def list_warehouse_items():
+    conn = connect()
+    rows = rows_to_dicts(conn.execute("SELECT * FROM warehouse_items ORDER BY item_no").fetchall())
+    conn.close()
+    return rows
+
+
+def enrich_warehouse_tx_from_item(data: dict) -> dict:
+    """يربط حركة المستودع ببيانات الصنف (اسم/وحدة) من رقم المادة."""
+    item_no = (data.get("item_no") or "").strip()
+    if not item_no:
+        return data
+    conn = connect()
+    item = conn.execute(
+        "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+        (item_no,),
+    ).fetchone()
+    conn.close()
+    if item:
+        if not data.get("item_name"):
+            data["item_name"] = item["item_name"]
+        if not data.get("unit"):
+            data["unit"] = item["unit"]
+    return data
