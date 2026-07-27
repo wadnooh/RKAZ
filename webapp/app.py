@@ -375,6 +375,7 @@ def health():
             "rasmalah_tabs": True,
             "backups": True,
             "auto_backup": True,
+            "s3_backup": backup_svc.s3_configured(),
             "trial_mode": os.environ.get("TRIAL_MODE", "").strip() in {"1", "true", "yes"},
         },
         "auto_backup": auto,

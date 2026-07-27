@@ -63,10 +63,10 @@ def hosting_info() -> dict:
         "data_root": str(data_root()),
         "backups_root": str(backups_root()),
         "hint": (
-            "البيانات تُزامن تلقائياً إلى الجهاز الرئيسي في الخلفية. "
+            "البيانات تُزامن تلقائياً إلى Amazon S3 (إن وُجد) و/أو الجهاز الرئيسي في الخلفية. "
             "عند الاعتماد الكامل أضف Disk مدفوع مع RAKAZ_DATA_DIR=/var/data."
             if trial
-            else "المزامنة التلقائية تعمل في الخلفية إلى الجهاز الرئيسي."
+            else "المزامنة التلقائية تعمل في الخلفية (S3 و/أو الجهاز الرئيسي)."
         ),
     }
 
@@ -494,6 +494,64 @@ def email_delivery_configured() -> bool:
     )
 
 
+def s3_configured() -> bool:
+    return bool(
+        os.environ.get("AWS_S3_BUCKET", "").strip()
+        and os.environ.get("AWS_ACCESS_KEY_ID", "").strip()
+        and os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip()
+    )
+
+
+def s3_settings() -> dict:
+    return {
+        "bucket": os.environ.get("AWS_S3_BUCKET", "").strip(),
+        "region": os.environ.get("AWS_S3_REGION", "").strip() or "eu-north-1",
+        "prefix": (os.environ.get("AWS_S3_PREFIX", "").strip() or "rekaz-backups").strip("/"),
+        "configured": s3_configured(),
+    }
+
+
+def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
+    """رفع الحفظة تلقائياً إلى Amazon S3 (بديل الجهاز الدائم)."""
+    if not s3_configured():
+        return {"ok": False, "skipped": True, "reason": "S3 غير مُعد"}
+    try:
+        import boto3
+        from botocore.exceptions import BotoCoreError, ClientError
+    except ImportError:
+        return {"ok": False, "error": "حزمة boto3 غير مثبتة"}
+
+    cfg = s3_settings()
+    stamp = (meta.get("created_at") or datetime.now().isoformat(timespec="seconds")).replace(":", "-")
+    key = f"{cfg['prefix']}/{stamp}__{(meta.get('id') or 'backup').replace('/', '-')}.zip"
+    try:
+        client = boto3.client(
+            "s3",
+            region_name=cfg["region"],
+            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "").strip(),
+            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip(),
+        )
+        extra = {
+            "ContentType": "application/zip",
+            "Metadata": {
+                "app": "rekaz",
+                "backup-id": str(meta.get("id") or "")[:256],
+                "tickets": str((meta.get("progress") or {}).get("tickets_total", 0)),
+            },
+        }
+        client.upload_file(str(zip_path), cfg["bucket"], key, ExtraArgs=extra)
+        return {
+            "ok": True,
+            "bucket": cfg["bucket"],
+            "region": cfg["region"],
+            "key": key,
+            "uri": f"s3://{cfg['bucket']}/{key}",
+            "size": zip_path.stat().st_size if zip_path.exists() else 0,
+        }
+    except (BotoCoreError, ClientError, Exception) as exc:
+        return {"ok": False, "error": str(exc)}
+
+
 def send_backup_email(meta: dict, zip_path: Path) -> dict:
     to_addr = os.environ.get("BACKUP_EMAIL_TO", "").strip()
     host = os.environ.get("SMTP_HOST", "").strip()
@@ -558,20 +616,21 @@ def post_backup_webhook(meta: dict, download_url: str = "") -> dict:
 
 
 def deliver_backup(meta: dict, *, download_url: str = "") -> dict:
-    """إرسال الحفظة للجهاز الرئيسي: بريد (إن وُجد) + webhook (إن وُجد). السحب المحلي هو القناة الأساسية."""
-    result = {"email": None, "webhook": None, "ready_for_pull": True}
-    rel = meta.get("_rel") or meta.get("path", "").replace("backups/", "", 1)
-    # path في meta هو نسبة إلى data_root مثل backups/2026/...
+    """إرسال الحفظة: S3 أولاً (بدون جهاز دائم) + بريد/webhook اختياري + جاهز للسحب المحلي."""
+    result = {"s3": None, "email": None, "webhook": None, "ready_for_pull": True}
     if not meta.get("_rel"):
         path = meta.get("path") or ""
         if path.startswith("backups/"):
             rel = path[len("backups/") :]
         else:
             rel = path
+        meta["_rel"] = rel
     try:
-        zip_path = build_backup_zip(rel)
+        zip_path = build_backup_zip(meta["_rel"])
     except Exception as exc:
         return {"ready_for_pull": False, "error": str(exc)}
+
+    result["s3"] = upload_backup_to_s3(meta, zip_path)
 
     if email_delivery_configured():
         try:
@@ -579,7 +638,7 @@ def deliver_backup(meta: dict, *, download_url: str = "") -> dict:
         except Exception as exc:
             result["email"] = {"ok": False, "error": str(exc)}
     else:
-        result["email"] = {"ok": False, "skipped": True, "reason": "البريد غير مُعد — استخدم وكيل الجهاز الرئيسي"}
+        result["email"] = {"ok": False, "skipped": True, "reason": "البريد غير مُعد"}
 
     result["webhook"] = post_backup_webhook(meta, download_url=download_url)
     result["zip_size"] = zip_path.stat().st_size if zip_path.exists() else 0
@@ -663,6 +722,8 @@ def auto_status() -> dict:
         "last_backup_rel": state.get("last_backup_rel"),
         "next_due_minutes": next_due,
         "email_configured": email_delivery_configured(),
+        "s3_configured": s3_configured(),
+        "s3": s3_settings(),
         "webhook_configured": bool(os.environ.get("BACKUP_WEBHOOK_URL", "").strip()),
         "sync_token_ready": bool(get_sync_token()),
         "latest": {
