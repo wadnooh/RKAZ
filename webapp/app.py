@@ -57,7 +57,13 @@ def create_app():
     global _DB_READY
     db.init_db()
     _DB_READY = True
-    # ابدأ الحفظ التلقائي في الخلفية
+    # استعادة تلقائية من AWS S3 إن كانت القاعدة فارغة بعد إعادة نشر Render
+    try:
+        backup_svc.maybe_restore_from_s3_on_boot()
+        db.ensure_schema()
+    except Exception:
+        pass
+    # ابدأ الحفظ التلقائي في الخلفية (يرفع إلى S3)
     try:
         backup_svc.start_auto_backup_scheduler(app)
     except Exception:
@@ -382,9 +388,15 @@ def health():
             "backups": True,
             "auto_backup": True,
             "s3_backup": backup_svc.s3_configured(),
+            "s3_restore": True,
             "trial_mode": os.environ.get("TRIAL_MODE", "").strip() in {"1", "true", "yes"},
         },
         "auto_backup": auto,
+        "aws": {
+            "linked": backup_svc.s3_configured(),
+            "bucket": (backup_svc.s3_settings() or {}).get("bucket"),
+            "region": (backup_svc.s3_settings() or {}).get("region"),
+        },
     }, 200
 
 
@@ -1097,34 +1109,42 @@ def settings_page():
 @app.route("/admin/backups")
 @login_required
 def backups_home():
-    backups = backup_svc.list_backups(limit=80)
-    sizes = {}
-    for b in backups:
-        try:
-            sizes[b["_rel"]] = backup_svc.human_size((b.get("progress") or {}).get("db_size_bytes") or 0)
-        except Exception:
-            sizes[b["_rel"]] = "—"
     current = backup_svc.progress_snapshot()
     auto = backup_svc.auto_status()
-    sync_token = backup_svc.get_sync_token()
-    base = request.url_root.rstrip("/")
     return render_template(
         "backups.html",
-        backups=backups,
         timeline=backup_svc.progress_timeline(limit=40),
-        purposes=backup_svc.PURPOSE_CHOICES,
-        data_root=str(backup_svc.data_root()),
-        backups_root=str(backup_svc.backups_root()),
         current_progress=current,
         current_size=backup_svc.human_size(current.get("db_size_bytes") or 0),
-        sizes=sizes,
         hosting=backup_svc.hosting_info(),
         auto=auto,
-        sync_token=sync_token,
-        sync_latest_url=f"{base}/api/backups/latest?token={sync_token}",
-        sync_status_url=f"{base}/api/backups/sync-status?token={sync_token}",
-        sync_autorun_url=f"{base}/api/backups/auto-run?token={sync_token}",
+        s3_backups=auto.get("s3_backups") or [],
+        aws_link=auto.get("aws_link") or {},
     )
+
+
+@app.route("/admin/backups/restore-s3", methods=["POST"])
+@login_required
+def backups_restore_s3():
+    key = (request.form.get("key") or "").strip()
+    if not key:
+        flash("اختر حفظة من Amazon S3.", "danger")
+        return redirect(url_for("backups_home"))
+    try:
+        result = backup_svc.restore_from_s3(key, user_name=current_user_name())
+        db.log_audit(
+            current_user_name(),
+            "استعادة من AWS S3",
+            "نسخة احتياطية",
+            details=key,
+        )
+        flash(
+            f"تمت الاستعادة من Amazon S3: {(result.get('imported') or {}).get('id') or key}",
+            "ok",
+        )
+    except Exception as exc:
+        flash(f"تعذر الاستعادة من S3: {exc}", "danger")
+    return redirect(url_for("backups_home"))
 
 
 @app.route("/admin/backups/create", methods=["POST"])
@@ -1220,7 +1240,11 @@ def backups_auto_now():
     try:
         result = backup_svc.create_auto_backup(force=True, user_name=current_user_name())
         if result.get("created"):
-            flash("تم إنشاء حفظة تلقائية وتجهيزها للجهاز الرئيسي.", "ok")
+            s3 = (result.get("delivery") or {}).get("s3") or {}
+            if s3.get("ok"):
+                flash("تم الحفظ ورفعه إلى Amazon S3.", "ok")
+            else:
+                flash("تم الحفظ محلياً — تعذر الرفع إلى S3.", "warning")
         else:
             flash(result.get("reason") or result.get("error") or "لم تُنشأ حفظة", "warning")
     except Exception as exc:

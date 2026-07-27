@@ -337,6 +337,7 @@ def required_perm_for_request() -> str | None:
         "backups_create",
         "backups_download",
         "backups_restore",
+        "backups_restore_s3",
         "backups_upload",
         "backups_auto_now",
         "backups_regen_token",
