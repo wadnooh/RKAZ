@@ -9,13 +9,31 @@
       <div class="meta">متابعة بلاغات الطوارئ — عرض / تعديل / طباعة تقرير المعاملة</div>
     </div>
     <div class="actions">
-      {% if can('tickets.write') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">+ بلاغ جديد</a>{% endif %}
+      {% if can('tickets.write') %}
+      <a class="btn ghost" href="{{ url_for('tickets_template') }}">قالب Excel</a>
+      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ بلاغ جديد</a>
+      {% endif %}
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>
   </div>
 
+  {% if can('tickets.write') %}
+  <div class="form-grid" style="margin-bottom:14px;">
+    <form method="post" action="{{ url_for('tickets_import') }}" enctype="multipart/form-data" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+      <div style="flex:1;min-width:220px;">
+        <label>استيراد البلاغات من Excel</label>
+        <input type="file" name="file" accept=".xlsx,.xlsm" required>
+      </div>
+      <button class="btn primary" type="submit">استيراد</button>
+    </form>
+  </div>
+  <p class="meta" style="margin-top:-6px;margin-bottom:12px;">
+    نزّل <strong>قالب Excel</strong> ثم املأ الصفوف وارفع الملف. عند تكرار <strong>رقم العطل</strong> يتم تحديث السجل تلقائياً.
+  </p>
+  {% endif %}
+
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q }}" placeholder="بحث برقم البلاغ / الحي / العطل..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="بحث برقم العطل / الحي / العطل..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">كل الحالات</option>
       {% for s in lists.execution_status %}
@@ -30,7 +48,7 @@
     <table class="table">
       <thead>
         <tr>
-          <th>رقم البلاغ</th>
+          <th>رقم العطل</th>
           <th>التاريخ</th>
           <th>الحي</th>
           <th>المحطة</th>
