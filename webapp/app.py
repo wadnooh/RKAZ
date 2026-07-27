@@ -317,7 +317,19 @@ def section_links(section):
 @app.route("/health")
 def health():
     """فحص نبض للإبقاء على الخدمة مستيقظة على Render."""
-    return {"ok": True, "app": "rekaz"}, 200
+    return {
+        "ok": True,
+        "app": "rekaz",
+        "build": os.environ.get("RENDER_GIT_COMMIT")
+        or os.environ.get("RAKAZ_BUILD")
+        or "local",
+        "features": {
+            "review_removed": True,
+            "rasmalah_tabs": True,
+            "backups": True,
+            "trial_mode": os.environ.get("TRIAL_MODE", "").strip() in {"1", "true", "yes"},
+        },
+    }, 200
 
 
 @app.route("/")
