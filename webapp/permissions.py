@@ -261,6 +261,8 @@ def required_perm_for_request() -> str | None:
         "ticket_new": "tickets.write",
         "ticket_edit": "tickets.write",
         "ticket_delete": "tickets.delete",
+        "tickets_template": "tickets.write",
+        "tickets_import": "tickets.write",
     }
     if ep in ticket_map:
         need = ticket_map[ep]

@@ -3,28 +3,68 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">المزامنة التلقائية</h2>
-      <div class="meta">الحفظ والإرسال للجهاز الرئيسي يعملان في الخلفية بدون تدخل</div>
+      <h2 class="section-title">المزامنة السحابية — Render ↔ Amazon S3</h2>
+      <div class="meta">الحفظ التلقائي على سيرفر AWS، والاستعادة منه أيضاً — بدون جهاز دائم</div>
     </div>
   </div>
 
   <div class="stats-grid" style="margin-bottom:8px;">
-    <div class="stat-card"><div>الحالة</div><strong>{% if auto and auto.enabled %}تلقائي{% else %}متوقف{% endif %}</strong></div>
-    <div class="stat-card"><div>دورة الحفظ</div><strong>كل {{ auto.interval_minutes if auto else 360 }} د</strong></div>
-    <div class="stat-card"><div>آخر مزامنة</div><strong style="font-size:0.9rem">{{ auto.last_backup_at if auto and auto.last_backup_at else '—' }}</strong></div>
-    <div class="stat-card"><div>القادمة</div><strong>{% if auto and auto.next_due_minutes is not none %}{{ auto.next_due_minutes }} د{% else %}—{% endif %}</strong></div>
-    <div class="stat-card"><div>Amazon S3</div><strong>{% if auto and auto.s3_configured %}مربوط{% else %}غير مربوط{% endif %}</strong></div>
+    <div class="stat-card"><div>ربط AWS</div><strong>{% if aws_link and aws_link.linked %}متصل{% else %}غير متصل{% endif %}</strong></div>
+    <div class="stat-card"><div>الـ Bucket</div><strong style="font-size:0.85rem">{{ (auto.s3.bucket if auto and auto.s3 else '—') }}</strong></div>
+    <div class="stat-card"><div>المنطقة</div><strong>{{ (auto.s3.region if auto and auto.s3 else '—') }}</strong></div>
+    <div class="stat-card"><div>دورة الحفظ</div><strong>كل {{ auto.interval_minutes if auto else 120 }} د</strong></div>
+    <div class="stat-card"><div>آخر رفع لـ S3</div><strong style="font-size:0.85rem">{% if auto and auto.last_s3_upload %}{{ auto.last_s3_upload.at }}{% else %}—{% endif %}</strong></div>
     <div class="stat-card"><div>حجم القاعدة</div><strong>{{ current_size }}</strong></div>
   </div>
-
 </div>
+
+{% if s3_backups %}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">أرشيف Amazon S3</h3>
+      <div class="meta">الحفظات على السيرفر السحابي — الاستعادة تتم من هنا</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>الملف</th>
+          <th>التاريخ</th>
+          <th>الحجم</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in s3_backups %}
+        <tr>
+          <td class="meta" style="direction:ltr;text-align:left;">{{ item.name }}</td>
+          <td>{{ item.last_modified }}</td>
+          <td>{{ item.size_label }}</td>
+          <td>
+            <form method="post" action="{{ url_for('backups_restore_s3') }}" style="display:inline;" onsubmit="return confirm('استعادة هذه الحفظة من Amazon S3؟ سيتم إنشاء حفظة أمان أولاً.');">
+              <input type="hidden" name="key" value="{{ item.key }}">
+              <button class="btn ghost" type="submit">استعادة</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card" style="margin-top:14px;">
+  <p class="meta">لا توجد حفظات على Amazon S3 بعد — ستظهر تلقائياً بعد أول دورة حفظ.</p>
+</div>
+{% endif %}
 
 {% if timeline %}
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">سجل المزامنة</h3>
-      <div class="meta">آخر النسخ التلقائية</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">سجل المزامنة المحلي</h3>
     </div>
   </div>
   <div class="table-wrap">
@@ -55,35 +95,4 @@
   </div>
 </div>
 {% endif %}
-
-<details style="margin-top:18px;">
-  <summary class="meta" style="cursor:pointer;user-select:none;">إعدادات متقدمة (للإدارة فقط)</summary>
-  <div class="card" style="margin-top:10px;">
-    <div class="field full">
-      <label>رمز المزامنة للجهاز الرئيسي</label>
-      <input value="{{ sync_token }}" readonly style="direction:ltr;font-family:monospace;" onclick="this.select()">
-    </div>
-    <p class="meta" style="margin-top:10px;">
-      وكيل الجهاز: <code>الجهاز_الرئيسي\تثبيت_المهمة_التلقائية.bat</code>
-      — المجلد: <code>backups_inbox</code>
-    </p>
-    <form method="post" action="{{ url_for('backups_regen_token') }}" style="margin-top:10px;" onsubmit="return confirm('تجديد الرمز؟ حدّث إعداد الجهاز الرئيسي بعد ذلك.');">
-      <button class="btn ghost" type="submit">تجديد الرمز</button>
-    </form>
-
-    <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb;">
-    <p class="meta">استعادة طارئة من ملف ZIP بعد إعادة نشر السيرفر</p>
-    <form method="post" action="{{ url_for('backups_upload') }}" enctype="multipart/form-data" class="form-grid" style="margin-top:8px;">
-      <div class="field full">
-        <input type="file" name="backup_zip" accept=".zip,application/zip" required>
-      </div>
-      <div class="field full">
-        <label><input type="checkbox" name="also_restore" value="1" checked> استعادة فورية</label>
-      </div>
-      <div class="actions" style="grid-column:1/-1">
-        <button class="btn ghost" type="submit">رفع واستعادة</button>
-      </div>
-    </form>
-  </div>
-</details>
 {% endblock %}

@@ -63,10 +63,10 @@ def hosting_info() -> dict:
         "data_root": str(data_root()),
         "backups_root": str(backups_root()),
         "hint": (
-            "البيانات تُزامن تلقائياً إلى Amazon S3 (إن وُجد) و/أو الجهاز الرئيسي في الخلفية. "
-            "عند الاعتماد الكامل أضف Disk مدفوع مع RAKAZ_DATA_DIR=/var/data."
+            "الحفظ والاستعادة عبر Amazon S3 تلقائياً. "
+            "راجع: للعميل/الحفظ_والاستعادة_S3.md"
             if trial
-            else "المزامنة التلقائية تعمل في الخلفية (S3 و/أو الجهاز الرئيسي)."
+            else "المزامنة التلقائية مع Amazon S3 تعمل في الخلفية."
         ),
     }
 
@@ -511,12 +511,166 @@ def s3_settings() -> dict:
     }
 
 
+def _s3_client():
+    import boto3
+
+    cfg = s3_settings()
+    return boto3.client(
+        "s3",
+        region_name=cfg["region"],
+        aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "").strip(),
+        aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip(),
+    )
+
+
+def probe_aws_link() -> dict:
+    """فحص ربط Render ↔ Amazon S3."""
+    cfg = s3_settings()
+    if not cfg["configured"]:
+        return {
+            "ok": False,
+            "linked": False,
+            "provider": "aws-s3",
+            "reason": "مفاتيح AWS أو اسم الـ Bucket غير مضبوطة على Render",
+            "s3": cfg,
+        }
+    try:
+        client = _s3_client()
+        client.head_bucket(Bucket=cfg["bucket"])
+        listed = list_s3_backups(limit=3)
+        return {
+            "ok": True,
+            "linked": True,
+            "provider": "aws-s3",
+            "s3": cfg,
+            "objects_sample": len(listed),
+            "latest_key": (listed[0]["key"] if listed else None),
+            "latest_modified": (listed[0]["last_modified"] if listed else None),
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "linked": False,
+            "provider": "aws-s3",
+            "s3": cfg,
+            "error": str(exc),
+        }
+
+
+def list_s3_backups(limit: int = 40) -> list[dict]:
+    """قائمة حفظات Amazon S3 من الأحدث للأقدم."""
+    if not s3_configured():
+        return []
+    cfg = s3_settings()
+    try:
+        client = _s3_client()
+        prefix = f"{cfg['prefix']}/"
+        resp = client.list_objects_v2(Bucket=cfg["bucket"], Prefix=prefix, MaxKeys=max(1, min(limit, 100)))
+        items = []
+        for obj in resp.get("Contents") or []:
+            key = obj.get("Key") or ""
+            if not key.endswith(".zip"):
+                continue
+            lm = obj.get("LastModified")
+            items.append(
+                {
+                    "key": key,
+                    "name": key.split("/")[-1],
+                    "size": int(obj.get("Size") or 0),
+                    "size_label": human_size(int(obj.get("Size") or 0)),
+                    "last_modified": lm.isoformat() if hasattr(lm, "isoformat") else str(lm or ""),
+                    "uri": f"s3://{cfg['bucket']}/{key}",
+                }
+            )
+        items.sort(key=lambda x: x.get("last_modified") or "", reverse=True)
+        return items[:limit]
+    except Exception:
+        return []
+
+
+def download_s3_backup(key: str) -> Path:
+    """تنزيل حفظة من S3 إلى مجلد مؤقت محلي."""
+    key = (key or "").strip()
+    if not key or ".." in key or not key.endswith(".zip"):
+        raise ValueError("مفتاح S3 غير صالح")
+    cfg = s3_settings()
+    if not key.startswith(cfg["prefix"] + "/") and key != cfg["prefix"]:
+        # اسمح فقط داخل بادئة الحفظات
+        raise ValueError("المفتاح خارج مجلد الحفظات")
+    dest_dir = backups_root() / "_s3_inbox"
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / Path(key).name
+    client = _s3_client()
+    client.download_file(cfg["bucket"], key, str(dest))
+    return dest
+
+
+def restore_from_s3(key: str, *, user_name: str = "نظام AWS") -> dict:
+    """استعادة قاعدة البيانات من حفظة موجودة على Amazon S3."""
+    zip_path = download_s3_backup(key)
+
+    class _ZipFile:
+        def __init__(self, path: Path):
+            self._path = path
+            self.filename = path.name
+
+        def read(self):
+            return self._path.read_bytes()
+
+    imported = import_backup_zip(_ZipFile(zip_path), user_name=user_name, also_restore=True)
+    state = load_auto_state()
+    state["last_s3_restore"] = {
+        "key": key,
+        "at": datetime.now().isoformat(timespec="seconds"),
+        "user": user_name,
+        "backup_id": (imported.get("imported") or {}).get("id"),
+    }
+    save_auto_state(state)
+    return imported
+
+
+def maybe_restore_from_s3_on_boot() -> dict:
+    """
+    عند إقلاع Render: إن كانت القاعدة فارغة/جديدة جداً وS3 فيه حفظات،
+    استعد أحدث نسخة تلقائياً (ربط شامل بدون تدخل).
+    """
+    flag = os.environ.get("AWS_S3_AUTO_RESTORE", "1").strip().lower()
+    if flag in {"0", "false", "no", "off"}:
+        return {"restored": False, "skipped": True, "reason": "الاستعادة التلقائية متوقفة"}
+    if not s3_configured():
+        return {"restored": False, "skipped": True, "reason": "S3 غير مربوط"}
+
+    # لا نستعيد إن وُجدت بيانات حقيقية
+    try:
+        if db.DB_PATH.exists() and db.DB_PATH.stat().st_size > 40_000:
+            conn = db.connect()
+            try:
+                n = int(conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0])
+            finally:
+                conn.close()
+            if n > 1:
+                return {"restored": False, "skipped": True, "reason": "القاعدة تحتوي بيانات"}
+    except Exception:
+        pass
+
+    remote = list_s3_backups(limit=1)
+    if not remote:
+        return {"restored": False, "skipped": True, "reason": "لا توجد حفظات على S3"}
+
+    key = remote[0]["key"]
+    try:
+        result = restore_from_s3(key, user_name="إقلاع Render←AWS")
+        db.ensure_schema()
+        return {"restored": True, "key": key, "result": result}
+    except Exception as exc:
+        return {"restored": False, "error": str(exc), "key": key}
+
+
 def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
     """رفع الحفظة تلقائياً إلى Amazon S3 (بديل الجهاز الدائم)."""
     if not s3_configured():
         return {"ok": False, "skipped": True, "reason": "S3 غير مُعد"}
     try:
-        import boto3
         from botocore.exceptions import BotoCoreError, ClientError
     except ImportError:
         return {"ok": False, "error": "حزمة boto3 غير مثبتة"}
@@ -528,15 +682,10 @@ def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
     bid = re.sub(r"-+", "-", bid).strip("-")[:120] or "backup"
     key = f"{cfg['prefix']}/{stamp}__{bid}.zip"
     try:
-        client = boto3.client(
-            "s3",
-            region_name=cfg["region"],
-            aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "").strip(),
-            aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip(),
-        )
+        client = _s3_client()
         # S3 metadata يجب أن تكون ASCII فقط
-        bid = str(meta.get("id") or "")
-        bid_ascii = re.sub(r"[^A-Za-z0-9_./\-]", "-", bid)[:200]
+        bid_raw = str(meta.get("id") or "")
+        bid_ascii = re.sub(r"[^A-Za-z0-9_./\-]", "-", bid_raw)[:200]
         stamp_ascii = re.sub(r"[^0-9T\-]", "", str(meta.get("created_at") or ""))[:32]
         extra = {
             "ContentType": "application/zip",
@@ -548,6 +697,14 @@ def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
             },
         }
         client.upload_file(str(zip_path), cfg["bucket"], key, ExtraArgs=extra)
+        state = load_auto_state()
+        state["last_s3_upload"] = {
+            "key": key,
+            "at": datetime.now().isoformat(timespec="seconds"),
+            "uri": f"s3://{cfg['bucket']}/{key}",
+            "size": zip_path.stat().st_size if zip_path.exists() else 0,
+        }
+        save_auto_state(state)
         return {
             "ok": True,
             "bucket": cfg["bucket"],
@@ -684,8 +841,8 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
 
         purpose = "auto"
         meta = create_backup(
-            label="حفظ تلقائي للجهاز الرئيسي",
-            note=f"حفظ تلقائي كل {interval} دقيقة — جاهز للسحب إلى الجهاز الرئيسي",
+            label="حفظ تلقائي إلى Amazon S3",
+            note=f"حفظ تلقائي كل {interval} دقيقة — يُرفع إلى سيرفر AWS S3 للاستعادة لاحقاً",
             purpose=purpose,
             user_name=user_name,
         )
@@ -722,6 +879,8 @@ def auto_status() -> dict:
             next_due = max(0, int((due - datetime.now()).total_seconds() / 60))
         except Exception:
             next_due = None
+    aws = probe_aws_link()
+    s3_items = list_s3_backups(limit=15) if s3_configured() else []
     return {
         "enabled": auto_backup_enabled(),
         "interval_minutes": interval,
@@ -732,6 +891,10 @@ def auto_status() -> dict:
         "email_configured": email_delivery_configured(),
         "s3_configured": s3_configured(),
         "s3": s3_settings(),
+        "aws_link": aws,
+        "s3_backups": s3_items,
+        "last_s3_upload": state.get("last_s3_upload"),
+        "last_s3_restore": state.get("last_s3_restore"),
         "webhook_configured": bool(os.environ.get("BACKUP_WEBHOOK_URL", "").strip()),
         "sync_token_ready": bool(get_sync_token()),
         "latest": {

@@ -24,8 +24,14 @@ services:
       - key: AUTO_BACKUP
         value: "1"
       - key: AUTO_BACKUP_HOURS
-        value: "6"
-      # عيّن BACKUP_SYNC_TOKEN في لوحة Render (Environment) ثم انسخه إلى الجهاز_الرئيسي/sync_config.json
+        value: "2"
+      - key: AWS_S3_AUTO_RESTORE
+        value: "1"
+      # عيّن على Render (Environment) دون وضعها في Git:
+      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
+      # AWS_S3_BUCKET=rekaz-alenjaz-backups
+      # AWS_S3_REGION=eu-north-1
+      # AWS_S3_PREFIX=rekaz-backups
       - key: PYTHON_VERSION
         value: "3.12.8"
       # لا تفعّل RAKAZ_DATA_DIR على المجاني بدون Disk.

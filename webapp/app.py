@@ -24,6 +24,7 @@ from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import review_engine
 from webapp import permissions
 from webapp import warehouse_excel
+from webapp import tickets_excel
 from webapp import backup as backup_svc
 
 app = Flask(__name__, instance_relative_config=True)
@@ -656,6 +657,43 @@ def tickets_list():
         r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
         r["final_value"] = final_value(r.get("items_value"))
     return render_template("tickets_list.html", rows=rows, q=q, status=status)
+
+
+@app.route("/tickets/template.xlsx")
+@login_required
+def tickets_template():
+    data = tickets_excel.build_tickets_template()
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name="قالب_البلاغات.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/tickets/import", methods=["POST"])
+@login_required
+def tickets_import():
+    if not permissions.can("tickets.write"):
+        return permissions.deny_redirect()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("اختر ملف Excel للبلاغات", "danger")
+        return redirect(url_for("tickets_list"))
+    try:
+        result = tickets_excel.import_tickets_from_excel(f)
+        flash(
+            f"استيراد البلاغات: جديد {result['ok']} | محدّث {result['updated']}",
+            "ok",
+        )
+        if result.get("errors"):
+            flash(" / ".join(result["errors"][:5]), "danger")
+        db.log_audit(current_user_name(), "استيراد Excel", "بلاغات", details=str(result)[:240])
+        if result["ok"] or result["updated"]:
+            _after_data_change()
+    except Exception as exc:
+        flash(f"تعذر الاستيراد: {exc}", "danger")
+    return redirect(url_for("tickets_list"))
 
 
 @app.route("/tickets/new", methods=["GET", "POST"])
