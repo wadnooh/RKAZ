@@ -214,8 +214,8 @@ def import_items_from_excel(file_storage) -> dict:
     if not rows:
         return {"ok": 0, "updated": 0, "opening": 0, "errors": ["الملف فارغ"]}
 
-    mapping = _map_headers(rows[0], _ITEM_ALIASES)
-    if "item_no" not in mapping.values() and "item_name" not in mapping.values():
+    header_idx, mapping = _find_header(rows, _ITEM_ALIASES, {"item_no", "item_name"})
+    if header_idx < 0:
         return {"ok": 0, "updated": 0, "opening": 0, "errors": ["لم يُعثر على أعمدة رقم/اسم المادة"]}
 
     inv = {v: k for k, v in mapping.items()}
@@ -224,7 +224,7 @@ def import_items_from_excel(file_storage) -> dict:
     conn = db.connect()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    for i, row in enumerate(rows[1:], start=2):
+    for i, row in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
         item_no = _cell(row, inv.get("item_no"))
@@ -309,8 +309,8 @@ def import_tx_from_excel(file_storage) -> dict:
     if not rows:
         return {"ok": 0, "linked": 0, "errors": ["الملف فارغ"]}
 
-    mapping = _map_headers(rows[0], _TX_ALIASES)
-    if "item_no" not in mapping.values() and "item_name" not in mapping.values():
+    header_idx, mapping = _find_header(rows, _TX_ALIASES, {"item_no", "item_name"})
+    if header_idx < 0:
         return {"ok": 0, "linked": 0, "errors": ["لم يُعثر على عمود المادة"]}
     if "qty" not in mapping.values():
         return {"ok": 0, "linked": 0, "errors": ["لم يُعثر على عمود الكمية"]}
@@ -321,7 +321,7 @@ def import_tx_from_excel(file_storage) -> dict:
     conn = db.connect()
     today = datetime.now().strftime("%Y-%m-%d")
 
-    for i, row in enumerate(rows[1:], start=2):
+    for i, row in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
         item_no = _cell(row, inv.get("item_no"))
