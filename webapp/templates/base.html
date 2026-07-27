@@ -45,12 +45,6 @@
     </div>
   </header>
 
-  {% if session.get('user_id') and not is_login_page and hosting and hosting.is_trial_free %}
-  <div class="flash warning" style="margin:10px 16px 0;border-radius:12px;">
-    وضع التجربة على سيرفر مجاني — البيانات تُزامن تلقائياً إلى Amazon S3 عند الربط.
-  </div>
-  {% endif %}
-
   {% if session.get('user_id') and not is_login_page %}
   {% set p = request.path or '' %}
   {# ترتيب التبويبات مطابق لتقارير رسملة #}
