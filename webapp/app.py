@@ -352,6 +352,8 @@ def _count(table):
 def section_links(section):
     links = []
     for key, mod in modules_for_section(section):
+        if mod.get("hub_hidden"):
+            continue
         links.append(
             {
                 "label": mod["title"],
@@ -409,19 +411,26 @@ def dashboard():
 @app.route("/ops")
 @login_required
 def ops_home():
-    links = [
-        {"label": "الأعطال", "href": url_for("tickets_list"), "count": _count("tickets")},
-        {"label": "الكميات", "href": url_for("module_list", name="quantities"), "count": _count("quantities")},
-        {"label": "قائمة الصور", "href": url_for("module_list", name="photos"), "count": _count("photos")},
-        {"label": "التمتير", "href": url_for("module_list", name="metering"), "count": _count("metering")},
-        {"label": "فرق المهام العاجلة", "href": url_for("teams_page"), "count": _count("teams")},
-        {"label": "إجراءات العمل (SOP)", "href": url_for("sop_page")},
-        {"label": "القوائم المرجعية", "href": url_for("lists_page")},
+    tools = [
+        {"label": "فرق المهام العاجلة", "href": url_for("teams_page")},
     ]
+    if permissions.can("sop.read"):
+        tools.append({"label": "إجراءات العمل (SOP)", "href": url_for("sop_page")})
+
+    conn = db.connect()
+    recent = db.rows_to_dicts(
+        conn.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 12").fetchall()
+    )
+    conn.close()
+    for r in recent:
+        r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
+        r["final_value"] = final_value(r.get("items_value"))
+
     return render_template(
         "ops_home.html",
         stats=dashboard_stats(),
-        links=links,
+        tools=tools,
+        recent_tickets=recent,
         total_count=_count("tickets"),
     )
 
@@ -757,6 +766,11 @@ def ticket_view(ticket_id):
         "metering": db.rows_to_dicts(conn.execute("SELECT * FROM metering WHERE ticket_no=?", (tno,)).fetchall()),
     }
     conn.close()
+    for q in related["quantities"]:
+        q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
+    photo_keys = ["before_shot", "during_shot", "after_shot", "quantities_shot", "location_shot"]
+    for p in related["photos"]:
+        p["complete"] = "مكتمل" if all(p.get(k) == "نعم" for k in photo_keys) else "ناقص"
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
     ticket["final_value"] = final_value(ticket.get("items_value"))
     return render_template("ticket_view.html", ticket=ticket, related=related)
@@ -849,6 +863,20 @@ def _module_form_data(module):
     return data
 
 
+def _redirect_after_module(name, data):
+    """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل إن أمكن."""
+    tno = str((data or {}).get("ticket_no") or "").strip()
+    if tno and name in ("quantities", "photos", "metering"):
+        conn = db.connect()
+        row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
+        conn.close()
+        if row:
+            return redirect(url_for("ticket_view", ticket_id=row["id"]))
+    if tno:
+        return redirect(url_for("module_list", name=name, ticket_no=tno))
+    return redirect(url_for("module_list", name=name))
+
+
 @app.route("/module/<name>")
 @login_required
 def module_list(name):
@@ -878,11 +906,10 @@ def module_list(name):
     if name == "warehouse_items":
         for r in rows:
             r["balance"] = db.warehouse_balance(r.get("item_no"))
-    if name == "warehouse_tx":
-        if item_filter:
-            rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
-        if ticket_filter:
-            rows = [r for r in rows if (r.get("ticket_no") or "") == ticket_filter]
+    if name == "warehouse_tx" and item_filter:
+        rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
+    if ticket_filter and any(f[0] == "ticket_no" for f in module.get("fields", [])):
+        rows = [r for r in rows if (r.get("ticket_no") or "") == ticket_filter]
     section = module.get("section")
     return render_template(
         "module_list.html",
@@ -924,7 +951,7 @@ def module_new(name):
         db.log_audit(current_user_name(), "إضافة", module["title"], new_id, str(data)[:240])
         flash("تمت الإضافة", "ok")
         _after_data_change()
-        return redirect(url_for("module_list", name=name))
+        return _redirect_after_module(name, data)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     if request.args.get("item_no") and "item_no" in prefill:
         prefill["item_no"] = request.args.get("item_no")
@@ -973,7 +1000,7 @@ def module_edit(name, row_id):
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
         flash("تم الحفظ", "ok")
         _after_data_change()
-        return redirect(url_for("module_list", name=name))
+        return _redirect_after_module(name, data)
     data = dict(row)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     conn.close()

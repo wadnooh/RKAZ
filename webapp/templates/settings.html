@@ -4,6 +4,7 @@
   <div class="actions">
     {% if can('users.manage') %}<a class="btn ghost" href="{{ url_for('users_home') }}">المستخدمون</a>{% endif %}
     <a class="btn primary" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>
+    {% if can('lists.write') %}<a class="btn ghost" href="{{ url_for('lists_page') }}">القوائم المرجعية</a>{% endif %}
   </div>
 </div>
 <div class="card">

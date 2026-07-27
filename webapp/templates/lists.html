@@ -1,7 +1,12 @@
 {% extends "base.html" %}
 {% block content %}
-{% set active = 'lists' %}
-{% include "_ops_subnav.html" %}
+<div class="toolbar" style="margin-bottom:12px;">
+  <div class="actions">
+    {% if can('users.manage') %}<a class="btn ghost" href="{{ url_for('users_home') }}">المستخدمون</a>{% endif %}
+    {% if can('settings.write') %}<a class="btn ghost" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>{% endif %}
+    <a class="btn primary" href="{{ url_for('lists_page') }}">القوائم المرجعية</a>
+  </div>
+</div>
 {% set labels = {
   'execution_status':'حالة التنفيذ',
   'photo_status':'حالة الصور',
@@ -37,7 +42,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">القوائم المرجعية</h2>
-      <div class="meta">قيم القوائم المنسدلة لكل أقسام النظام</div>
+      <div class="meta">قيم القوائم المنسدلة لكل أقسام النظام — إعداد إداري</div>
     </div>
   </div>
   <form method="post">

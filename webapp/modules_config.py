@@ -6,6 +6,7 @@ MODULES = {
         "title": "الكميات",
         "table": "quantities",
         "section": "ops",
+        "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("item_no", "رقم البند", "text"),
@@ -22,6 +23,7 @@ MODULES = {
         "title": "قائمة الصور",
         "table": "photos",
         "section": "ops",
+        "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("before_shot", "صور قبل التنفيذ", "yesno"),
@@ -37,6 +39,7 @@ MODULES = {
         "title": "التمتير",
         "table": "metering",
         "section": "ops",
+        "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("officer", "مسؤول المستخلصات", "list:invoice_officers"),

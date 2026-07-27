@@ -7,23 +7,21 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">العمليات والصيانة</h2>
-      <div class="meta ui-hint">لوحة تقرير عامة للعمليات. أعطال الطوارئ التفصيلية تظهر داخل التبويبات التخصصية (محتوى ملف ركاز).</div>
+      <div class="meta">متابعة أعطال الطوارئ — الكميات والصور والتمتير تُدار من داخل العطل نفسه.</div>
     </div>
     <div class="actions">
       {% if can('tickets.write') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">+ عطل جديد</a>{% endif %}
+      {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('tickets_list') }}">سجل الأعطال</a>{% endif %}
       <button type="button" class="btn ghost" data-open-jump>قفز سريع</button>
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>
   </div>
 
-  <div class="actions" style="margin-bottom:14px;" data-tab-strip="1">
-    {% for item in links %}
-    <a class="btn ghost" href="{{ item.href }}">{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
-    {% endfor %}
-  </div>
-
   <div class="stats-grid">
-    <div class="stat-card"><div>إجمالي الأعطال</div><strong>{{ stats.total }}</strong></div>
+    <a class="stat-card" href="{{ url_for('tickets_list') if can('tickets.read') else '#' }}" style="text-decoration:none;color:inherit;">
+      <div>إجمالي الأعطال</div>
+      <strong>{{ stats.total }}</strong>
+    </a>
     <div class="stat-card"><div>أعطال منفذة</div><strong>{{ stats.done }}</strong></div>
     <div class="stat-card"><div>أعطال مغلقة</div><strong>{{ stats.closed }}</strong></div>
     <div class="stat-card"><div>متأخرة استجابة</div><strong>{{ stats.delayed }}</strong></div>
@@ -40,25 +38,80 @@
   </div>
 </div>
 
+{% if can('tickets.read') %}
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
-    <h3 class="section-title" style="font-size:1.05rem;margin:0;">تبويبات العمليات</h3>
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">أحدث الأعطال</h3>
+      <div class="meta">افتح العطل لإدارة الكميات والصور والتمتير من داخله</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('tickets_list') }}">كل الأعطال</a>
+    </div>
   </div>
   <div class="table-wrap">
-    <table class="table" style="min-width:0">
+    <table class="table">
       <thead>
-        <tr><th>القسم</th><th>المعاملات</th><th>إجراءات</th></tr>
+        <tr>
+          <th>رقم العطل</th>
+          <th>التاريخ</th>
+          <th>الحي</th>
+          <th>العطل</th>
+          <th>الفرقة</th>
+          <th>الحالة</th>
+          <th>القيمة</th>
+          <th>إجراءات</th>
+        </tr>
       </thead>
       <tbody>
-        {% for item in links %}
+        {% for t in recent_tickets %}
         <tr>
-          <td>{{ item.label }}</td>
-          <td>{{ item.count if item.count is defined else '—' }}</td>
-          <td class="actions"><a class="btn ghost" href="{{ item.href }}">فتح</a></td>
+          <td><strong>{{ t.ticket_no }}</strong></td>
+          <td>{{ t.receive_date or '—' }}</td>
+          <td>{{ t.district or '—' }}</td>
+          <td>{{ t.fault_type or '—' }}</td>
+          <td>{{ t.team or '—' }}</td>
+          <td>
+            {% if t.status in ['منفذ','مغلق'] %}
+            <span class="badge ok">{{ t.status }}</span>
+            {% elif t.status in ['مرفوض/إعادة عمل'] %}
+            <span class="badge danger">{{ t.status }}</span>
+            {% elif t.status in ['قيد التنفيذ','تم التوجيه'] %}
+            <span class="badge warn">{{ t.status }}</span>
+            {% else %}
+            <span class="badge info">{{ t.status or '—' }}</span>
+            {% endif %}
+          </td>
+          <td>{% if t.final_value is not none %}{{ t.final_value|money }}{% else %}—{% endif %}</td>
+          <td class="actions">
+            <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=t.id) }}">فتح</a>
+            {% if can('tickets.write') %}
+            <a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=t.id) }}">تعديل</a>
+            {% endif %}
+          </td>
         </tr>
+        {% else %}
+        <tr><td colspan="8" class="meta">لا توجد أعطال بعد. {% if can('tickets.write') %}<a href="{{ url_for('ticket_new') }}">أضف عطلاً جديداً</a>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 </div>
+{% endif %}
+
+{% if tools %}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">أدوات تشغيلية</h3>
+      <div class="meta">فرق المهام وإجراءات العمل</div>
+    </div>
+  </div>
+  <div class="actions">
+    {% for item in tools %}
+    <a class="btn ghost" href="{{ item.href }}">{{ item.label }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
 {% endblock %}

@@ -6,7 +6,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">عرض العطل — {{ ticket.ticket_no }}</h2>
-      <div class="meta">رحلة العطل وربطها بالأقسام (كميات، صور، تنسيقات، تمتير، مستودع، سلامة)</div>
+      <div class="meta">تفاصيل العطل والسجلات المرتبطة به (كميات، صور، تمتير)</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
@@ -33,25 +33,152 @@
     <div class="meta-item"><div class="k">التوجيه / الوصول</div><div class="v">{{ ticket.dispatch_time or '—' }} / {{ ticket.arrival_time or '—' }}</div></div>
     <div class="meta-item"><div class="k">زمن الاستجابة</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
     <div class="meta-item"><div class="k">القيمة النهائية</div><div class="v">{% if ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">تم التصوير</div><div class="v">{{ ticket.photographed or '—' }}</div></div>
+    <div class="meta-item"><div class="k">الكميات مكتملة</div><div class="v">{{ ticket.quantities_done or '—' }}</div></div>
+    <div class="meta-item"><div class="k">حالة التمتير</div><div class="v">{{ ticket.metering_status or '—' }}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">الموقع</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">ملاحظات</div><div class="v">{{ ticket.notes or '—' }}</div></div>
   </div>
 </div>
 
+{# —— الكميات —— #}
 <div class="card" style="margin-top:14px;">
-  <h3 class="section-title" style="font-size:1.05rem;">السجلات المرتبطة</h3>
-  <div class="meta" style="margin:8px 0 12px;">
-    الكميات: {{ related.quantities|length }} |
-    الصور: {{ related.photos|length }} |
-    التنسيقات: {{ related.coordination|length }} |
-    التمتير: {{ related.metering|length }}
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">الكميات</h3>
+      <div class="meta">{{ related.quantities|length }} بند مرتبط بهذا العطل</div>
+    </div>
+    <div class="actions">
+      {% if can('modules.write') and can('section.ops') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='quantities', ticket_no=ticket.ticket_no) }}">+ بند كمية</a>
+      {% endif %}
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='quantities', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      {% endif %}
+    </div>
   </div>
-  {% if can('modules.write') %}
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th>{% if can('modules.write') %}<th></th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for q in related.quantities %}
+        <tr>
+          <td>{{ q.item_no or '—' }}</td>
+          <td>{{ q.description or '—' }}</td>
+          <td>{{ q.unit or '—' }}</td>
+          <td>{{ q.qty if q.qty is not none else '—' }}</td>
+          <td>{% if q.unit_price is not none %}{{ q.unit_price|money }}{% else %}—{% endif %}</td>
+          <td>{% if q.total is not none %}{{ q.total|money }}{% else %}—{% endif %}</td>
+          {% if can('modules.write') %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='quantities', row_id=q.id) }}">تعديل</a></td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">لا توجد كميات لهذا العطل بعد.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# —— الصور —— #}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">قائمة الصور</h3>
+      <div class="meta">{{ related.photos|length }} سجل صور مرتبط بهذا العطل</div>
+    </div>
+    <div class="actions">
+      {% if can('modules.write') and can('section.ops') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">+ سجل صور</a>
+      {% endif %}
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>قبل</th><th>أثناء</th><th>بعد</th><th>كميات</th><th>موقع</th><th>الحالة</th>{% if can('modules.write') %}<th></th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for p in related.photos %}
+        <tr>
+          <td>{{ p.before_shot or '—' }}</td>
+          <td>{{ p.during_shot or '—' }}</td>
+          <td>{{ p.after_shot or '—' }}</td>
+          <td>{{ p.quantities_shot or '—' }}</td>
+          <td>{{ p.location_shot or '—' }}</td>
+          <td>
+            {% if p.complete == 'مكتمل' %}<span class="badge ok">مكتمل</span>
+            {% else %}<span class="badge danger">ناقص</span>{% endif %}
+          </td>
+          {% if can('modules.write') %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">تعديل</a></td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">لا يوجد سجل صور لهذا العطل بعد.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# —— التمتير —— #}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">التمتير</h3>
+      <div class="meta">{{ related.metering|length }} سجل تمتير مرتبط بهذا العطل</div>
+    </div>
+    <div class="actions">
+      {% if can('modules.write') and can('section.ops') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">+ تمتير</a>
+      {% endif %}
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>المسؤول</th><th>بداية</th><th>الحالة</th><th>قيمة معتمدة</th>{% if can('modules.write') %}<th></th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for m in related.metering %}
+        <tr>
+          <td>{{ m.officer or '—' }}</td>
+          <td>{{ m.start_date or '—' }}</td>
+          <td>{{ m.status or '—' }}</td>
+          <td>{% if m.approved_value is not none %}{{ m.approved_value|money }}{% else %}—{% endif %}</td>
+          {% if can('modules.write') %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">تعديل</a></td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="meta">لا يوجد تمتير لهذا العطل بعد.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+{# —— روابط أقسام أخرى مرتبطة —— #}
+{% if can('modules.write') %}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">ربط بأقسام أخرى</h3>
+      <div class="meta">تنسيقات: {{ related.coordination|length }} سجل</div>
+    </div>
+  </div>
   <div class="actions">
-    {% if can('section.ops') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='quantities', ticket_no=ticket.ticket_no) }}">+ كمية</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">+ صور</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">+ تمتير</a>
+    {% if can('section.financial') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">+ مستخلص</a>
     {% endif %}
     {% if can('section.quality') %}
@@ -65,6 +192,6 @@
     <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">+ تصريح سلامة</a>
     {% endif %}
   </div>
-  {% endif %}
 </div>
+{% endif %}
 {% endblock %}

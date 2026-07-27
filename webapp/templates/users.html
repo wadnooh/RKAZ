@@ -6,6 +6,9 @@
     {% if can('settings.write') %}
     <a class="btn ghost" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>
     {% endif %}
+    {% if can('lists.write') %}
+    <a class="btn ghost" href="{{ url_for('lists_page') }}">القوائم المرجعية</a>
+    {% endif %}
   </div>
 </div>
 

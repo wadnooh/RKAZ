@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-{% if section == 'ops' or name in ['quantities','photos','metering'] %}
-  {% set active = name %}
+{% if name in ['quantities','photos','metering'] %}
+  {% set active = 'tickets' %}
+  {% include "_ops_subnav.html" %}
+{% elif section == 'ops' %}
+  {% set active = 'ops' %}
   {% include "_ops_subnav.html" %}
 {% else %}
   {% include "_section_subnav.html" %}
@@ -11,8 +14,13 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">{% if mode=='new' %}إضافة — {{ module.title }}{% else %}تعديل — {{ module.title }}{% endif %}</h2>
+      {% if row.get('ticket_no') %}<div class="meta">مرتبط برقم العطل {{ row.ticket_no }}</div>{% endif %}
     </div>
+    {% if row.get('ticket_no') and name in ['quantities','photos','metering'] %}
+    <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=row.ticket_no) }}">رجوع</a>
+    {% else %}
     <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">رجوع</a>
+    {% endif %}
   </div>
 
   <form method="post" class="form-grid">
