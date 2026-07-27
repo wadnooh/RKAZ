@@ -9,8 +9,10 @@ services:
     startCommand: python -m webapp.app
     healthCheckPath: /health
     envVars:
+      # لا تستخدم generateValue هنا — إعادة تطبيق الـ Blueprint قد تُبدّل المفتاح وتُخرج الجميع.
+      # عيّن SECRET_KEY مرة واحدة في لوحة Render (Environment) واتركه كما هو دائماً.
       - key: SECRET_KEY
-        generateValue: true
+        sync: false
       - key: HOST
         value: "0.0.0.0"
       - key: PORT

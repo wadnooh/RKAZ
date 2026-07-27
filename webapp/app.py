@@ -27,9 +27,14 @@ from webapp import warehouse_excel
 from webapp import backup as backup_svc
 
 app = Flask(__name__, instance_relative_config=True)
+# يجب أن يبقى SECRET_KEY ثابتاً على Render — تغييره يُبطل جلسات الجميع
 app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.permanent_session_lifetime = timedelta(days=30)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Render يضبط RENDER=true ويعمل خلف HTTPS
+app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
 app.url_map.strict_slashes = False
 # Render / reverse proxies
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -275,7 +280,6 @@ def login():
     if request.method == "POST":
         username = (request.form.get("username") or "").strip()
         password = (request.form.get("password") or "").strip()
-        remember = bool(request.form.get("remember"))
         conn = db.connect()
         user = conn.execute(
             "SELECT * FROM users WHERE lower(username)=lower(?)",
@@ -289,7 +293,8 @@ def login():
             flash(i18n_tr(session.get("lang") or "ar", "inactive_user"), "danger")
             return render_template("login.html")
         session.clear()
-        session.permanent = remember
+        # جلسة دائمة دائماً (30 يوماً) حتى لا يخرج المستخدم عند إعادة نشر Render
+        session.permanent = True
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["full_name"] = user["full_name"]
