@@ -1,0 +1,6 @@
+{
+  "base_url": "https://rekaz-alenjaz.onrender.com",
+  "token": "ضع_هنا_رمز_المزامنة_من_صفحة_حفظ_البيانات",
+  "out_dir": "حِفظات",
+  "keep_files": 30
+}

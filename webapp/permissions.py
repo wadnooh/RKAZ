@@ -330,7 +330,15 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
-    if ep in {"backups_home", "backups_create", "backups_download", "backups_restore", "backups_upload"}:
+    if ep in {
+        "backups_home",
+        "backups_create",
+        "backups_download",
+        "backups_restore",
+        "backups_upload",
+        "backups_auto_now",
+        "backups_regen_token",
+    }:
         return None if has_perm("backup.manage") else "backup.manage"
 
     if ep in {"audit_log_home", "audit_log_page"}:

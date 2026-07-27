@@ -2,7 +2,7 @@ name: Keep Render Awake
 
 on:
   schedule:
-    # كل 10 دقائق تقريباً لإبقاء الخدمة المجانية مستيقظة
+    # كل 10 دقائق تقريباً لإبقاء الخدمة المجانية مستيقظة + تشغيل الحفظ التلقائي
     - cron: "*/10 * * * *"
   workflow_dispatch:
 
@@ -16,9 +16,22 @@ jobs:
             code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 90 "https://rekaz-alenjaz.onrender.com/health" || true)
             echo "attempt=$i status=$code"
             if [ "$code" = "200" ]; then
-              exit 0
+              break
             fi
             sleep 20
           done
-          echo "Service did not respond with 200 (may be deploying)."
+
+      - name: Trigger auto backup if token configured
+        env:
+          BACKUP_SYNC_TOKEN: ${{ secrets.BACKUP_SYNC_TOKEN }}
+        run: |
+          if [ -z "$BACKUP_SYNC_TOKEN" ]; then
+            echo "BACKUP_SYNC_TOKEN not set — skip auto-run (pull agent still works)."
+            exit 0
+          fi
+          code=$(curl -s -o /tmp/auto.json -w "%{http_code}" --max-time 120 \
+            "https://rekaz-alenjaz.onrender.com/api/backups/auto-run?token=${BACKUP_SYNC_TOKEN}" || true)
+          echo "auto-run status=$code"
+          head -c 400 /tmp/auto.json || true
+          echo
           exit 0

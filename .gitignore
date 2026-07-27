@@ -11,3 +11,6 @@ instance/
 نسخة_العميل_للمراجعة.zip
 tools/cloudflared.exe
 tools/*.zip
+الجهاز_الرئيسي/sync_config.json
+الجهاز_الرئيسي/حِفظات/
+الجهاز_الرئيسي/sync_log.txt

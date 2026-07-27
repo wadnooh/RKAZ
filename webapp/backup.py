@@ -5,11 +5,17 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
 import shutil
+import smtplib
 import sqlite3
 import tempfile
+import threading
+import urllib.error
+import urllib.request
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta
+from email.message import EmailMessage
 from pathlib import Path
 
 from webapp import db
@@ -19,12 +25,16 @@ SAFE_LABEL = re.compile(r"[^\w\u0600-\u06FF\-]+", re.UNICODE)
 
 PURPOSE_CHOICES = [
     ("manual", "حفظ يدوي"),
+    ("auto", "حفظ تلقائي"),
     ("dev", "نقطة تطوير"),
     ("milestone", "مرحلة إنجاز"),
     ("before_change", "قبل تعديل كبير"),
     ("daily", "حفظ يومي"),
     ("trial", "حفظ تجربة سحابية"),
 ]
+
+_auto_lock = threading.Lock()
+_scheduler_started = False
 
 
 def is_cloud() -> bool:
@@ -54,9 +64,10 @@ def hosting_info() -> dict:
         "backups_root": str(backups_root()),
         "hint": (
             "البيانات على الخطة المجانية قد تُفقد عند إعادة النشر أو السكون. "
-            "نزّل حفظة إلى جهازك بانتظام، وعند الاعتماد الكامل أضف Disk مدفوع مع RAKAZ_DATA_DIR=/var/data."
+            "الحفظ التلقائي يعمل على السيرفر ويُسحب تلقائياً إلى الجهاز الرئيسي عبر وكيل المزامنة. "
+            "عند الاعتماد الكامل أضف Disk مدفوع مع RAKAZ_DATA_DIR=/var/data."
             if trial
-            else "البيانات محفوظة على مسار البيانات الحالي."
+            else "الحفظ التلقائي مفعّل — يُزامن إلى الجهاز الرئيسي عند تشغيل وكيل السحب."
         ),
     }
 
@@ -402,3 +413,300 @@ def human_size(n: int) -> str:
             return f"{n:.0f} {unit}" if unit == "بايت" else f"{n:.1f} {unit}"
         n /= 1024
     return f"{n:.1f} ج.ب"
+
+
+def _auto_state_path() -> Path:
+    return backups_root() / ".auto_state.json"
+
+
+def load_auto_state() -> dict:
+    path = _auto_state_path()
+    if not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_auto_state(state: dict) -> None:
+    path = _auto_state_path()
+    path.write_text(json.dumps(state, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def auto_interval_minutes() -> int:
+    raw = os.environ.get("AUTO_BACKUP_INTERVAL_MINUTES", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return int(raw)
+    hours = os.environ.get("AUTO_BACKUP_HOURS", "").strip()
+    if hours.isdigit() and int(hours) > 0:
+        return int(hours) * 60
+    # افتراضي: كل 6 ساعات
+    return 6 * 60
+
+
+def auto_backup_enabled() -> bool:
+    flag = os.environ.get("AUTO_BACKUP", "1").strip().lower()
+    return flag not in {"0", "false", "no", "off"}
+
+
+def get_sync_token() -> str:
+    env = os.environ.get("BACKUP_SYNC_TOKEN", "").strip()
+    if env:
+        return env
+    settings = db.get_settings()
+    token = str(settings.get("backup_sync_token") or "").strip()
+    if token:
+        return token
+    token = secrets.token_urlsafe(24)
+    db.save_settings({"backup_sync_token": token})
+    return token
+
+
+def regenerate_sync_token() -> str:
+    token = secrets.token_urlsafe(24)
+    db.save_settings({"backup_sync_token": token})
+    return token
+
+
+def token_matches(provided: str | None) -> bool:
+    expected = get_sync_token()
+    if not expected or not provided:
+        return False
+    return secrets.compare_digest(str(provided).strip(), expected)
+
+
+def latest_backup(purpose: str | None = None) -> dict | None:
+    for item in list_backups(limit=200):
+        if purpose and item.get("purpose") != purpose:
+            continue
+        return item
+    return None
+
+
+def email_delivery_configured() -> bool:
+    return bool(
+        os.environ.get("BACKUP_EMAIL_TO", "").strip()
+        and os.environ.get("SMTP_HOST", "").strip()
+        and os.environ.get("SMTP_USER", "").strip()
+        and os.environ.get("SMTP_PASS", "").strip()
+    )
+
+
+def send_backup_email(meta: dict, zip_path: Path) -> dict:
+    to_addr = os.environ.get("BACKUP_EMAIL_TO", "").strip()
+    host = os.environ.get("SMTP_HOST", "").strip()
+    port = int(os.environ.get("SMTP_PORT", "587") or 587)
+    user = os.environ.get("SMTP_USER", "").strip()
+    password = os.environ.get("SMTP_PASS", "").strip()
+    from_addr = os.environ.get("SMTP_FROM", "").strip() or user
+    if not (to_addr and host and user and password):
+        return {"ok": False, "skipped": True, "reason": "البريد غير مُعد"}
+
+    msg = EmailMessage()
+    msg["Subject"] = f"حفظة ركاز تلقائية — {meta.get('created_at')}"
+    msg["From"] = from_addr
+    msg["To"] = to_addr
+    msg.set_content(
+        "حفظة تلقائية من نظام ركاز.\n"
+        f"الوقت: {meta.get('created_at')}\n"
+        f"البلاغات: {(meta.get('progress') or {}).get('tickets_total', 0)}\n"
+        f"المعرّف: {meta.get('id')}\n"
+        "أرفق الملف على الجهاز الرئيسي في مجلد الحفظات.\n"
+    )
+    msg.add_attachment(
+        zip_path.read_bytes(),
+        maintype="application",
+        subtype="zip",
+        filename=f"rekaz-auto-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip",
+    )
+    with smtplib.SMTP(host, port, timeout=60) as smtp:
+        smtp.starttls()
+        smtp.login(user, password)
+        smtp.send_message(msg)
+    return {"ok": True, "to": to_addr}
+
+
+def post_backup_webhook(meta: dict, download_url: str = "") -> dict:
+    url = os.environ.get("BACKUP_WEBHOOK_URL", "").strip()
+    if not url:
+        return {"ok": False, "skipped": True, "reason": "لا يوجد webhook"}
+    payload = json.dumps(
+        {
+            "app": "rekaz",
+            "event": "backup.created",
+            "backup_id": meta.get("id"),
+            "created_at": meta.get("created_at"),
+            "purpose": meta.get("purpose"),
+            "tickets_total": (meta.get("progress") or {}).get("tickets_total", 0),
+            "download_url": download_url,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=payload,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return {"ok": True, "status": getattr(resp, "status", 200)}
+    except urllib.error.URLError as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+def deliver_backup(meta: dict, *, download_url: str = "") -> dict:
+    """إرسال الحفظة للجهاز الرئيسي: بريد (إن وُجد) + webhook (إن وُجد). السحب المحلي هو القناة الأساسية."""
+    result = {"email": None, "webhook": None, "ready_for_pull": True}
+    rel = meta.get("_rel") or meta.get("path", "").replace("backups/", "", 1)
+    # path في meta هو نسبة إلى data_root مثل backups/2026/...
+    if not meta.get("_rel"):
+        path = meta.get("path") or ""
+        if path.startswith("backups/"):
+            rel = path[len("backups/") :]
+        else:
+            rel = path
+    try:
+        zip_path = build_backup_zip(rel)
+    except Exception as exc:
+        return {"ready_for_pull": False, "error": str(exc)}
+
+    if email_delivery_configured():
+        try:
+            result["email"] = send_backup_email(meta, zip_path)
+        except Exception as exc:
+            result["email"] = {"ok": False, "error": str(exc)}
+    else:
+        result["email"] = {"ok": False, "skipped": True, "reason": "البريد غير مُعد — استخدم وكيل الجهاز الرئيسي"}
+
+    result["webhook"] = post_backup_webhook(meta, download_url=download_url)
+    result["zip_size"] = zip_path.stat().st_size if zip_path.exists() else 0
+    return result
+
+
+def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلقائي") -> dict:
+    """
+    إنشاء حفظة تلقائية إن حان موعدها، ثم تجهيزها للسحب إلى الجهاز الرئيسي.
+    """
+    with _auto_lock:
+        state = load_auto_state()
+        now = datetime.now()
+        interval = auto_interval_minutes()
+        last_raw = state.get("last_backup_at")
+        if not force and last_raw:
+            try:
+                last = datetime.fromisoformat(last_raw)
+                if now - last < timedelta(minutes=interval):
+                    return {
+                        "created": False,
+                        "skipped": True,
+                        "reason": "لم يحن موعد الحفظ بعد",
+                        "next_due_minutes": max(
+                            0, int(interval - (now - last).total_seconds() / 60)
+                        ),
+                        "last_backup_at": last_raw,
+                        "latest": latest_backup(),
+                    }
+            except Exception:
+                pass
+
+        if not db.DB_PATH.exists():
+            return {"created": False, "error": "قاعدة البيانات غير موجودة"}
+
+        purpose = "auto"
+        meta = create_backup(
+            label="حفظ تلقائي للجهاز الرئيسي",
+            note=f"حفظ تلقائي كل {interval} دقيقة — جاهز للسحب إلى الجهاز الرئيسي",
+            purpose=purpose,
+            user_name=user_name,
+        )
+        meta["_rel"] = str((data_root() / meta["path"]).relative_to(backups_root())).replace("\\", "/")
+        delivery = deliver_backup(meta)
+        state.update(
+            {
+                "last_backup_at": now.isoformat(timespec="seconds"),
+                "last_backup_id": meta.get("id"),
+                "last_backup_rel": meta.get("_rel"),
+                "last_delivery": delivery,
+                "interval_minutes": interval,
+            }
+        )
+        save_auto_state(state)
+        return {
+            "created": True,
+            "backup": meta,
+            "delivery": delivery,
+            "interval_minutes": interval,
+        }
+
+
+def auto_status() -> dict:
+    state = load_auto_state()
+    latest = latest_backup(purpose="auto") or latest_backup()
+    interval = auto_interval_minutes()
+    next_due = None
+    last_raw = state.get("last_backup_at")
+    if last_raw:
+        try:
+            last = datetime.fromisoformat(last_raw)
+            due = last + timedelta(minutes=interval)
+            next_due = max(0, int((due - datetime.now()).total_seconds() / 60))
+        except Exception:
+            next_due = None
+    return {
+        "enabled": auto_backup_enabled(),
+        "interval_minutes": interval,
+        "last_backup_at": last_raw,
+        "last_backup_id": state.get("last_backup_id"),
+        "last_backup_rel": state.get("last_backup_rel"),
+        "next_due_minutes": next_due,
+        "email_configured": email_delivery_configured(),
+        "webhook_configured": bool(os.environ.get("BACKUP_WEBHOOK_URL", "").strip()),
+        "sync_token_ready": bool(get_sync_token()),
+        "latest": {
+            "id": (latest or {}).get("id"),
+            "created_at": (latest or {}).get("created_at"),
+            "purpose": (latest or {}).get("purpose"),
+            "rel": (latest or {}).get("_rel"),
+            "tickets_total": ((latest or {}).get("progress") or {}).get("tickets_total"),
+        }
+        if latest
+        else None,
+        "last_delivery": state.get("last_delivery"),
+    }
+
+
+def start_auto_backup_scheduler(app=None) -> None:
+    """خيط خلفي ينشئ حفظة عند حلول الموعد (يعمل مع Waitress أيضاً)."""
+    global _scheduler_started
+    if _scheduler_started or not auto_backup_enabled():
+        return
+    _scheduler_started = True
+
+    def _loop():
+        # أول تشغيل بعد دقيقة من الإقلاع
+        import time
+
+        time.sleep(60)
+        while True:
+            try:
+                if auto_backup_enabled():
+                    if app is not None:
+                        with app.app_context():
+                            create_auto_backup(force=False)
+                    else:
+                        create_auto_backup(force=False)
+            except Exception as exc:
+                try:
+                    state = load_auto_state()
+                    state["last_error"] = str(exc)
+                    state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
+                    save_auto_state(state)
+                except Exception:
+                    pass
+            # افحص كل 5 دقائق
+            time.sleep(300)
+
+    t = threading.Thread(target=_loop, name="rekaz-auto-backup", daemon=True)
+    t.start()

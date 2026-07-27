@@ -25,6 +25,38 @@
   </div>
   {% endif %}
 
+  <div style="margin-bottom:14px;border:1px solid #c5d6c5;background:#f4faf4;border-radius:12px;padding:14px;">
+    <div class="toolbar">
+      <div>
+        <h3 class="section-title" style="font-size:1.05rem;margin:0;">الحفظ التلقائي → الجهاز الرئيسي</h3>
+        <div class="meta">السيرفر ينشئ حفظة تلقائياً، والجهاز الرئيسي يسحبها عبر وكيل المزامنة بدون تدخل يدوي</div>
+      </div>
+      <div class="actions">
+        <form method="post" action="{{ url_for('backups_auto_now') }}" style="display:inline;">
+          <button class="btn primary" type="submit">حفظ تلقائي الآن</button>
+        </form>
+        <form method="post" action="{{ url_for('backups_regen_token') }}" style="display:inline;" onsubmit="return confirm('توليد رمز جديد؟ يجب تحديث إعداد الجهاز الرئيسي.');">
+          <button class="btn ghost" type="submit">تجديد رمز المزامنة</button>
+        </form>
+      </div>
+    </div>
+    <div class="stats-grid" style="margin-top:10px;">
+      <div class="stat-card"><div>الحالة</div><strong>{% if auto and auto.enabled %}مفعّل{% else %}متوقف{% endif %}</strong></div>
+      <div class="stat-card"><div>الفترة</div><strong>كل {{ auto.interval_minutes if auto else 360 }} دقيقة</strong></div>
+      <div class="stat-card"><div>آخر حفظ تلقائي</div><strong style="font-size:0.9rem">{{ auto.last_backup_at if auto and auto.last_backup_at else '—' }}</strong></div>
+      <div class="stat-card"><div>الموعد القادم</div><strong>{% if auto and auto.next_due_minutes is not none %}بعد {{ auto.next_due_minutes }} د{% else %}قريبًا{% endif %}</strong></div>
+    </div>
+    <div class="field full" style="margin-top:12px;">
+      <label>رمز المزامنة (للجهاز الرئيسي فقط)</label>
+      <input value="{{ sync_token }}" readonly style="direction:ltr;font-family:monospace;" onclick="this.select()">
+    </div>
+    <p class="meta" style="margin-top:10px;">
+      1) شغّل مرة واحدة على الجهاز الرئيسي: <code>الجهاز_الرئيسي\تثبيت_المهمة_التلقائية.bat</code><br>
+      2) سيُحفظ تلقائياً في مجلد <code>الجهاز_الرئيسي\حِفظات</code><br>
+      3) رابط السحب: <code style="direction:ltr;word-break:break-all;">{{ sync_latest_url }}</code>
+    </p>
+  </div>
+
   <div class="stats-grid" style="margin-bottom:14px;">
     <div class="stat-card"><div>الخطة</div><strong style="font-size:0.95rem">{{ hosting.plan_label if hosting else 'محلي' }}</strong></div>
     <div class="stat-card"><div>مسار البيانات</div><strong style="font-size:0.95rem">{{ data_root }}</strong></div>

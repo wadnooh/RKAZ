@@ -35,13 +35,27 @@ app.url_map.strict_slashes = False
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 _DB_READY = False
-PUBLIC_ENDPOINTS = {"login", "forgot_password", "set_lang", "static", "health"}
+PUBLIC_ENDPOINTS = {
+    "login",
+    "forgot_password",
+    "set_lang",
+    "static",
+    "health",
+    "api_backups_latest",
+    "api_backups_auto_run",
+    "api_backups_sync_status",
+}
 
 
 def create_app():
     global _DB_READY
     db.init_db()
     _DB_READY = True
+    # ابدأ الحفظ التلقائي في الخلفية
+    try:
+        backup_svc.start_auto_backup_scheduler(app)
+    except Exception:
+        pass
     return app
 
 
@@ -317,6 +331,16 @@ def section_links(section):
 @app.route("/health")
 def health():
     """فحص نبض للإبقاء على الخدمة مستيقظة على Render."""
+    auto = {}
+    try:
+        st = backup_svc.auto_status()
+        auto = {
+            "enabled": st.get("enabled"),
+            "last_backup_at": st.get("last_backup_at"),
+            "next_due_minutes": st.get("next_due_minutes"),
+        }
+    except Exception:
+        auto = {"enabled": backup_svc.auto_backup_enabled()}
     return {
         "ok": True,
         "app": "rekaz",
@@ -327,8 +351,10 @@ def health():
             "review_removed": True,
             "rasmalah_tabs": True,
             "backups": True,
+            "auto_backup": True,
             "trial_mode": os.environ.get("TRIAL_MODE", "").strip() in {"1", "true", "yes"},
         },
+        "auto_backup": auto,
     }, 200
 
 
@@ -1004,6 +1030,9 @@ def backups_home():
         except Exception:
             sizes[b["_rel"]] = "—"
     current = backup_svc.progress_snapshot()
+    auto = backup_svc.auto_status()
+    sync_token = backup_svc.get_sync_token()
+    base = request.url_root.rstrip("/")
     return render_template(
         "backups.html",
         backups=backups,
@@ -1015,6 +1044,11 @@ def backups_home():
         current_size=backup_svc.human_size(current.get("db_size_bytes") or 0),
         sizes=sizes,
         hosting=backup_svc.hosting_info(),
+        auto=auto,
+        sync_token=sync_token,
+        sync_latest_url=f"{base}/api/backups/latest?token={sync_token}",
+        sync_status_url=f"{base}/api/backups/sync-status?token={sync_token}",
+        sync_autorun_url=f"{base}/api/backups/auto-run?token={sync_token}",
     )
 
 
@@ -1039,7 +1073,7 @@ def backups_create():
         )
         flash(f"تم إنشاء الحفظة: {meta.get('label') or meta.get('purpose_label')}", "ok")
         if backup_svc.is_trial_free():
-            flash("وضع التجربة المجانية: نزّل الحفظة إلى جهازك لتحافظ عليها بعد إعادة النشر.", "warning")
+            flash("الحفظ التلقائي يُسحب للجهاز الرئيسي عبر وكيل المزامنة — راجع التعليمات أدناه.", "warning")
     except Exception as exc:
         flash(f"تعذر إنشاء الحفظة: {exc}", "danger")
     return redirect(url_for("backups_home"))
@@ -1105,6 +1139,77 @@ def backups_upload():
     except Exception as exc:
         flash(f"تعذر رفع الحفظة: {exc}", "danger")
     return redirect(url_for("backups_home"))
+
+
+@app.route("/admin/backups/auto-now", methods=["POST"])
+@login_required
+def backups_auto_now():
+    try:
+        result = backup_svc.create_auto_backup(force=True, user_name=current_user_name())
+        if result.get("created"):
+            flash("تم إنشاء حفظة تلقائية وتجهيزها للجهاز الرئيسي.", "ok")
+        else:
+            flash(result.get("reason") or result.get("error") or "لم تُنشأ حفظة", "warning")
+    except Exception as exc:
+        flash(f"تعذر الحفظ التلقائي: {exc}", "danger")
+    return redirect(url_for("backups_home"))
+
+
+@app.route("/admin/backups/regen-token", methods=["POST"])
+@login_required
+def backups_regen_token():
+    try:
+        backup_svc.regenerate_sync_token()
+        flash("تم توليد رمز مزامنة جديد — حدّث ملف الإعداد على الجهاز الرئيسي.", "ok")
+    except Exception as exc:
+        flash(f"تعذر توليد الرمز: {exc}", "danger")
+    return redirect(url_for("backups_home"))
+
+
+@app.route("/api/backups/latest")
+def api_backups_latest():
+    """سحب أحدث حفظة للجهاز الرئيسي (يتطلب رمز المزامنة)."""
+    token = request.args.get("token") or request.headers.get("X-Backup-Token")
+    if not backup_svc.token_matches(token):
+        return {"ok": False, "error": "رمز غير صالح"}, 401
+    try:
+        backup_svc.create_auto_backup(force=False)
+    except Exception:
+        pass
+    latest = backup_svc.latest_backup(purpose="auto") or backup_svc.latest_backup()
+    if not latest:
+        return {"ok": False, "error": "لا توجد حفظات بعد"}, 404
+    zip_path = backup_svc.build_backup_zip(latest["_rel"])
+    stamp = (latest.get("created_at") or "").replace(":", "").replace("T", "-")
+    return send_file(
+        zip_path,
+        as_attachment=True,
+        download_name=f"rekaz-auto-{stamp or 'latest'}.zip",
+        mimetype="application/zip",
+    )
+
+
+@app.route("/api/backups/auto-run")
+def api_backups_auto_run():
+    """تشغيل دورة الحفظ التلقائي (من keep-alive أو الجهاز الرئيسي)."""
+    token = request.args.get("token") or request.headers.get("X-Backup-Token")
+    if not backup_svc.token_matches(token):
+        return {"ok": False, "error": "رمز غير صالح"}, 401
+    force = (request.args.get("force") or "").strip() in {"1", "true", "yes"}
+    result = backup_svc.create_auto_backup(force=force)
+    return {
+        "ok": True,
+        **{k: v for k, v in result.items() if k != "backup"},
+        "backup_id": (result.get("backup") or {}).get("id"),
+    }, 200
+
+
+@app.route("/api/backups/sync-status")
+def api_backups_sync_status():
+    token = request.args.get("token") or request.headers.get("X-Backup-Token")
+    if not backup_svc.token_matches(token):
+        return {"ok": False, "error": "رمز غير صالح"}, 401
+    return {"ok": True, **backup_svc.auto_status()}, 200
 
 
 @app.route("/sop")
