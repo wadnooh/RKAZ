@@ -21,7 +21,6 @@ PERM_LABELS = {
     "section.maintenance": "الورشة",
     "section.hr": "الموارد البشرية",
     "section.contracts": "إدارة العقود",
-    "section.review": "المتابعة والمراجعة",
     "tickets.read": "عرض البلاغات",
     "tickets.write": "إضافة/تعديل البلاغات",
     "tickets.delete": "حذف البلاغات",
@@ -56,7 +55,6 @@ SECTION_PERMS = {
     "maintenance": "section.maintenance",
     "hr": "section.hr",
     "contracts": "section.contracts",
-    "review": "section.review",
 }
 
 _READ_ALL_SECTIONS = set(SECTION_PERMS.values())
@@ -96,7 +94,6 @@ _ROLE_PERMS: dict[str, set[str]] = {
         "section.financial",
         "section.maintenance",
         "section.hr",
-        "section.review",
         "tickets.read",
         "tickets.write",
         "modules.read",
@@ -183,7 +180,6 @@ def deny_redirect(message: str | None = None):
     # وجّه لأول قسم مسموح
     for section, perm in (
         ("ops", "section.ops"),
-        ("review", "section.review"),
         ("constructions", "section.constructions"),
         ("contractors", "section.contractors"),
         ("quality", "section.quality"),
@@ -198,7 +194,6 @@ def deny_redirect(message: str | None = None):
         if has_perm(perm):
             endpoint = {
                 "ops": "ops_home",
-                "review": "review_home",
                 "constructions": "constructions_home",
                 "contractors": "contractors_home",
                 "quality": "quality_home",
@@ -289,25 +284,9 @@ def required_perm_for_request() -> str | None:
         "maintenance_home": "section.maintenance",
         "hr_home": "section.hr",
         "contracts_admin_home": "section.contracts",
-        "review_home": "section.review",
-        "ticket_review": "section.review",
-        "review_followup_save": "section.review",
     }
     if ep in section_endpoints:
         need = section_endpoints[ep]
-        # المتابعة / حفظ المراجعة تحتاج صلاحية كتابة
-        if ep == "review_followup_save" and method == "POST":
-            if not has_perm("section.review"):
-                return "section.review"
-            if not has_perm("tickets.write") and not has_perm("modules.write"):
-                return "tickets.write"
-            return None
-        if ep == "ticket_review" and method == "POST":
-            if not has_perm("section.review"):
-                return "section.review"
-            if not has_perm("tickets.write") and not has_perm("modules.write"):
-                return "tickets.write"
-            return None
         return None if has_perm(need) else need
 
     # المتابعات المالية
@@ -397,7 +376,6 @@ def _perm_for_path(path: str) -> str | None:
         ("/settings", "settings.write"),
         ("/admin/backups", "backup.manage"),
         ("/admin/audit", "audit.read"),
-        ("/review", "section.review"),
         ("/constructions", "section.constructions"),
         ("/contractors", "section.contractors"),
         ("/quality", "section.quality"),

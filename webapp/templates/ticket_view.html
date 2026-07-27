@@ -10,7 +10,6 @@
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
-      {% if can('section.review') %}<a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=ticket.ticket_no) }}">مراجعة شاملة</a>{% endif %}
       {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=ticket.id) }}">تعديل</a>{% endif %}
       <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
       {% if can('tickets.delete') %}

@@ -11,7 +11,6 @@
     </div>
     <div class="actions">
       {% if can('tickets.write') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">+ معاملة بلاغ جديدة</a>{% endif %}
-      {% if can('section.review') %}<a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة{% if alert_summary %} ({{ alert_summary.total }}){% endif %}</a>{% endif %}
       <button type="button" class="btn ghost" data-open-jump>قفز سريع</button>
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>

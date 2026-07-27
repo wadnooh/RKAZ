@@ -10,7 +10,6 @@
     </div>
     <div class="actions">
       {% if can('tickets.write') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">+ بلاغ جديد</a>{% endif %}
-      {% if can('section.review') %}<a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>{% endif %}
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>
   </div>
@@ -69,7 +68,6 @@
           <td>{{ t.final_value|money if t.final_value is not none else '—' }}</td>
           <td class="actions">
             {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">عرض</a>{% endif %}
-            {% if can('section.review') %}<a class="btn ghost" href="{{ url_for('ticket_review', ticket_no=t.ticket_no) }}">مراجعة</a>{% endif %}
             {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=t.id) }}">تعديل</a>{% endif %}
             {% if can('tickets.read') %}<a class="btn primary" href="{{ url_for('ticket_print', ticket_id=t.id) }}" target="_blank">طباعة</a>{% endif %}
           </td>

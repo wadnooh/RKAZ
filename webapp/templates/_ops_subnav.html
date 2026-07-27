@@ -17,8 +17,5 @@
     {% if can('lists.write') %}
     <a class="btn ghost{% if active=='lists' %} primary{% endif %}" href="{{ url_for('lists_page') }}">القوائم</a>
     {% endif %}
-    {% if can('section.review') %}
-    <a class="btn ghost{% if active=='review' %} primary{% endif %}" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
-    {% endif %}
   </div>
 </div>

@@ -337,16 +337,12 @@ def ops_home():
         {"label": "فرق المهام العاجلة", "href": url_for("teams_page"), "count": _count("teams")},
         {"label": "إجراءات العمل (SOP)", "href": url_for("sop_page")},
         {"label": "القوائم المرجعية", "href": url_for("lists_page")},
-        {"label": "المتابعة والمراجعة", "href": url_for("review_home")},
     ]
-    alerts, alert_summary = review_engine.build_alerts(g.settings)
     return render_template(
         "ops_home.html",
         stats=dashboard_stats(),
         links=links,
         total_count=_count("tickets"),
-        alert_summary=alert_summary,
-        top_alerts=alerts[:5],
     )
 
 
@@ -1380,162 +1376,13 @@ def global_search():
     return render_template("search.html", q=q, results=results)
 
 
-# ---------- Jump + Review / Follow-up ----------
+# ---------- Jump ----------
 @app.route("/api/jump-destinations")
 @login_required
 def api_jump_destinations():
     from flask import jsonify
 
     return jsonify(permissions.filter_jump_items(review_engine.jump_destinations()))
-
-
-@app.route("/review")
-@login_required
-def review_home():
-    alerts, summary = review_engine.build_alerts(g.settings)
-    conn = db.connect()
-    followups = db.rows_to_dicts(
-        conn.execute(
-            """
-            SELECT * FROM followups
-            ORDER BY
-              CASE status WHEN 'مفتوح' THEN 0 WHEN 'قيد المتابعة' THEN 1 ELSE 2 END,
-              CASE priority WHEN 'عاجل' THEN 0 WHEN 'عالي' THEN 1 WHEN 'متوسط' THEN 2 ELSE 3 END,
-              CASE WHEN due_date IS NULL OR due_date='' THEN 1 ELSE 0 END,
-              due_date ASC,
-              id DESC
-            LIMIT 200
-            """
-        ).fetchall()
-    )
-    reviews = db.rows_to_dicts(conn.execute("SELECT * FROM reviews ORDER BY id DESC LIMIT 100").fetchall())
-    tickets = [
-        r["ticket_no"]
-        for r in conn.execute("SELECT ticket_no FROM tickets ORDER BY id DESC").fetchall()
-    ]
-    conn.close()
-
-    # resolve alert links
-    for a in alerts:
-        try:
-            if a.get("href_name") == "tickets_list":
-                a["url"] = url_for("tickets_list", q=a.get("href_q") or "")
-            elif a.get("href_args") is not None:
-                a["url"] = url_for(a["href_name"], **(a.get("href_args") or {}))
-            else:
-                a["url"] = url_for(a["href_name"])
-        except Exception:
-            a["url"] = url_for("review_home")
-
-    return render_template(
-        "review_home.html",
-        alerts=alerts[:80],
-        summary=summary,
-        followups=followups,
-        reviews=reviews,
-        tickets=tickets,
-    )
-
-
-@app.route("/review/followup", methods=["POST"])
-@login_required
-def review_followup_save():
-    action = request.form.get("action") or "add"
-    conn = db.connect()
-    if action == "add":
-        conn.execute(
-            """
-            INSERT INTO followups(title, ticket_no, section, priority, due_date, assignee, status, notes, created_by)
-            VALUES (?,?,?,?,?,?,?,?,?)
-            """,
-            (
-                request.form.get("title"),
-                request.form.get("ticket_no"),
-                request.form.get("section"),
-                request.form.get("priority") or "متوسط",
-                request.form.get("due_date"),
-                request.form.get("assignee"),
-                request.form.get("status") or "مفتوح",
-                request.form.get("notes"),
-                current_user_name(),
-            ),
-        )
-        conn.commit()
-        db.log_audit(current_user_name(), "إضافة", "متابعة", details=request.form.get("title"))
-        flash("تم إضافة المتابعة", "ok")
-    elif action == "status":
-        fid = request.form.get("id")
-        status = request.form.get("status")
-        if status == "مكتمل":
-            conn.execute(
-                "UPDATE followups SET status=?, closed_at=CURRENT_TIMESTAMP WHERE id=?",
-                (status, fid),
-            )
-        else:
-            conn.execute("UPDATE followups SET status=?, closed_at=NULL WHERE id=?", (status, fid))
-        conn.commit()
-        db.log_audit(current_user_name(), "تعديل", "متابعة", fid, status)
-        flash("تم تحديث حالة المتابعة", "ok")
-    elif action == "delete":
-        conn.execute("DELETE FROM followups WHERE id=?", (request.form.get("id"),))
-        conn.commit()
-        db.log_audit(current_user_name(), "حذف", "متابعة", request.form.get("id"))
-        flash("تم حذف المتابعة", "ok")
-    conn.close()
-    return redirect(url_for("review_home"))
-
-
-@app.route("/review/ticket/<ticket_no>", methods=["GET", "POST"])
-@login_required
-def ticket_review(ticket_no):
-    journey = review_engine.ticket_journey(ticket_no)
-    if not journey:
-        flash("البلاغ غير موجود", "danger")
-        return redirect(url_for("review_home"))
-    if request.method == "POST":
-        checklist = {c["key"]: ("1" if request.form.get(c["key"]) == "1" else "0") for c in journey["checks"]}
-        result = request.form.get("result") or "يحتاج استكمال"
-        notes = request.form.get("notes") or ""
-        score = journey["score"]
-        # override score if manual checks provided
-        checked = sum(1 for c in journey["checks"] if c["required"] and checklist.get(c["key"]) == "1")
-        req = sum(1 for c in journey["checks"] if c["required"])
-        if req:
-            score = int(round((checked / req) * 100))
-        conn = db.connect()
-        conn.execute(
-            """
-            INSERT INTO reviews(ticket_no, review_date, reviewer, result, score, checklist_json, notes)
-            VALUES (?,?,?,?,?,?,?)
-            """,
-            (
-                ticket_no,
-                datetime.now().strftime("%Y-%m-%d"),
-                current_user_name(),
-                result,
-                score,
-                __import__("json").dumps(checklist, ensure_ascii=False),
-                notes,
-            ),
-        )
-        conn.commit()
-        conn.close()
-        db.log_audit(current_user_name(), "مراجعة", "بلاغ", ticket_no, f"{result} — {score}%")
-        flash("تم حفظ المراجعة", "ok")
-        return redirect(url_for("ticket_review", ticket_no=ticket_no))
-
-    conn = db.connect()
-    history = db.rows_to_dicts(
-        conn.execute("SELECT * FROM reviews WHERE ticket_no=? ORDER BY id DESC", (ticket_no,)).fetchall()
-    )
-    ticket_row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (ticket_no,)).fetchone()
-    conn.close()
-    return render_template(
-        "ticket_review.html",
-        journey=journey,
-        history=history,
-        ticket_id=ticket_row["id"] if ticket_row else None,
-    )
 
 
 @app.route("/export/tickets.xlsx")

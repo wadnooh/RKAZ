@@ -211,7 +211,6 @@ def jump_destinations():
         {"title": "فرق المهام", "path": "/teams", "group": "عمليات", "keywords": "فرقة فريق"},
         {"title": "إجراءات العمل SOP", "path": "/sop", "group": "عمليات", "keywords": "sop إجراء"},
         {"title": "القوائم المرجعية", "path": "/lists", "group": "عمليات", "keywords": "قوائم"},
-        {"title": "المتابعة والمراجعة", "path": "/review", "group": "متابعة", "keywords": "مراجعة تنبيه متابعة review"},
         {"title": "المقاولين", "path": "/contractors", "group": "أقسام", "keywords": "مقاول"},
         {"title": "التنسيقات والجودة", "path": "/quality", "group": "أقسام", "keywords": "تنسيق جودة"},
         {"title": "السلامة", "path": "/safety", "group": "أقسام", "keywords": "سلامة تصريح"},

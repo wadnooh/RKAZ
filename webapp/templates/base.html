@@ -38,9 +38,6 @@
       </div>
       {% if session.get('user_id') and not is_login_page %}
       <div class="actions">
-        {% if can('section.review') %}
-        <a class="btn ghost" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
-        {% endif %}
         <span class="meta">{{ session.get('full_name', '') }} ({{ session.get('role', '') }})</span>
         <a class="btn ghost" href="{{ url_for('logout') }}">{{ tr('logout') }}</a>
       </div>
@@ -64,7 +61,7 @@
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">الإنشاءات - التنفيذ</a>
     {% endif %}
     {% if can('section.ops') %}
-    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/sop') or p.startswith('/lists') or p.startswith('/review') %} active{% endif %}" href="{{ url_for('ops_home') }}">العمليات والصيانة</a>
+    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/sop') or p.startswith('/lists') %} active{% endif %}" href="{{ url_for('ops_home') }}">العمليات والصيانة</a>
     {% endif %}
     {% if can('section.contractors') %}
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">المقاولين</a>
