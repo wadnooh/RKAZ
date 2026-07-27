@@ -286,6 +286,8 @@ def restore_backup(rel_path: str, *, user_name: str = "") -> dict:
     tmp = db.DB_PATH.with_suffix(".restore.tmp")
     shutil.copy2(src_db, tmp)
     tmp.replace(db.DB_PATH)
+    # الحفظات القديمة قد لا تحتوي جداول المقاولين/الموارد البشرية
+    db.ensure_schema()
 
     return {"restored": meta, "safety": safety}
 

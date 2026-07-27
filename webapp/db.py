@@ -93,6 +93,62 @@ def connect():
     return conn
 
 
+# جداول أُضيفت لاحقاً — تُضمن صراحة حتى بعد استعادة حفظة قديمة
+EXTRA_TABLE_DDL = {
+    "contractor_works": """
+        CREATE TABLE IF NOT EXISTS contractor_works (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_no TEXT,
+            work_date TEXT,
+            contractor TEXT,
+            ticket_no TEXT,
+            work_type TEXT,
+            site TEXT,
+            status TEXT,
+            value REAL,
+            notes TEXT
+        )
+    """,
+    "hr_employees": """
+        CREATE TABLE IF NOT EXISTS hr_employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            emp_no TEXT,
+            full_name TEXT,
+            job_title TEXT,
+            department TEXT,
+            phone TEXT,
+            status TEXT,
+            join_date TEXT,
+            notes TEXT
+        )
+    """,
+}
+
+
+def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
+    """إنشاء أي جداول ناقصة (مهم بعد استعادة نسخة قديمة على Render)."""
+    own = conn is None
+    conn = conn or connect()
+    created: list[str] = []
+    try:
+        existing = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        for name, ddl in EXTRA_TABLE_DDL.items():
+            if name not in existing:
+                conn.execute(ddl)
+                created.append(name)
+        if created:
+            conn.commit()
+        return created
+    finally:
+        if own:
+            conn.close()
+
+
 def init_db():
     conn = connect()
     cur = conn.cursor()
@@ -425,6 +481,9 @@ def init_db():
     inv_cols = [r[1] for r in cur.execute("PRAGMA table_info(invoices)").fetchall()]
     if "ticket_no" not in inv_cols:
         cur.execute("ALTER TABLE invoices ADD COLUMN ticket_no TEXT")
+
+    # تأكيد الجداول المضافة لاحقاً (حتى لو استُعيدت قاعدة قديمة)
+    ensure_schema(conn)
 
     # seed settings
     for k, v in DEFAULT_SETTINGS.items():

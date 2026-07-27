@@ -65,6 +65,12 @@ def _load_context():
     if not _DB_READY:
         db.init_db()
         _DB_READY = True
+    else:
+        # بعد استعادة حفظة قديمة قد تختفي جداول جديدة
+        try:
+            db.ensure_schema()
+        except Exception:
+            pass
     g.settings = db.get_settings()
     g.lists = db.get_lists()
     g.year = datetime.now().year
@@ -309,9 +315,18 @@ def logout():
 # ---------- Main hubs (نفس تبويبات تقارير رسملة) ----------
 def _count(table):
     conn = db.connect()
-    n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
-    conn.close()
-    return n
+    try:
+        n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+        return n
+    except Exception:
+        try:
+            db.ensure_schema(conn)
+            n = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+            return n
+        except Exception:
+            return 0
+    finally:
+        conn.close()
 
 
 def section_links(section):
