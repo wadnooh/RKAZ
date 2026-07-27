@@ -33,7 +33,7 @@ PERM_LABELS = {
     "lists.write": "إدارة القوائم",
     "settings.write": "إعدادات المكتب",
     "users.manage": "إدارة المستخدمين",
-    "backup.manage": "حفظ واستعادة البيانات",
+    "backup.manage": "المزامنة التلقائية",
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",

@@ -1,136 +1,45 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="toolbar" style="margin-bottom:12px;">
-  <div class="actions">
-    {% if can('users.manage') %}<a class="btn ghost" href="{{ url_for('users_home') }}">المستخدمون</a>{% endif %}
-    {% if can('settings.write') %}<a class="btn ghost" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>{% endif %}
-    <a class="btn primary" href="{{ url_for('backups_home') }}">حفظ البيانات</a>
-    {% if can('audit.read') %}<a class="btn ghost" href="{{ url_for('audit_log_home') }}">سجل النشاط</a>{% endif %}
-  </div>
-</div>
-
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">مسار حفظ البيانات</h2>
-      <div class="meta">نسخ منظمة لقاعدة البيانات مع لقطة تقدّم العمل — للتطوير والمتابعة</div>
+      <h2 class="section-title">المزامنة التلقائية</h2>
+      <div class="meta">الحفظ والإرسال للجهاز الرئيسي يعملان في الخلفية بدون تدخل</div>
     </div>
+  </div>
+
+  <div class="stats-grid" style="margin-bottom:8px;">
+    <div class="stat-card"><div>الحالة</div><strong>{% if auto and auto.enabled %}تلقائي{% else %}متوقف{% endif %}</strong></div>
+    <div class="stat-card"><div>دورة الحفظ</div><strong>كل {{ auto.interval_minutes if auto else 360 }} د</strong></div>
+    <div class="stat-card"><div>آخر مزامنة</div><strong style="font-size:0.9rem">{{ auto.last_backup_at if auto and auto.last_backup_at else '—' }}</strong></div>
+    <div class="stat-card"><div>القادمة</div><strong>{% if auto and auto.next_due_minutes is not none %}{{ auto.next_due_minutes }} د{% else %}—{% endif %}</strong></div>
+    <div class="stat-card"><div>حجم القاعدة</div><strong>{{ current_size }}</strong></div>
+    <div class="stat-card"><div>البلاغات</div><strong>{{ current_progress.tickets_total }}</strong></div>
   </div>
 
   {% if hosting and hosting.is_trial_free %}
-  <div class="flash warning" style="margin-bottom:14px;">
-    <strong>وضع التجربة — سيرفر مجاني (Render Free)</strong><br>
-    {{ hosting.hint }}<br>
-    الخطة الحالية: {{ hosting.plan_label }} — بعد الاعتماد الكامل: Disk مدفوع + <code>RAKAZ_DATA_DIR=/var/data</code> + <code>TRIAL_MODE=0</code>
-  </div>
+  <p class="meta" style="margin:8px 0 0;">تجربة على سيرفر مجاني — النسخ تُحفظ تلقائياً وتُسحب للجهاز الرئيسي عبر وكيل المزامنة.</p>
   {% endif %}
-
-  <div style="margin-bottom:14px;border:1px solid #c5d6c5;background:#f4faf4;border-radius:12px;padding:14px;">
-    <div class="toolbar">
-      <div>
-        <h3 class="section-title" style="font-size:1.05rem;margin:0;">الحفظ التلقائي → الجهاز الرئيسي</h3>
-        <div class="meta">السيرفر ينشئ حفظة تلقائياً، والجهاز الرئيسي يسحبها عبر وكيل المزامنة بدون تدخل يدوي</div>
-      </div>
-      <div class="actions">
-        <form method="post" action="{{ url_for('backups_auto_now') }}" style="display:inline;">
-          <button class="btn primary" type="submit">حفظ تلقائي الآن</button>
-        </form>
-        <form method="post" action="{{ url_for('backups_regen_token') }}" style="display:inline;" onsubmit="return confirm('توليد رمز جديد؟ يجب تحديث إعداد الجهاز الرئيسي.');">
-          <button class="btn ghost" type="submit">تجديد رمز المزامنة</button>
-        </form>
-      </div>
-    </div>
-    <div class="stats-grid" style="margin-top:10px;">
-      <div class="stat-card"><div>الحالة</div><strong>{% if auto and auto.enabled %}مفعّل{% else %}متوقف{% endif %}</strong></div>
-      <div class="stat-card"><div>الفترة</div><strong>كل {{ auto.interval_minutes if auto else 360 }} دقيقة</strong></div>
-      <div class="stat-card"><div>آخر حفظ تلقائي</div><strong style="font-size:0.9rem">{{ auto.last_backup_at if auto and auto.last_backup_at else '—' }}</strong></div>
-      <div class="stat-card"><div>الموعد القادم</div><strong>{% if auto and auto.next_due_minutes is not none %}بعد {{ auto.next_due_minutes }} د{% else %}قريبًا{% endif %}</strong></div>
-    </div>
-    <div class="field full" style="margin-top:12px;">
-      <label>رمز المزامنة (للجهاز الرئيسي فقط)</label>
-      <input value="{{ sync_token }}" readonly style="direction:ltr;font-family:monospace;" onclick="this.select()">
-    </div>
-    <p class="meta" style="margin-top:10px;">
-      1) شغّل مرة واحدة على الجهاز الرئيسي: <code>الجهاز_الرئيسي\تثبيت_المهمة_التلقائية.bat</code><br>
-      2) ضع رمز المزامنة أعلاه في <code>الجهاز_الرئيسي\sync_config.json</code><br>
-      3) تُحفظ الملفات تلقائياً في <code>الجهاز_الرئيسي\backups_inbox</code> كل 15 دقيقة<br>
-      4) رابط السحب: <code style="direction:ltr;word-break:break-all;">{{ sync_latest_url }}</code>
-    </p>
-  </div>
-
-  <div class="stats-grid" style="margin-bottom:14px;">
-    <div class="stat-card"><div>الخطة</div><strong style="font-size:0.95rem">{{ hosting.plan_label if hosting else 'محلي' }}</strong></div>
-    <div class="stat-card"><div>مسار البيانات</div><strong style="font-size:0.95rem">{{ data_root }}</strong></div>
-    <div class="stat-card"><div>مجلد الحفظات</div><strong style="font-size:0.95rem">{{ backups_root }}</strong></div>
-    <div class="stat-card"><div>حجم القاعدة الحالية</div><strong>{{ current_size }}</strong></div>
-    <div class="stat-card"><div>إجمالي البلاغات الآن</div><strong>{{ current_progress.tickets_total }}</strong></div>
-  </div>
-
-  <form method="post" action="{{ url_for('backups_create') }}" class="form-grid">
-    <div class="field">
-      <label>نوع الحفظ</label>
-      <select name="purpose">
-        {% for key, label in purposes %}
-        <option value="{{ key }}" {% if hosting and hosting.is_trial_free and key=='trial' %}selected{% elif (not hosting or not hosting.is_trial_free) and key=='dev' %}selected{% endif %}>{{ label }}</option>        {% endfor %}
-      </select>
-    </div>
-    <div class="field">
-      <label>عنوان مختصر</label>
-      <input name="label" placeholder="مثال: حفظ تجربة أسبوعي" required>
-    </div>
-    <div class="field full">
-      <label>ملاحظة التطوير / ماذا تغيّر؟</label>
-      <textarea name="note" rows="3" placeholder="اكتب ماذا تريد تتبّعه لاحقاً (ميزة، إصلاح، مراجعة عميل...)"></textarea>
-    </div>
-    <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">إنشاء حفظة الآن</button>
-    </div>
-  </form>
 </div>
 
-{% if can('backup.manage') %}
+{% if timeline %}
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">رفع حفظة من الجهاز (مهم للتجربة المجانية)</h3>
-      <div class="meta">أعد البيانات إلى السيرفر بعد إعادة النشر عبر ملف ZIP الذي نزّلته سابقاً</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">سجل المزامنة</h3>
+      <div class="meta">آخر النسخ التلقائية</div>
     </div>
   </div>
-  <form method="post" action="{{ url_for('backups_upload') }}" enctype="multipart/form-data" class="form-grid">
-    <div class="field full">
-      <label>ملف ZIP</label>
-      <input type="file" name="backup_zip" accept=".zip,application/zip" required>
-    </div>
-    <div class="field full">
-      <label><input type="checkbox" name="also_restore" value="1" checked> استعادة فورية بعد الرفع</label>
-    </div>
-    <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">رفع الحفظة</button>
-    </div>
-  </form>
-</div>
-{% endif %}
-
-<div class="card" style="margin-top:14px;">
-  <div class="toolbar">
-    <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">خط تقدّم العمل</h3>
-      <div class="meta">كل حفظة تسجّل أعداد البلاغات والأقسام لمعرفة كيف يسير العمل</div>
-    </div>
-  </div>
-  {% if timeline %}
   <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
-          <th>التاريخ</th>
+          <th>الوقت</th>
           <th>النوع</th>
-          <th>العنوان</th>
           <th>البلاغات</th>
           <th>العمليات</th>
           <th>المستودعات</th>
           <th>المالية</th>
-          <th>بواسطة</th>
         </tr>
       </thead>
       <tbody>
@@ -138,72 +47,46 @@
         <tr>
           <td>{{ row.created_at }}</td>
           <td><span class="badge ok">{{ row.purpose_label }}</span></td>
-          <td>
-            <strong>{{ row.label or '—' }}</strong>
-            {% if row.note %}<div class="meta">{{ row.note }}</div>{% endif %}
-          </td>
           <td>{{ row.tickets_total }}</td>
           <td>{{ row.sections.get('ops', 0) }}</td>
           <td>{{ row.sections.get('warehouses', 0) }}</td>
           <td>{{ row.sections.get('financial', 0) }}</td>
-          <td>{{ row.user_name }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
-  {% else %}
-  <p class="meta">لا توجد حفظات بعد — أنشئ أول نقطة تطوير أعلاه.</p>
-  {% endif %}
 </div>
+{% endif %}
 
-<div class="card" style="margin-top:14px;">
-  <div class="toolbar">
-    <h3 class="section-title" style="font-size:1.05rem;margin:0;">أرشيف الحفظات</h3>
+<details style="margin-top:18px;">
+  <summary class="meta" style="cursor:pointer;user-select:none;">إعدادات متقدمة (للإدارة فقط)</summary>
+  <div class="card" style="margin-top:10px;">
+    <div class="field full">
+      <label>رمز المزامنة للجهاز الرئيسي</label>
+      <input value="{{ sync_token }}" readonly style="direction:ltr;font-family:monospace;" onclick="this.select()">
+    </div>
+    <p class="meta" style="margin-top:10px;">
+      وكيل الجهاز: <code>الجهاز_الرئيسي\تثبيت_المهمة_التلقائية.bat</code>
+      — المجلد: <code>backups_inbox</code>
+    </p>
+    <form method="post" action="{{ url_for('backups_regen_token') }}" style="margin-top:10px;" onsubmit="return confirm('تجديد الرمز؟ حدّث إعداد الجهاز الرئيسي بعد ذلك.');">
+      <button class="btn ghost" type="submit">تجديد الرمز</button>
+    </form>
+
+    <hr style="margin:16px 0;border:none;border-top:1px solid #e5e7eb;">
+    <p class="meta">استعادة طارئة من ملف ZIP بعد إعادة نشر السيرفر</p>
+    <form method="post" action="{{ url_for('backups_upload') }}" enctype="multipart/form-data" class="form-grid" style="margin-top:8px;">
+      <div class="field full">
+        <input type="file" name="backup_zip" accept=".zip,application/zip" required>
+      </div>
+      <div class="field full">
+        <label><input type="checkbox" name="also_restore" value="1" checked> استعادة فورية</label>
+      </div>
+      <div class="actions" style="grid-column:1/-1">
+        <button class="btn ghost" type="submit">رفع واستعادة</button>
+      </div>
+    </form>
   </div>
-  {% if backups %}
-  <div class="table-wrap">
-    <table class="table">
-      <thead>
-        <tr>
-          <th>الحفظة</th>
-          <th>المسار</th>
-          <th>الحجم</th>
-          <th>إجراءات</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for b in backups %}
-        <tr>
-          <td>
-            <strong>{{ b.label or b.purpose_label }}</strong>
-            <div class="meta">{{ b.created_at }} — {{ b.purpose_label }} — {{ b.user_name }}</div>
-            {% if b.note %}<div class="meta">{{ b.note }}</div>{% endif %}
-            {% if b.progress and b.progress.tickets_by_status %}
-            <div class="meta">
-              حالات البلاغات:
-              {% for st, n in b.progress.tickets_by_status.items() %}
-                {{ st }} ({{ n }}){% if not loop.last %} · {% endif %}
-              {% endfor %}
-            </div>
-            {% endif %}
-          </td>
-          <td class="meta" style="direction:ltr;text-align:left;">{{ b._rel }}</td>
-          <td>{{ sizes.get(b._rel, '—') }}</td>
-          <td class="actions">
-            <a class="btn ghost" href="{{ url_for('backups_download', rel=b._rel) }}">تنزيل</a>
-            <form method="post" action="{{ url_for('backups_restore') }}" style="display:inline;" onsubmit="return confirm('استعادة هذه الحفظة؟ سيتم إنشاء حفظة أمان أولاً.');">
-              <input type="hidden" name="rel" value="{{ b._rel }}">
-              <button class="btn danger" type="submit">استعادة</button>
-            </form>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <p class="meta">الأرشيف فارغ.</p>
-  {% endif %}
-</div>
+</details>
 {% endblock %}

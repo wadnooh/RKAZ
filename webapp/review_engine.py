@@ -225,7 +225,7 @@ def jump_destinations():
         {"title": "إدارة العقود", "path": "/contracts-admin", "group": "أقسام", "keywords": "عقد"},
         {"title": "المستخدمون", "path": "/users/list", "group": "إدارة", "keywords": "مستخدم"},
         {"title": "الإعدادات", "path": "/settings", "group": "إدارة", "keywords": "إعدادات"},
-        {"title": "حفظ البيانات", "path": "/admin/backups", "group": "إدارة", "keywords": "نسخ احتياطي backup حفظ تطوير"},
+        {"title": "المزامنة التلقائية", "path": "/admin/backups", "group": "إدارة", "keywords": "مزامنة backup حفظ تلقائي"},
         {"title": "سجل النشاط", "path": "/admin/audit-log/view", "group": "إدارة", "keywords": "سجل audit"},
         {"title": "البحث العام", "path": "/search", "group": "إدارة", "keywords": "بحث search"},
     ]

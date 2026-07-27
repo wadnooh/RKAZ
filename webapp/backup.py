@@ -63,11 +63,10 @@ def hosting_info() -> dict:
         "data_root": str(data_root()),
         "backups_root": str(backups_root()),
         "hint": (
-            "البيانات على الخطة المجانية قد تُفقد عند إعادة النشر أو السكون. "
-            "الحفظ التلقائي يعمل على السيرفر ويُسحب تلقائياً إلى الجهاز الرئيسي عبر وكيل المزامنة. "
+            "البيانات تُزامن تلقائياً إلى الجهاز الرئيسي في الخلفية. "
             "عند الاعتماد الكامل أضف Disk مدفوع مع RAKAZ_DATA_DIR=/var/data."
             if trial
-            else "الحفظ التلقائي مفعّل — يُزامن إلى الجهاز الرئيسي عند تشغيل وكيل السحب."
+            else "المزامنة التلقائية تعمل في الخلفية إلى الجهاز الرئيسي."
         ),
     }
 
@@ -712,3 +711,27 @@ def start_auto_backup_scheduler(app=None) -> None:
 
     t = threading.Thread(target=_loop, name="rekaz-auto-backup", daemon=True)
     t.start()
+
+
+def silent_backup_after_change() -> None:
+    """حفظ صامت في الخلفية بعد تعديل بيانات — بدون واجهة أو أزرار."""
+    if not auto_backup_enabled():
+        return
+
+    def _run():
+        try:
+            activity_min = int(os.environ.get("AUTO_BACKUP_ACTIVITY_MINUTES", "30") or 30)
+            state = load_auto_state()
+            last_raw = state.get("last_backup_at")
+            if last_raw:
+                try:
+                    last = datetime.fromisoformat(last_raw)
+                    if datetime.now() - last < timedelta(minutes=max(5, activity_min)):
+                        return
+                except Exception:
+                    pass
+            create_auto_backup(force=True)
+        except Exception:
+            pass
+
+    threading.Thread(target=_run, name="rekaz-silent-backup", daemon=True).start()

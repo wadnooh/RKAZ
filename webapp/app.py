@@ -93,6 +93,14 @@ def current_user_name():
     return session.get("full_name") or session.get("username") or "مستخدم"
 
 
+def _after_data_change():
+    """مزامنة صامتة بعد أي تعديل — بدون أزرار أو رسائل للمستخدم."""
+    try:
+        backup_svc.silent_backup_after_change()
+    except Exception:
+        pass
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -663,6 +671,7 @@ def ticket_new():
             conn.commit()
             db.log_audit(current_user_name(), "إضافة", "بلاغ", cur.lastrowid, data.get("ticket_no"))
             flash("تم إنشاء المعاملة بنجاح", "ok")
+        _after_data_change()
             return redirect(url_for("tickets_list"))
         except Exception as exc:
             flash(f"تعذر الحفظ: {exc}", "danger")
@@ -717,6 +726,7 @@ def ticket_edit(ticket_id):
         conn.close()
         db.log_audit(current_user_name(), "تعديل", "بلاغ", ticket_id, data.get("ticket_no"))
         flash("تم حفظ المعاملة", "ok")
+        _after_data_change()
         return redirect(url_for("ticket_view", ticket_id=ticket_id))
     ticket = dict(row)
     conn.close()
@@ -733,6 +743,7 @@ def ticket_delete(ticket_id):
     conn.close()
     db.log_audit(current_user_name(), "حذف", "بلاغ", ticket_id, row["ticket_no"] if row else "")
     flash("تم حذف المعاملة", "ok")
+    _after_data_change()
     return redirect(url_for("tickets_list"))
 
 
@@ -856,6 +867,7 @@ def module_new(name):
         conn.close()
         db.log_audit(current_user_name(), "إضافة", module["title"], new_id, str(data)[:240])
         flash("تمت الإضافة", "ok")
+        _after_data_change()
         return redirect(url_for("module_list", name=name))
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     if request.args.get("item_no") and "item_no" in prefill:
@@ -904,6 +916,7 @@ def module_edit(name, row_id):
         conn.close()
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
         flash("تم الحفظ", "ok")
+        _after_data_change()
         return redirect(url_for("module_list", name=name))
     data = dict(row)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
@@ -953,6 +966,7 @@ def cashflow():
             )
         conn.commit()
         flash("تم حفظ التحصيل الشهري", "ok")
+        _after_data_change()
     cash_actual = {r["month_index"]: r["amount"] for r in conn.execute("SELECT * FROM cash_actual").fetchall()}
     conn.close()
     rows = calc_cashflow(cash_actual=cash_actual)
@@ -1007,6 +1021,7 @@ def lists_page():
         db.save_lists(data)
         g.lists = db.get_lists()
         flash("تم حفظ القوائم", "ok")
+        _after_data_change()
     return render_template("lists.html", lists_data=db.get_lists())
 
 
@@ -1031,6 +1046,7 @@ def settings_page():
         db.save_settings(data)
         g.settings = db.get_settings()
         flash("تم حفظ الإعدادات", "ok")
+        _after_data_change()
     return render_template("settings.html", s=db.get_settings())
 
 
@@ -1087,8 +1103,6 @@ def backups_create():
             details=f"{meta.get('purpose_label')} — {meta.get('label')} — بلاغات {meta.get('progress', {}).get('tickets_total', 0)}",
         )
         flash(f"تم إنشاء الحفظة: {meta.get('label') or meta.get('purpose_label')}", "ok")
-        if backup_svc.is_trial_free():
-            flash("الحفظ التلقائي يُسحب للجهاز الرئيسي عبر وكيل المزامنة — راجع التعليمات أدناه.", "warning")
     except Exception as exc:
         flash(f"تعذر إنشاء الحفظة: {exc}", "danger")
     return redirect(url_for("backups_home"))
