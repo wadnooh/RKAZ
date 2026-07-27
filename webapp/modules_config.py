@@ -53,7 +53,7 @@ MODULES = {
     "invoices": {
         "title": "المستخلصات و SAP",
         "table": "invoices",
-        "section": "ops",
+        "section": "financial",
         "fields": [
             ("invoice_id", "رقم المستخلص", "text"),
             ("ticket_no", "رقم البلاغ", "ticket"),
@@ -72,6 +72,24 @@ MODULES = {
             ("notes", "ملاحظات", "textarea"),
         ],
         "list_cols": ["invoice_id", "ticket_no", "period", "value", "sap_status", "collected"],
+    },
+    # ---- المقاولين ----
+    "contractor_works": {
+        "title": "أعمال المقاولين",
+        "table": "contractor_works",
+        "section": "contractors",
+        "fields": [
+            ("work_no", "رقم المعاملة", "text"),
+            ("work_date", "التاريخ", "date"),
+            ("contractor", "المقاول", "text"),
+            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("work_type", "نوع العمل", "list:construction_types"),
+            ("site", "الموقع", "text"),
+            ("status", "الحالة", "list:execution_status"),
+            ("value", "القيمة", "number"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["work_no", "work_date", "contractor", "ticket_no", "work_type", "status", "value"],
     },
     # ---- الإنشاءات ----
     "construction_works": {
@@ -269,6 +287,23 @@ MODULES = {
         ],
         "list_cols": ["equip_no", "equip_name", "status", "location", "last_service"],
     },
+    # ---- الموارد البشرية ----
+    "hr_employees": {
+        "title": "الموظفون",
+        "table": "hr_employees",
+        "section": "hr",
+        "fields": [
+            ("emp_no", "الرقم الوظيفي", "text"),
+            ("full_name", "الاسم", "text"),
+            ("job_title", "المسمى الوظيفي", "text"),
+            ("department", "القسم", "list:hr_departments"),
+            ("phone", "الجوال", "text"),
+            ("status", "الحالة", "list:hr_status"),
+            ("join_date", "تاريخ الالتحاق", "date"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["emp_no", "full_name", "job_title", "department", "phone", "status"],
+    },
     # ---- العقود ----
     "contracts": {
         "title": "العقود",
@@ -289,13 +324,16 @@ MODULES = {
 }
 
 SECTION_META = {
-    "ops": {"title": "العمليات والصيانة", "home": "ops_home"},
     "constructions": {"title": "الإنشاءات - التنفيذ", "home": "constructions_home"},
+    "ops": {"title": "العمليات والصيانة", "home": "ops_home"},
+    "contractors": {"title": "المقاولين", "home": "contractors_home"},
     "quality": {"title": "التنسيقات والجودة", "home": "quality_home"},
     "safety": {"title": "السلامة", "home": "safety_home"},
     "warehouses": {"title": "المستودعات", "home": "warehouses_home"},
     "external": {"title": "المشتريات الخارجية والعهد", "home": "external_purchases_home"},
+    "financial": {"title": "المتابعات المالية", "home": "financial_home"},
     "maintenance": {"title": "الورشة (سيارات - معدات)", "home": "maintenance_home"},
+    "hr": {"title": "الموارد البشرية", "home": "hr_home"},
     "contracts": {"title": "إدارة العقود", "home": "contracts_admin_home"},
 }
 

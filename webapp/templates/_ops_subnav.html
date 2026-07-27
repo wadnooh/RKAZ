@@ -9,10 +9,6 @@
     <a class="btn ghost{% if active=='quantities' %} primary{% endif %}" href="{{ url_for('module_list', name='quantities') }}">الكميات</a>
     <a class="btn ghost{% if active=='photos' %} primary{% endif %}" href="{{ url_for('module_list', name='photos') }}">قائمة الصور</a>
     <a class="btn ghost{% if active=='metering' %} primary{% endif %}" href="{{ url_for('module_list', name='metering') }}">التمتير</a>
-    <a class="btn ghost{% if active=='invoices' %} primary{% endif %}" href="{{ url_for('module_list', name='invoices') }}">المستخلصات و SAP</a>
-    {% endif %}
-    {% if can('cashflow.read') %}
-    <a class="btn ghost{% if active=='cashflow' %} primary{% endif %}" href="{{ url_for('cashflow') }}">التدفق النقدي</a>
     {% endif %}
     <a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">فرق المهام العاجلة</a>
     {% if can('sop.read') %}
@@ -20,6 +16,9 @@
     {% endif %}
     {% if can('lists.write') %}
     <a class="btn ghost{% if active=='lists' %} primary{% endif %}" href="{{ url_for('lists_page') }}">القوائم</a>
+    {% endif %}
+    {% if can('section.review') %}
+    <a class="btn ghost{% if active=='review' %} primary{% endif %}" href="{{ url_for('review_home') }}">المتابعة والمراجعة</a>
     {% endif %}
   </div>
 </div>

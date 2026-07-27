@@ -6,6 +6,9 @@
     {% if can('settings.write') %}
     <a class="btn ghost" href="{{ url_for('settings_page') }}">إعدادات المكتب</a>
     {% endif %}
+    {% if can('backup.manage') %}
+    <a class="btn ghost" href="{{ url_for('backups_home') }}">حفظ البيانات</a>
+    {% endif %}
   </div>
 </div>
 

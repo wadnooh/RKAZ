@@ -1,3 +1,5 @@
+# مرحلة التجربة: خطة مجانية على Render
+# بعد الاعتماد: غيّر plan إلى starter وأضف disk + RAKAZ_DATA_DIR=/var/data وTRIAL_MODE=0
 services:
   - type: web
     name: rekaz-alenjaz
@@ -15,5 +17,14 @@ services:
         value: "10000"
       - key: USE_WAITRESS
         value: "1"
+      - key: TRIAL_MODE
+        value: "1"
       - key: PYTHON_VERSION
         value: "3.12.8"
+      # لا تفعّل RAKAZ_DATA_DIR على المجاني بدون Disk.
+      # عند الترقية للمدفوع أضف:
+      # - key: TRIAL_MODE
+      #   value: "0"
+      # - key: RAKAZ_DATA_DIR
+      #   value: "/var/data"
+      # وDisk على المسار /var/data

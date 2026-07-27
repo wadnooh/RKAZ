@@ -24,6 +24,7 @@ from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import review_engine
 from webapp import permissions
 from webapp import warehouse_excel
+from webapp import backup as backup_svc
 
 app = Flask(__name__, instance_relative_config=True)
 app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
@@ -106,6 +107,7 @@ def inject_globals():
         "has_perm": permissions.has_perm,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
+        "hosting": backup_svc.hosting_info(),
     }
 
 
@@ -332,8 +334,6 @@ def ops_home():
         {"label": "الكميات", "href": url_for("module_list", name="quantities"), "count": _count("quantities")},
         {"label": "قائمة الصور", "href": url_for("module_list", name="photos"), "count": _count("photos")},
         {"label": "التمتير", "href": url_for("module_list", name="metering"), "count": _count("metering")},
-        {"label": "المستخلصات و SAP", "href": url_for("module_list", name="invoices"), "count": _count("invoices")},
-        {"label": "التدفق النقدي", "href": url_for("cashflow")},
         {"label": "فرق المهام العاجلة", "href": url_for("teams_page"), "count": _count("teams")},
         {"label": "إجراءات العمل (SOP)", "href": url_for("sop_page")},
         {"label": "القوائم المرجعية", "href": url_for("lists_page")},
@@ -369,7 +369,17 @@ def constructions_home():
 @app.route("/contractors")
 @login_required
 def contractors_home():
-    return redirect(url_for("ops_home"))
+    links = section_links("contractors")
+    return render_template(
+        "section_hub.html",
+        title="المقاولين",
+        subtitle="متابعة أعمال المقاولين وربطها ببلاغات المكتب — بنفس تبويب تقارير رسملة.",
+        links=links,
+        section="contractors",
+        section_modules=modules_for_section("contractors"),
+        section_meta=SECTION_META["contractors"],
+        total_count=sum(i.get("count") or 0 for i in links),
+    )
 
 
 @app.route("/quality")
@@ -440,7 +450,27 @@ def external_purchases_home():
 @app.route("/financial")
 @login_required
 def financial_home():
-    return redirect(url_for("ops_home"))
+    links = section_links("financial")
+    links.append({"label": "التدفق النقدي", "href": url_for("cashflow")})
+    stats = dashboard_stats()
+    finance_stats = {
+        "sap_raised": stats["sap_raised"],
+        "invoices_total": stats["invoices_total"],
+        "collected": stats["collected"],
+        "remaining": stats["remaining"],
+        "liquidity": stats["liquidity"],
+    }
+    return render_template(
+        "section_hub.html",
+        title="المتابعات المالية",
+        subtitle="المستخلصات و SAP والتدفق النقدي — بنفس تبويب تقارير رسملة.",
+        links=links,
+        section="financial",
+        section_modules=modules_for_section("financial"),
+        section_meta=SECTION_META["financial"],
+        total_count=_count("invoices"),
+        finance_stats=finance_stats,
+    )
 
 
 @app.route("/maintenance")
@@ -462,7 +492,17 @@ def maintenance_home():
 @app.route("/hr")
 @login_required
 def hr_home():
-    return redirect(url_for("ops_home"))
+    links = section_links("hr")
+    return render_template(
+        "section_hub.html",
+        title="الموارد البشرية",
+        subtitle="سجل الموظفين والأقسام وحالات الالتحاق — بنفس تبويب تقارير رسملة.",
+        links=links,
+        section="hr",
+        section_modules=modules_for_section("hr"),
+        section_meta=SECTION_META["hr"],
+        total_count=sum(i.get("count") or 0 for i in links),
+    )
 
 
 @app.route("/contracts-admin")
@@ -867,7 +907,13 @@ def cashflow():
     cash_actual = {r["month_index"]: r["amount"] for r in conn.execute("SELECT * FROM cash_actual").fetchall()}
     conn.close()
     rows = calc_cashflow(cash_actual=cash_actual)
-    return render_template("cashflow.html", rows=rows)
+    return render_template(
+        "cashflow.html",
+        rows=rows,
+        section="financial",
+        section_meta=SECTION_META["financial"],
+        section_modules=modules_for_section("financial"),
+    )
 
 
 @app.route("/teams", methods=["GET", "POST"])
@@ -937,6 +983,120 @@ def settings_page():
         g.settings = db.get_settings()
         flash("تم حفظ الإعدادات", "ok")
     return render_template("settings.html", s=db.get_settings())
+
+
+@app.route("/admin/backups")
+@login_required
+def backups_home():
+    backups = backup_svc.list_backups(limit=80)
+    sizes = {}
+    for b in backups:
+        try:
+            sizes[b["_rel"]] = backup_svc.human_size((b.get("progress") or {}).get("db_size_bytes") or 0)
+        except Exception:
+            sizes[b["_rel"]] = "—"
+    current = backup_svc.progress_snapshot()
+    return render_template(
+        "backups.html",
+        backups=backups,
+        timeline=backup_svc.progress_timeline(limit=40),
+        purposes=backup_svc.PURPOSE_CHOICES,
+        data_root=str(backup_svc.data_root()),
+        backups_root=str(backup_svc.backups_root()),
+        current_progress=current,
+        current_size=backup_svc.human_size(current.get("db_size_bytes") or 0),
+        sizes=sizes,
+        hosting=backup_svc.hosting_info(),
+    )
+
+
+@app.route("/admin/backups/create", methods=["POST"])
+@login_required
+def backups_create():
+    try:
+        purpose = request.form.get("purpose") or "manual"
+        if backup_svc.is_trial_free() and purpose == "manual":
+            purpose = "trial"
+        meta = backup_svc.create_backup(
+            label=request.form.get("label") or "",
+            note=request.form.get("note") or "",
+            purpose=purpose,
+            user_name=current_user_name(),
+        )
+        db.log_audit(
+            current_user_name(),
+            "حفظ بيانات",
+            "نسخة احتياطية",
+            details=f"{meta.get('purpose_label')} — {meta.get('label')} — بلاغات {meta.get('progress', {}).get('tickets_total', 0)}",
+        )
+        flash(f"تم إنشاء الحفظة: {meta.get('label') or meta.get('purpose_label')}", "ok")
+        if backup_svc.is_trial_free():
+            flash("وضع التجربة المجانية: نزّل الحفظة إلى جهازك لتحافظ عليها بعد إعادة النشر.", "warning")
+    except Exception as exc:
+        flash(f"تعذر إنشاء الحفظة: {exc}", "danger")
+    return redirect(url_for("backups_home"))
+
+
+@app.route("/admin/backups/download")
+@login_required
+def backups_download():
+    rel = request.args.get("rel") or ""
+    try:
+        zip_path = backup_svc.build_backup_zip(rel)
+        return send_file(
+            zip_path,
+            as_attachment=True,
+            download_name=f"rekaz-backup-{rel.replace('/', '-')}.zip",
+        )
+    except Exception as exc:
+        flash(f"تعذر التنزيل: {exc}", "danger")
+        return redirect(url_for("backups_home"))
+
+
+@app.route("/admin/backups/restore", methods=["POST"])
+@login_required
+def backups_restore():
+    rel = request.form.get("rel") or ""
+    try:
+        result = backup_svc.restore_backup(rel, user_name=current_user_name())
+        db.log_audit(
+            current_user_name(),
+            "استعادة بيانات",
+            "نسخة احتياطية",
+            details=f"استعادة {rel} | أمان: {result['safety'].get('id')}",
+        )
+        flash("تمت الاستعادة بنجاح (مع حفظة أمان تلقائية).", "ok")
+    except Exception as exc:
+        flash(f"تعذر الاستعادة: {exc}", "danger")
+    return redirect(url_for("backups_home"))
+
+
+@app.route("/admin/backups/upload", methods=["POST"])
+@login_required
+def backups_upload():
+    f = request.files.get("backup_zip")
+    if not f or not f.filename:
+        flash("اختر ملف ZIP للحفظة.", "danger")
+        return redirect(url_for("backups_home"))
+    also_restore = request.form.get("also_restore") == "1"
+    try:
+        result = backup_svc.import_backup_zip(
+            f,
+            user_name=current_user_name(),
+            also_restore=also_restore,
+        )
+        db.log_audit(
+            current_user_name(),
+            "رفع حفظة",
+            "نسخة احتياطية",
+            details=f"{result['imported'].get('label')} — استعادة={also_restore}",
+        )
+        flash("تم رفع الحفظة إلى السيرفر.", "ok")
+        if also_restore:
+            flash("تمت استعادة البيانات من الملف المرفوع.", "ok")
+    except Exception as exc:
+        flash(f"تعذر رفع الحفظة: {exc}", "danger")
+    return redirect(url_for("backups_home"))
 
 
 @app.route("/sop")

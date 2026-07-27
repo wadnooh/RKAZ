@@ -199,30 +199,34 @@ def build_alerts(settings=None):
 
 
 def jump_destinations():
-    """قائمة وجهات نافذة القفز السريع."""
+    """قائمة وجهات نافذة القفز السريع — بنفس ترتيب تبويبات تقارير رسملة."""
     return [
+        {"title": "الإنشاءات - التنفيذ", "path": "/constructions", "group": "أقسام", "keywords": "إنشاءات"},
         {"title": "لوحة العمليات", "path": "/ops", "group": "عمليات", "keywords": "لوحة dashboard ops"},
         {"title": "بلاغات الأعمال", "path": "/tickets", "group": "عمليات", "keywords": "بلاغ ticket طوارئ"},
         {"title": "بلاغ جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة بلاغ جديد"},
         {"title": "الكميات", "path": "/module/quantities", "group": "عمليات", "keywords": "كميات boq"},
         {"title": "قائمة الصور", "path": "/module/photos", "group": "عمليات", "keywords": "صور"},
         {"title": "التمتير", "path": "/module/metering", "group": "عمليات", "keywords": "تمتير مستخلص"},
-        {"title": "المستخلصات و SAP", "path": "/module/invoices", "group": "عمليات", "keywords": "فاتورة sap"},
-        {"title": "التدفق النقدي", "path": "/cashflow", "group": "عمليات", "keywords": "سيولة نقدي"},
         {"title": "فرق المهام", "path": "/teams", "group": "عمليات", "keywords": "فرقة فريق"},
         {"title": "إجراءات العمل SOP", "path": "/sop", "group": "عمليات", "keywords": "sop إجراء"},
         {"title": "القوائم المرجعية", "path": "/lists", "group": "عمليات", "keywords": "قوائم"},
         {"title": "المتابعة والمراجعة", "path": "/review", "group": "متابعة", "keywords": "مراجعة تنبيه متابعة review"},
-        {"title": "الإنشاءات", "path": "/constructions", "group": "أقسام", "keywords": "إنشاءات"},
+        {"title": "المقاولين", "path": "/contractors", "group": "أقسام", "keywords": "مقاول"},
         {"title": "التنسيقات والجودة", "path": "/quality", "group": "أقسام", "keywords": "تنسيق جودة"},
         {"title": "السلامة", "path": "/safety", "group": "أقسام", "keywords": "سلامة تصريح"},
         {"title": "المستودعات", "path": "/warehouses", "group": "أقسام", "keywords": "مستودع مواد"},
         {"title": "أرصدة المواد", "path": "/warehouses/balances", "group": "أقسام", "keywords": "رصيد"},
         {"title": "المشتريات والعهد", "path": "/external-purchases", "group": "أقسام", "keywords": "شراء عهدة"},
+        {"title": "المتابعات المالية", "path": "/financial", "group": "مالية", "keywords": "مالية مستخلص"},
+        {"title": "المستخلصات و SAP", "path": "/module/invoices", "group": "مالية", "keywords": "فاتورة sap"},
+        {"title": "التدفق النقدي", "path": "/cashflow", "group": "مالية", "keywords": "سيولة نقدي"},
         {"title": "الورشة", "path": "/maintenance", "group": "أقسام", "keywords": "سيارة معدة ورشة"},
+        {"title": "الموارد البشرية", "path": "/hr", "group": "أقسام", "keywords": "موظف موارد"},
         {"title": "إدارة العقود", "path": "/contracts-admin", "group": "أقسام", "keywords": "عقد"},
         {"title": "المستخدمون", "path": "/users/list", "group": "إدارة", "keywords": "مستخدم"},
         {"title": "الإعدادات", "path": "/settings", "group": "إدارة", "keywords": "إعدادات"},
+        {"title": "حفظ البيانات", "path": "/admin/backups", "group": "إدارة", "keywords": "نسخ احتياطي backup حفظ تطوير"},
         {"title": "سجل النشاط", "path": "/admin/audit-log/view", "group": "إدارة", "keywords": "سجل audit"},
         {"title": "البحث العام", "path": "/search", "group": "إدارة", "keywords": "بحث search"},
     ]

@@ -30,12 +30,14 @@
     <div class="stat-card"><div>متأخرة استجابة</div><strong>{{ stats.delayed }}</strong></div>
     <div class="stat-card"><div>صور ناقصة</div><strong>{{ stats.photos_incomplete }}</strong></div>
     <div class="stat-card"><div>تمتير معتمد</div><strong>{{ stats.metering_approved }}</strong></div>
-    <div class="stat-card"><div>فواتير مرفوعة SAP</div><strong>{{ stats.sap_raised }}</strong></div>
     <div class="stat-card"><div>قيمة البلاغات</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>
-    <div class="stat-card"><div>إجمالي المستخلصات</div><strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong></div>
-    <div class="stat-card"><div>المبالغ المحصلة</div><strong style="font-size:1.05rem">{{ stats.collected|money }}</strong></div>
-    <div class="stat-card"><div>المتبقي غير محصل</div><strong style="font-size:1.05rem">{{ stats.remaining|money }}</strong></div>
-    <div class="stat-card"><div>السيولة المطلوبة</div><strong style="font-size:1.05rem">{{ stats.liquidity|money }}</strong></div>
+    {% if can('section.financial') %}
+    <a class="stat-card" href="{{ url_for('financial_home') }}" style="text-decoration:none;color:inherit;">
+      <div>المتابعات المالية</div>
+      <strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong>
+      <div class="meta">فتح تبويب المالية</div>
+    </a>
+    {% endif %}
   </div>
 </div>
 

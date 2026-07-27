@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{% if section == 'ops' or name in ['quantities','photos','metering','invoices'] %}
+{% if section == 'ops' or name in ['quantities','photos','metering'] %}
   {% set active = name %}
   {% include "_ops_subnav.html" %}
 {% else %}

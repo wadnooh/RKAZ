@@ -1,15 +1,22 @@
 {% if section and section_modules %}
+{% set p = request.path or '' %}
+{% set hub_path = url_for(section_meta.home) if section_meta else '' %}
+{% set on_hub = section_meta and (p == hub_path or p.rstrip('/') == hub_path.rstrip('/')) and not name %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1">
     {% if section_meta %}
-    <a class="btn ghost" href="{{ url_for(section_meta.home) }}">{{ section_meta.title }}</a>
+    <a class="btn ghost{% if on_hub %} primary{% endif %}" href="{{ url_for(section_meta.home) }}">{{ section_meta.title }}</a>
     {% endif %}
     {% for key, mod in section_modules %}
     <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>
     {% endfor %}
     {% if section == 'warehouses' %}
-    <a class="btn ghost{% if request.path.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>
+    <a class="btn ghost{% if p.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>
+    {% endif %}
+    {% if section == 'financial' and can('cashflow.read') %}
+    <a class="btn ghost{% if p.startswith('/cashflow') %} primary{% endif %}" href="{{ url_for('cashflow') }}">التدفق النقدي</a>
     {% endif %}
   </div>
 </div>
 {% endif %}
+

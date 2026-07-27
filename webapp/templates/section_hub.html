@@ -32,6 +32,13 @@
       <div>المعاملات / السجلات</div>
       <strong>{{ total_count or 0 }}</strong>
     </div>
+    {% if finance_stats %}
+    <div class="stat-card"><div>فواتير مرفوعة SAP</div><strong>{{ finance_stats.sap_raised }}</strong></div>
+    <div class="stat-card"><div>إجمالي المستخلصات</div><strong style="font-size:1.05rem">{{ finance_stats.invoices_total|money }}</strong></div>
+    <div class="stat-card"><div>المبالغ المحصلة</div><strong style="font-size:1.05rem">{{ finance_stats.collected|money }}</strong></div>
+    <div class="stat-card"><div>المتبقي غير محصل</div><strong style="font-size:1.05rem">{{ finance_stats.remaining|money }}</strong></div>
+    <div class="stat-card"><div>السيولة المطلوبة</div><strong style="font-size:1.05rem">{{ finance_stats.liquidity|money }}</strong></div>
+    {% endif %}
   </div>
 
   <div class="table-wrap" style="margin-top:14px;">

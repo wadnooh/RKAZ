@@ -10,13 +10,16 @@ from webapp.modules_config import MODULES
 
 # ---- أكواد الصلاحيات ----
 PERM_LABELS = {
-    "section.ops": "العمليات والصيانة",
     "section.constructions": "الإنشاءات",
+    "section.ops": "العمليات والصيانة",
+    "section.contractors": "المقاولين",
     "section.quality": "التنسيقات والجودة",
     "section.safety": "السلامة",
     "section.warehouses": "المستودعات",
     "section.external": "المشتريات والعهد",
+    "section.financial": "المتابعات المالية",
     "section.maintenance": "الورشة",
+    "section.hr": "الموارد البشرية",
     "section.contracts": "إدارة العقود",
     "section.review": "المتابعة والمراجعة",
     "tickets.read": "عرض البلاغات",
@@ -31,6 +34,7 @@ PERM_LABELS = {
     "lists.write": "إدارة القوائم",
     "settings.write": "إعدادات المكتب",
     "users.manage": "إدارة المستخدمين",
+    "backup.manage": "حفظ واستعادة البيانات",
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",
@@ -41,13 +45,16 @@ ALL_PERMS = set(PERM_LABELS)
 
 # كل أقسام العرض
 SECTION_PERMS = {
-    "ops": "section.ops",
     "constructions": "section.constructions",
+    "ops": "section.ops",
+    "contractors": "section.contractors",
     "quality": "section.quality",
     "safety": "section.safety",
     "warehouses": "section.warehouses",
     "external": "section.external",
+    "financial": "section.financial",
     "maintenance": "section.maintenance",
+    "hr": "section.hr",
     "contracts": "section.contracts",
     "review": "section.review",
 }
@@ -71,6 +78,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "lists.write",
             "settings.write",
             "audit.read",
+            "backup.manage",
             "export",
             "search",
             "sop.read",
@@ -80,11 +88,14 @@ _ROLE_PERMS: dict[str, set[str]] = {
     "مدخل بيانات": {
         "section.ops",
         "section.constructions",
+        "section.contractors",
         "section.quality",
         "section.safety",
         "section.warehouses",
         "section.external",
+        "section.financial",
         "section.maintenance",
+        "section.hr",
         "section.review",
         "tickets.read",
         "tickets.write",
@@ -174,11 +185,14 @@ def deny_redirect(message: str | None = None):
         ("ops", "section.ops"),
         ("review", "section.review"),
         ("constructions", "section.constructions"),
+        ("contractors", "section.contractors"),
         ("quality", "section.quality"),
         ("safety", "section.safety"),
         ("warehouses", "section.warehouses"),
         ("external", "section.external"),
+        ("financial", "section.financial"),
         ("maintenance", "section.maintenance"),
+        ("hr", "section.hr"),
         ("contracts", "section.contracts"),
     ):
         if has_perm(perm):
@@ -186,11 +200,14 @@ def deny_redirect(message: str | None = None):
                 "ops": "ops_home",
                 "review": "review_home",
                 "constructions": "constructions_home",
+                "contractors": "contractors_home",
                 "quality": "quality_home",
                 "safety": "safety_home",
                 "warehouses": "warehouses_home",
                 "external": "external_purchases_home",
+                "financial": "financial_home",
                 "maintenance": "maintenance_home",
+                "hr": "hr_home",
                 "contracts": "contracts_admin_home",
             }[section]
             return redirect(url_for(endpoint))
@@ -262,12 +279,15 @@ def required_perm_for_request() -> str | None:
         "dashboard": "section.ops",
         "ops_home": "section.ops",
         "constructions_home": "section.constructions",
+        "contractors_home": "section.contractors",
         "quality_home": "section.quality",
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
         "warehouse_balances": "section.warehouses",
         "external_purchases_home": "section.external",
+        "financial_home": "section.financial",
         "maintenance_home": "section.maintenance",
+        "hr_home": "section.hr",
         "contracts_admin_home": "section.contracts",
         "review_home": "section.review",
         "ticket_review": "section.review",
@@ -290,10 +310,10 @@ def required_perm_for_request() -> str | None:
             return None
         return None if has_perm(need) else need
 
-    # أدوات العمليات
+    # المتابعات المالية
     if ep == "cashflow":
-        if not has_perm("section.ops"):
-            return "section.ops"
+        if not has_perm("section.financial"):
+            return "section.financial"
         if method == "POST":
             return None if has_perm("cashflow.write") else "cashflow.write"
         return None if has_perm("cashflow.read") else "cashflow.read"
@@ -331,6 +351,9 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
+    if ep in {"backups_home", "backups_create", "backups_download", "backups_restore", "backups_upload"}:
+        return None if has_perm("backup.manage") else "backup.manage"
+
     if ep in {"audit_log_home", "audit_log_page"}:
         return None if has_perm("audit.read") else "audit.read"
 
@@ -342,10 +365,6 @@ def required_perm_for_request() -> str | None:
 
     if ep == "api_jump_destinations":
         return None  # يُفلتر المحتوى حسب الصلاحيات
-
-    # aliases قديمة
-    if ep in {"contractors_home", "financial_home", "hr_home"}:
-        return None if has_perm("section.ops") else "section.ops"
 
     return None
 
@@ -376,17 +395,21 @@ def _perm_for_path(path: str) -> str | None:
     rules = (
         ("/users", "users.manage"),
         ("/settings", "settings.write"),
+        ("/admin/backups", "backup.manage"),
         ("/admin/audit", "audit.read"),
         ("/review", "section.review"),
         ("/constructions", "section.constructions"),
+        ("/contractors", "section.contractors"),
         ("/quality", "section.quality"),
         ("/safety", "section.safety"),
         ("/warehouses", "section.warehouses"),
         ("/external-purchases", "section.external"),
+        ("/financial", "section.financial"),
         ("/maintenance", "section.maintenance"),
+        ("/hr", "section.hr"),
         ("/contracts-admin", "section.contracts"),
         ("/tickets", "tickets.read"),
-        ("/cashflow", "cashflow.read"),
+        ("/cashflow", "section.financial"),
         ("/teams", "section.ops"),
         ("/lists", "section.ops"),
         ("/sop", "sop.read"),

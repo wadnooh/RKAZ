@@ -20,9 +20,11 @@ mkdir "%OUT%\للعميل"
 copy /y "requirements.txt" "%OUT%\" >nul
 copy /y "Procfile" "%OUT%\" >nul
 copy /y "render.yaml" "%OUT%\" >nul
+copy /y "wsgi.py" "%OUT%\" >nul
 copy /y ".gitignore" "%OUT%\" >nul
 copy /y "تشغيل البرنامج.bat" "%OUT%\" >nul
 copy /y "تشغيل للشبكة.bat" "%OUT%\" >nul
+copy /y "فتح دليل النشر.bat" "%OUT%\" >nul
 copy /y "نشر_على_Render.md" "%OUT%\" >nul
 copy /y "README.md" "%OUT%\" >nul
 copy /y "للعميل\اقرأني_أولاً.md" "%OUT%\للعميل\" >nul
@@ -42,4 +44,4 @@ echo   الملف:  %ZIP%
 echo.
 echo أرسل ملف ZIP للعميل مع توجيهه لفتح: للعميل\اقرأني_أولاً.md
 echo.
-pause
+if /i not "%~1"=="/nopause" pause

@@ -63,6 +63,8 @@ DEFAULT_LISTS = {
     "vehicle_status": ["عاملة", "صيانة", "متوقفة"],
     "equipment_status": ["جاهزة", "صيانة", "تخريد"],
     "contract_status": ["ساري", "منتهي", "موقوف"],
+    "hr_departments": ["العمليات", "المستودعات", "الجودة", "السلامة", "المالية", "الموارد البشرية", "الإدارة"],
+    "hr_status": ["على رأس العمل", "إجازة", "منتهي"],
     "user_roles": ["admin", "مشرف", "مدخل بيانات", "مراقب"],
     "followup_status": ["مفتوح", "قيد المتابعة", "مكتمل", "ملغي"],
     "followup_priority": ["عاجل", "عالي", "متوسط", "منخفض"],
@@ -337,6 +339,29 @@ def init_db():
             status TEXT,
             location TEXT,
             last_service TEXT,
+            notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS contractor_works (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_no TEXT,
+            work_date TEXT,
+            contractor TEXT,
+            ticket_no TEXT,
+            work_type TEXT,
+            site TEXT,
+            status TEXT,
+            value REAL,
+            notes TEXT
+        );
+        CREATE TABLE IF NOT EXISTS hr_employees (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            emp_no TEXT,
+            full_name TEXT,
+            job_title TEXT,
+            department TEXT,
+            phone TEXT,
+            status TEXT,
+            join_date TEXT,
             notes TEXT
         );
         CREATE TABLE IF NOT EXISTS contracts (
