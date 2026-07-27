@@ -26,16 +26,17 @@
 
 - حساب على [GitHub](https://github.com)
 - حساب على [Render](https://render.com)
-- المشروع: https://github.com/rtcco2013/rekaz
+- المستودع: https://github.com/wadnooh/RKAZ
 
 ---
 
 ## 1) رفع التحديثات
 
 ```bash
+git remote add origin https://github.com/wadnooh/RKAZ.git
 git add .
-git commit -m "Update Rekaz trial hosting"
-git push origin main
+git commit -m "Update Rekaz"
+git push -u origin main
 ```
 
 ---
