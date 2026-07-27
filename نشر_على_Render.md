@@ -49,7 +49,14 @@ git push -u origin main
 - `TRIAL_MODE=1`
 - بدون `RAKAZ_DATA_DIR` (لا قرص دائم على المجاني)
 
-افتح أو حدّث الخدمة من Blueprint / Deploy.
+### ربط Render بالمستودع (مرة واحدة)
+
+1. افتح: https://render.com/deploy?repo=https://github.com/wadnooh/RKAZ  
+   أو شغّل: `ربط_Render.bat`
+2. سجّل دخول Render بحساب GitHub (`wadnooh`)
+3. وافق على المستودع `wadnooh/RKAZ` إن طُلب
+4. اضغط **Apply / Deploy** على الخطة Free
+5. انتظر حتى تصبح الحالة **Live**
 
 > أول فتح بعد السكون قد يتأخر دقيقة — طبيعي على Free.
 
