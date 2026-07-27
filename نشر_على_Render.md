@@ -26,7 +26,7 @@
 
 - حساب على [GitHub](https://github.com)
 - حساب على [Render](https://render.com)
-- المشروع: https://github.com/wadnooh/rekaz
+- المشروع: https://github.com/rtcco2013/rekaz
 
 ---
 
