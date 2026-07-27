@@ -522,8 +522,11 @@ def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
         return {"ok": False, "error": "حزمة boto3 غير مثبتة"}
 
     cfg = s3_settings()
-    stamp = (meta.get("created_at") or datetime.now().isoformat(timespec="seconds")).replace(":", "-")
-    key = f"{cfg['prefix']}/{stamp}__{(meta.get('id') or 'backup').replace('/', '-')}.zip"
+    stamp = (meta.get("created_at") or datetime.now().isoformat(timespec="seconds"))
+    stamp = re.sub(r"[^0-9T\-]", "-", stamp.replace(":", "-"))[:40]
+    bid = re.sub(r"[^A-Za-z0-9_./\-]", "-", str(meta.get("id") or "backup")).replace("/", "-")
+    bid = re.sub(r"-+", "-", bid).strip("-")[:120] or "backup"
+    key = f"{cfg['prefix']}/{stamp}__{bid}.zip"
     try:
         client = boto3.client(
             "s3",
@@ -531,11 +534,16 @@ def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
             aws_access_key_id=os.environ.get("AWS_ACCESS_KEY_ID", "").strip(),
             aws_secret_access_key=os.environ.get("AWS_SECRET_ACCESS_KEY", "").strip(),
         )
+        # S3 metadata يجب أن تكون ASCII فقط
+        bid = str(meta.get("id") or "")
+        bid_ascii = re.sub(r"[^A-Za-z0-9_./\-]", "-", bid)[:200]
+        stamp_ascii = re.sub(r"[^0-9T\-]", "", str(meta.get("created_at") or ""))[:32]
         extra = {
             "ContentType": "application/zip",
             "Metadata": {
                 "app": "rekaz",
-                "backup-id": str(meta.get("id") or "")[:256],
+                "backup-id": bid_ascii or "backup",
+                "created-at": stamp_ascii or "unknown",
                 "tickets": str((meta.get("progress") or {}).get("tickets_total", 0)),
             },
         }
