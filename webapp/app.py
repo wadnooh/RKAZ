@@ -702,7 +702,7 @@ def ticket_new():
     if request.method == "POST":
         data = ticket_from_form()
         if not data["ticket_no"]:
-            flash("رقم البلاغ مطلوب", "danger")
+            flash("رقم العطل مطلوب", "danger")
             return render_template("ticket_form.html", row=data, mode="new")
         conn = db.connect()
         try:
@@ -1587,7 +1587,7 @@ def export_tickets_excel():
     ws = wb.active
     ws.title = "Tracking"
     headers = [
-        "رقم البلاغ",
+        "رقم العطل",
         "تاريخ الاستلام",
         "الحي",
         "وقت الاستلام",

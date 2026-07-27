@@ -28,7 +28,7 @@ TX_HEADERS = [
     "الوحدة",
     "الكمية",
     "المستلم / المسلم",
-    "رقم البلاغ",
+    "رقم العطل",
     "المنطقة",
     "ملاحظات",
 ]
@@ -81,9 +81,12 @@ _TX_ALIASES = {
     "المستلم / المسلم": "recipient",
     "المستلم": "recipient",
     "recipient": "recipient",
-    "رقم البلاغ": "ticket_no",
+    "رقم العطل": "ticket_no",
+    "رقم البلاغ": "ticket_no",  # توافق مع القوالب القديمة
     "البلاغ": "ticket_no",
     "ticket_no": "ticket_no",
+    "fault no": "ticket_no",
+    "fault_no": "ticket_no",
     "المنطقة": "region",
     "region": "region",
     "ملاحظات": "notes",
@@ -187,7 +190,7 @@ def build_tx_template() -> bytes:
     tip = wb.create_sheet("تعليمات")
     tip.append(["أنواع الحركة المقترحة: وارد من الكهرباء | منصرف للمقاول | إرجاع للمجمعة | وارد من موقع العمل | رصيد افتتاحي"])
     tip.append(["رقم المادة يجب أن يكون موجوداً في أصناف المستودع (أو يُنشأ تلقائياً إن وُجد الاسم)."])
-    tip.append(["رقم البلاغ يربط الحركة بمعاملة البلاغ."])
+    tip.append(["رقم العطل يربط الحركة بمعاملة البلاغ."])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)

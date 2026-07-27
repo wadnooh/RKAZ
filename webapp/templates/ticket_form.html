@@ -12,7 +12,7 @@
   </div>
 
   <form method="post" class="form-grid">
-    <div class="field"><label>رقم البلاغ</label><input name="ticket_no" value="{{ row.ticket_no or '' }}" required></div>
+    <div class="field"><label>رقم العطل</label><input name="ticket_no" value="{{ row.ticket_no or '' }}" required></div>
     <div class="field"><label>تاريخ الاستلام</label><input type="date" name="receive_date" value="{{ row.receive_date or '' }}"></div>
     <div class="field"><label>وقت الاستلام</label><input type="time" name="receive_time" value="{{ row.receive_time or '' }}"></div>
     <div class="field"><label>الحي</label><input name="district" value="{{ row.district or '' }}"></div>

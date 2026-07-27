@@ -7,7 +7,7 @@ MODULES = {
         "table": "quantities",
         "section": "ops",
         "fields": [
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("item_no", "رقم البند", "text"),
             ("description", "وصف البند", "text"),
             ("unit", "الوحدة", "text"),
@@ -23,7 +23,7 @@ MODULES = {
         "table": "photos",
         "section": "ops",
         "fields": [
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("before_shot", "صور قبل التنفيذ", "yesno"),
             ("during_shot", "صور أثناء التنفيذ", "yesno"),
             ("after_shot", "صور بعد التنفيذ", "yesno"),
@@ -38,7 +38,7 @@ MODULES = {
         "table": "metering",
         "section": "ops",
         "fields": [
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("officer", "مسؤول المستخلصات", "list:invoice_officers"),
             ("start_date", "تاريخ بداية التمتير", "date"),
             ("submit_date", "تاريخ رفع للاستشاري", "date"),
@@ -56,7 +56,7 @@ MODULES = {
         "section": "financial",
         "fields": [
             ("invoice_id", "رقم المستخلص", "text"),
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("period", "الفترة", "text"),
             ("value", "قيمة المستخلص", "number"),
             ("support_date", "تاريخ الرفع للمساندة", "date"),
@@ -82,7 +82,7 @@ MODULES = {
             ("work_no", "رقم المعاملة", "text"),
             ("work_date", "التاريخ", "date"),
             ("contractor", "المقاول", "text"),
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("work_type", "نوع العمل", "list:construction_types"),
             ("site", "الموقع", "text"),
             ("status", "الحالة", "list:execution_status"),
@@ -116,7 +116,7 @@ MODULES = {
         "table": "coordination",
         "section": "quality",
         "fields": [
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("needs_asphalt", "هل يحتاج إخلاء أسفلت؟", "yesno"),
             ("officer", "مسؤول التنسيقات", "list:coordination_officers"),
             ("request_date", "تاريخ الطلب", "date"),
@@ -133,7 +133,7 @@ MODULES = {
         "table": "quality_clearances",
         "section": "quality",
         "fields": [
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("clearance_no", "رقم الإخلاء", "text"),
             ("request_date", "تاريخ الطلب", "date"),
             ("issue_date", "تاريخ الإصدار", "date"),
@@ -148,7 +148,7 @@ MODULES = {
         "table": "quality_inspections",
         "section": "quality",
         "fields": [
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("inspect_date", "تاريخ الفحص", "date"),
             ("inspector", "المفتش", "text"),
             ("result", "النتيجة", "list:inspect_result"),
@@ -163,7 +163,7 @@ MODULES = {
         "section": "safety",
         "fields": [
             ("permit_no", "رقم التصريح", "text"),
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("permit_date", "التاريخ", "date"),
             ("location", "الموقع", "text"),
             ("issuer", "المُصدر", "text"),
@@ -179,7 +179,7 @@ MODULES = {
         "table": "safety_incidents",
         "section": "safety",
         "fields": [
-            ("incident_no", "رقم البلاغ", "text"),
+            ("incident_no", "رقم العطل", "text"),
             ("incident_date", "التاريخ", "date"),
             ("location", "الموقع", "text"),
             ("incident_type", "نوع الحادث", "list:incident_types"),
@@ -217,7 +217,7 @@ MODULES = {
             ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),
             ("recipient", "المستلم / المسلم", "text"),
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("region", "المنطقة", "text"),
             ("notes", "ملاحظات", "textarea"),
         ],
@@ -236,7 +236,7 @@ MODULES = {
             ("qty", "الكمية", "number"),
             ("unit_price", "سعر الوحدة", "number"),
             ("status", "الحالة", "list:purchase_status"),
-            ("ticket_no", "رقم البلاغ", "ticket"),
+            ("ticket_no", "رقم العطل", "ticket"),
             ("notes", "ملاحظات", "textarea"),
         ],
         "list_cols": ["purchase_no", "purchase_date", "supplier", "item_name", "qty", "status"],
