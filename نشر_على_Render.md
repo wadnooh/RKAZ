@@ -6,6 +6,9 @@
 
 **https://rekaz-alenjaz.onrender.com**
 
+لوحة الخدمة: https://dashboard.render.com/web/exs-d9jpvf7lk1mc738luveg  
+المستودع: https://github.com/wadnooh/RKAZ
+
 | البند | التجربة المجانية | بعد الاعتماد (مدفوع) |
 |-------|------------------|----------------------|
 | الخطة | `plan: free` + `TRIAL_MODE=1` | Starter/أعلى + Disk |
