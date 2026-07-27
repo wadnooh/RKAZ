@@ -47,9 +47,14 @@
 
   {% if session.get('user_id') and not is_login_page and hosting and hosting.is_trial_free %}
   <div class="flash warning" style="margin:10px 16px 0;border-radius:12px;">
-    وضع التجربة على السيرفر المجاني — الحفظ تلقائي ويُرسل للجهاز الرئيسي عبر
-    <a href="{{ url_for('backups_home') if can('backup.manage') else url_for('settings_page') }}"><strong>حفظ البيانات</strong></a>
-    (ثبّت وكيل المزامنة على الجهاز الرئيسي مرة واحدة).
+    <strong>وضع التجربة — سيرفر مجاني:</strong>
+    الحفظ يعمل تلقائياً كل بضع ساعات، ويُسحب إلى الجهاز الرئيسي عبر وكيل المزامنة.
+    {% if can('backup.manage') %}
+    راجع الحالة وثبّت الوكيل مرة واحدة من
+    <a href="{{ url_for('backups_home') }}"><strong>حفظ البيانات</strong></a>.
+    {% else %}
+    اطلب من المدير فتح <strong>حفظ البيانات</strong> لضبط المزامنة.
+    {% endif %}
   </div>
   {% endif %}
 
