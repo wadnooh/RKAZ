@@ -1706,63 +1706,11 @@ def api_jump_destinations():
 @app.route("/export/tickets.xlsx")
 @login_required
 def export_tickets_excel():
-    from openpyxl import Workbook
-
-    conn = db.connect()
-    rows = db.rows_to_dicts(conn.execute("SELECT * FROM tickets ORDER BY id").fetchall())
-    conn.close()
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Tracking"
-    headers = [
-        "رقم العطل",
-        "تاريخ الاستلام",
-        "الحي",
-        "وقت الاستلام",
-        "المندوب",
-        "رقم المحطة",
-        "رقم الفيدر",
-        "الموقع",
-        "نوع العطل",
-        "تصنيف العطل",
-        "الفرقة",
-        "وقت التوجيه",
-        "وقت الوصول",
-        "حالة التنفيذ",
-        "تاريخ التنفيذ",
-        "قيمة البنود",
-        "ملاحظات",
-    ]
-    ws.append(headers)
-    for t in rows:
-        ws.append(
-            [
-                t.get("ticket_no"),
-                t.get("receive_date"),
-                t.get("district"),
-                t.get("receive_time"),
-                t.get("agent"),
-                t.get("station_no"),
-                t.get("feeder_no"),
-                t.get("location"),
-                t.get("fault_type"),
-                t.get("classification"),
-                t.get("team"),
-                t.get("dispatch_time"),
-                t.get("arrival_time"),
-                t.get("status"),
-                t.get("execution_date"),
-                t.get("items_value"),
-                t.get("notes"),
-            ]
-        )
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
+    data = tickets_excel.export_tickets()
     return send_file(
-        buf,
+        io.BytesIO(data),
         as_attachment=True,
-        download_name=f"rakaz-tickets-{datetime.now().strftime('%Y%m%d')}.xlsx",
+        download_name=f"الأعطال-{datetime.now().strftime('%Y%m%d')}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

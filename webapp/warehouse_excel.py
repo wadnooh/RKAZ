@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-import io
 from datetime import datetime
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 from webapp import db
+from webapp import excel_brand as brand
 
 ITEM_HEADERS = [
     "رقم المادة",
@@ -135,66 +136,75 @@ def _to_float(val):
         return None
 
 
+def _find_header(rows, aliases: dict, required_any: set[str], max_scan: int = 20) -> tuple[int, dict[int, str]]:
+    for i, row in enumerate(rows[:max_scan]):
+        if not row:
+            continue
+        mapping = _map_headers(row, aliases)
+        if required_any & set(mapping.values()):
+            return i, mapping
+    return -1, {}
+
+
 def build_items_template() -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "المواد"
-    ws.append(ITEM_HEADERS)
-    ws.append(["M-001", "كيبل 4×16", "متر", "كيابل", 100, "مثال", 500])
-    ws.append(["M-002", "قاطع 63 أمبير", "عدد", "مواد كهربائية", 5, "", 20])
-    tip = wb.create_sheet("تعليمات")
-    tip.append(["ارفع ملف المواد ثم استورد من شاشة أرصدة المواد."])
-    tip.append(["عمود رصيد افتتاحي اختياري — يُنشئ حركة وارد (رصيد افتتاحي) مربوطة بالمادة."])
-    tip.append(["رقم المادة مطلوب وفريد — عند التكرار يتم تحديث بيانات المادة."])
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf.read()
+    ncol = len(ITEM_HEADERS)
+    header_row = brand.apply_brand_header(ws, title="قالب استيراد مواد المستودع", ncol=ncol)
+    brand.write_header_row(ws, ITEM_HEADERS, header_row)
+    samples = [
+        ["M-001", "كيبل 4×16", "متر", "كيابل", 100, "مثال", 500],
+        ["M-002", "قاطع 63 أمبير", "عدد", "مواد كهربائية", 5, "", 20],
+    ]
+    for offset, sample in enumerate(samples):
+        r = header_row + 1 + offset
+        for col, val in enumerate(sample, start=1):
+            ws.cell(row=r, column=col, value=val)
+    end = header_row + len(samples)
+    brand.style_data_rows(ws, start_row=header_row + 1, end_row=end, ncol=ncol)
+    ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncol)}{end}"
+    brand.write_instructions_sheet(
+        wb,
+        [
+            "ارفع ملف المواد ثم استورد من شاشة أرصدة المواد.",
+            "عمود رصيد افتتاحي اختياري — يُنشئ حركة وارد (رصيد افتتاحي) مربوطة بالمادة.",
+            "رقم المادة مطلوب وفريد — عند التكرار يتم تحديث بيانات المادة.",
+            "لا تحذف صف رؤوس الأعمدة.",
+        ],
+    )
+    return brand.save_workbook_bytes(wb)
 
 
 def build_tx_template() -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "الحركات"
-    ws.append(TX_HEADERS)
-    ws.append(
+    ncol = len(TX_HEADERS)
+    header_row = brand.apply_brand_header(ws, title="قالب استيراد حركات المستودع", ncol=ncol)
+    brand.write_header_row(ws, TX_HEADERS, header_row)
+    today = datetime.now().strftime("%Y-%m-%d")
+    samples = [
+        ["V-001", today, "وارد من الكهرباء", "M-001", "كيبل 4×16", "متر", 100, "المستودع", "", "خريص", "مثال وارد"],
+        ["V-002", today, "منصرف للمقاول", "M-001", "كيبل 4×16", "متر", 25, "فرقة 1", "T-100", "خريص", "ربط بالمعاملة/العطل"],
+    ]
+    for offset, sample in enumerate(samples):
+        r = header_row + 1 + offset
+        for col, val in enumerate(sample, start=1):
+            ws.cell(row=r, column=col, value=val)
+    end = header_row + len(samples)
+    brand.style_data_rows(ws, start_row=header_row + 1, end_row=end, ncol=ncol)
+    ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncol)}{end}"
+    brand.write_instructions_sheet(
+        wb,
         [
-            "V-001",
-            datetime.now().strftime("%Y-%m-%d"),
-            "وارد من الكهرباء",
-            "M-001",
-            "كيبل 4×16",
-            "متر",
-            100,
-            "المستودع",
-            "",
-            "خريص",
-            "مثال وارد",
-        ]
+            "أنواع الحركة المقترحة: وارد من الكهرباء | منصرف للمقاول | إرجاع للمجمعة | وارد من موقع العمل | رصيد افتتاحي",
+            "رقم المادة يجب أن يكون موجوداً في أصناف المستودع (أو يُنشأ تلقائياً إن وُجد الاسم).",
+            "رقم العطل يربط الحركة بمعاملة العطل.",
+            "لا تحذف صف رؤوس الأعمدة.",
+        ],
     )
-    ws.append(
-        [
-            "V-002",
-            datetime.now().strftime("%Y-%m-%d"),
-            "منصرف للمقاول",
-            "M-001",
-            "كيبل 4×16",
-            "متر",
-            25,
-            "فرقة 1",
-            "T-100",
-            "خريص",
-            "ربط بالمعاملة/العطل",
-        ]
-    )
-    tip = wb.create_sheet("تعليمات")
-    tip.append(["أنواع الحركة المقترحة: وارد من الكهرباء | منصرف للمقاول | إرجاع للمجمعة | وارد من موقع العمل | رصيد افتتاحي"])
-    tip.append(["رقم المادة يجب أن يكون موجوداً في أصناف المستودع (أو يُنشأ تلقائياً إن وُجد الاسم)."])
-    tip.append(["رقم العطل يربط الحركة بمعاملة العطل."])
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf.read()
+    return brand.save_workbook_bytes(wb)
 
 
 def import_items_from_excel(file_storage) -> dict:

@@ -1,13 +1,14 @@
-"""استيراد وتصدير أعطال من/إلى Excel."""
+"""استيراد وتصدير أعطال من/إلى Excel — قالب وتصدير بترويسة احترافية."""
 
 from __future__ import annotations
 
-import io
 from datetime import datetime, time
 
 from openpyxl import Workbook, load_workbook
+from openpyxl.utils import get_column_letter
 
 from webapp import db
+from webapp import excel_brand as brand
 
 TICKET_HEADERS = [
     "رقم العطل",
@@ -66,6 +67,39 @@ TICKET_FIELDS = [
     "items_value",
     "notes",
 ]
+
+# أعمدة التصدير الكامل = نفس قالب الاستيراد (للتوافق وإعادة الاستيراد)
+EXPORT_HEADERS = TICKET_HEADERS
+EXPORT_FIELDS = TICKET_FIELDS
+
+_COL_WIDTHS = {
+    "رقم العطل": 14,
+    "تاريخ الاستلام": 14,
+    "الحي": 12,
+    "وقت الاستلام": 12,
+    "المندوب": 14,
+    "رقم المحطة": 12,
+    "رقم الفيدر": 12,
+    "الموقع": 28,
+    "نوع العطل": 16,
+    "تصنيف العطل": 14,
+    "الفرقة": 12,
+    "وقت التوجيه": 12,
+    "وقت الوصول": 12,
+    "حالة التنفيذ": 14,
+    "تاريخ التنفيذ": 14,
+    "تم التصوير": 12,
+    "الكميات مكتملة": 14,
+    "إخلاء الأسفلت": 14,
+    "حالة التمتير": 14,
+    "اعتماد الاستشاري": 16,
+    "حالة المستخلص": 14,
+    "أمر العمل": 14,
+    "رقم الفاتورة": 14,
+    "حالة SAP": 12,
+    "قيمة البنود": 12,
+    "ملاحظات": 28,
+}
 
 _DATE_FIELDS = {"receive_date", "execution_date"}
 _TIME_FIELDS = {"receive_time", "dispatch_time", "arrival_time"}
@@ -158,6 +192,17 @@ def _map_headers(row_values) -> dict[int, str]:
     return mapping
 
 
+def _find_header(rows, max_scan: int = 20) -> tuple[int, dict[int, str]]:
+    """يعثر على صف رؤوس الأعمدة حتى مع وجود ترويسة/شعار أعلاه."""
+    for i, row in enumerate(rows[:max_scan]):
+        if not row:
+            continue
+        mapping = _map_headers(row)
+        if "ticket_no" in mapping.values():
+            return i, mapping
+    return -1, {}
+
+
 def _format_date(val) -> str:
     if val is None or val == "":
         return ""
@@ -174,7 +219,6 @@ def _format_date(val) -> str:
     if "/" in s and len(s.split("/")) == 3:
         parts = s.split("/")
         if len(parts[2]) == 4:
-            # D/M/Y or M/D/Y — prefer D/M/Y for Arabic sheets
             d, m, y = parts[0].zfill(2), parts[1].zfill(2), parts[2]
             return f"{y}-{m}-{d}"
     return s
@@ -189,7 +233,6 @@ def _format_time(val) -> str:
         return val.strftime("%H:%M")
     s = str(val).strip()
     if " " in s and ":" in s:
-        # "2026-01-01 14:30:00" or similar
         part = s.split(" ")[-1]
         return part[:5] if len(part) >= 5 else part
     if len(s) >= 5 and s[2] == ":":
@@ -228,51 +271,109 @@ def _cell(row, idx, field: str | None = None):
     return str(val).strip()
 
 
+def _sample_row() -> list:
+    today = datetime.now().strftime("%Y-%m-%d")
+    return [
+        "T-1001",
+        today,
+        "خريص",
+        "08:30",
+        "مندوب 1",
+        "ST-01",
+        "F-12",
+        "",
+        "عطل كيبل",
+        "طارئ",
+        "فرقة 1",
+        "09:00",
+        "09:25",
+        "جديد",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        "",
+        0,
+        "صف مثال — احذفه أو عدّله",
+    ]
+
+
 def build_tickets_template() -> bytes:
     wb = Workbook()
     ws = wb.active
     ws.title = "الأعطال"
-    ws.append(TICKET_HEADERS)
-    today = datetime.now().strftime("%Y-%m-%d")
-    ws.append(
-        [
-            "T-1001",
-            today,
-            "خريص",
-            "08:30",
-            "مندوب 1",
-            "ST-01",
-            "F-12",
-            "",
-            "عطل كيبل",
-            "طارئ",
-            "فرقة 1",
-            "09:00",
-            "09:25",
-            "جديد",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            "",
-            0,
-            "صف مثال — احذفه أو عدّله",
-        ]
+    ncol = len(TICKET_HEADERS)
+
+    header_row = brand.apply_brand_header(
+        ws,
+        title="قالب استيراد الأعطال",
+        ncol=ncol,
     )
-    tip = wb.create_sheet("تعليمات")
-    tip.append(["عمود رقم العطل مطلوب وفريد."])
-    tip.append(["عند تكرار رقم العطل يتم تحديث السجل الموجود (upsert)."])
-    tip.append(["التواريخ بصيغة YYYY-MM-DD والأوقات HH:MM."])
-    tip.append(["ارفع الملف من صفحة الأعطال ← استيراد من Excel."])
-    buf = io.BytesIO()
-    wb.save(buf)
-    buf.seek(0)
-    return buf.read()
+    brand.write_header_row(ws, TICKET_HEADERS, header_row, widths=_COL_WIDTHS)
+
+    sample = _sample_row()
+    data_row = header_row + 1
+    for col, val in enumerate(sample, start=1):
+        ws.cell(row=data_row, column=col, value=val)
+    brand.style_data_rows(ws, start_row=data_row, end_row=data_row, ncol=ncol)
+    # توسيع نطاق الفلتر ليشمل صف المثال
+    ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncol)}{data_row}"
+
+    brand.write_instructions_sheet(
+        wb,
+        [
+            "عمود رقم العطل مطلوب وفريد.",
+            "عند تكرار رقم العطل يتم تحديث السجل الموجود (upsert).",
+            "التواريخ بصيغة YYYY-MM-DD والأوقات HH:MM.",
+            "لا تحذف صف رؤوس الأعمدة ولا تغيّر أسماء الأعمدة.",
+            "صف المثال يمكن حذفه أو تعديله قبل الرفع.",
+            "ارفع الملف من صفحة الأعطال ← استيراد من Excel.",
+        ],
+    )
+    return brand.save_workbook_bytes(wb)
+
+
+def export_tickets(rows: list[dict] | None = None) -> bytes:
+    """تصدير الأعطال بترويسة احترافية وشعار — أعمدة مطابقة للقالب."""
+    if rows is None:
+        conn = db.connect()
+        rows = db.rows_to_dicts(conn.execute("SELECT * FROM tickets ORDER BY id").fetchall())
+        conn.close()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الأعطال"
+    ncol = len(EXPORT_HEADERS)
+
+    header_row = brand.apply_brand_header(
+        ws,
+        title="تصدير الأعطال",
+        ncol=ncol,
+    )
+    brand.write_header_row(ws, EXPORT_HEADERS, header_row, widths=_COL_WIDTHS)
+
+    start = header_row + 1
+    for offset, t in enumerate(rows):
+        r = start + offset
+        for col, field in enumerate(EXPORT_FIELDS, start=1):
+            val = t.get(field)
+            if field in _DATE_FIELDS:
+                val = _format_date(val) if val else ""
+            elif field in _TIME_FIELDS:
+                val = _format_time(val) if val else ""
+            ws.cell(row=r, column=col, value=val if val is not None else "")
+
+    end = start + len(rows) - 1 if rows else header_row
+    if rows:
+        brand.style_data_rows(ws, start_row=start, end_row=end, ncol=ncol)
+        ws.auto_filter.ref = f"A{header_row}:{get_column_letter(ncol)}{end}"
+
+    return brand.save_workbook_bytes(wb)
 
 
 def import_tickets_from_excel(file_storage) -> dict:
@@ -282,8 +383,8 @@ def import_tickets_from_excel(file_storage) -> dict:
     if not rows:
         return {"ok": 0, "updated": 0, "errors": ["الملف فارغ"]}
 
-    mapping = _map_headers(rows[0])
-    if "ticket_no" not in mapping.values():
+    header_idx, mapping = _find_header(rows)
+    if header_idx < 0 or "ticket_no" not in mapping.values():
         return {"ok": 0, "updated": 0, "errors": ["لم يُعثر على عمود رقم العطل"]}
 
     inv = {v: k for k, v in mapping.items()}
@@ -291,13 +392,14 @@ def import_tickets_from_excel(file_storage) -> dict:
     errors: list[str] = []
     conn = db.connect()
 
-    for i, row in enumerate(rows[1:], start=2):
+    for i, row in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
         if not row or all(c is None or str(c).strip() == "" for c in row):
             continue
         ticket_no = _cell(row, inv.get("ticket_no"), "ticket_no")
         if not ticket_no:
             errors.append(f"صف {i}: رقم العطل فارغ")
             continue
+        # تجاهل صف المثال الافتراضي إن تُرك كما هو دون تعديل جاد — لا نمنع الاستيراد
 
         data = {}
         for field in TICKET_FIELDS:
