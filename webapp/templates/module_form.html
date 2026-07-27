@@ -23,7 +23,7 @@
     {% endif %}
   </div>
 
-  <form method="post" class="form-grid">
+  <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}>
     {% for key, label, ftype in module.fields %}
     <div class="field {% if ftype == 'textarea' %}full{% endif %}">
       <label>{{ label }}</label>
@@ -44,6 +44,25 @@
           </option>
           {% endfor %}
         </select>
+      {% elif ftype == 'image' %}
+        <div class="photo-slot">
+          {% if row[key] and row[key].startswith('/media/') %}
+            <img class="photo-preview" src="{{ row[key] }}" alt="{{ label }}">
+            <input type="hidden" name="{{ key }}" value="{{ row[key] }}">
+          {% elif row[key] == 'نعم' %}
+            <div class="photo-empty">مسجّل سابقاً (نعم) — ارفع صورة للتحديث</div>
+            <input type="hidden" name="{{ key }}" value="{{ row[key] }}">
+          {% else %}
+            <div class="photo-empty">لا توجد صورة</div>
+            <input type="hidden" name="{{ key }}" value="">
+          {% endif %}
+          <input type="file" name="file_{{ key }}" accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp">
+          {% if row[key] and (row[key].startswith('/media/') or row[key] == 'نعم') %}
+          <label class="photo-actions">
+            <input type="checkbox" name="clear_{{ key }}" value="1"> حذف الصورة الحالية
+          </label>
+          {% endif %}
+        </div>
       {% elif ftype == 'yesno' %}
         <select name="{{ key }}">
           <option value="">—</option>
@@ -66,6 +85,12 @@
       {% endif %}
     </div>
     {% endfor %}
+    {% if name == 'photos' %}
+    <p class="photo-storage-hint" style="grid-column:1/-1">
+      صيغ مقبولة: JPG / PNG / WebP — حد أقصى 6 ميجا لكل صورة.
+      {% if photo_storage == 's3' %}التخزين: Amazon S3 (دائم).{% else %}التخزين: محلي على السيرفر{% if photo_ephemeral %} — القرص المؤقت على Render قد يُفقد عند إعادة النشر؛ يُفضّل تفعيل S3.{% endif %}.{% endif %}
+    </p>
+    {% endif %}
     <div class="actions" style="grid-column:1/-1">
       <button class="btn primary" type="submit">حفظ</button>
       <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">إلغاء</a>

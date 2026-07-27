@@ -107,11 +107,17 @@
       <tbody>
         {% for p in related.photos %}
         <tr>
-          <td>{{ p.before_shot or '—' }}</td>
-          <td>{{ p.during_shot or '—' }}</td>
-          <td>{{ p.after_shot or '—' }}</td>
-          <td>{{ p.quantities_shot or '—' }}</td>
-          <td>{{ p.location_shot or '—' }}</td>
+          {% for key, label in [('before_shot','قبل'),('during_shot','أثناء'),('after_shot','بعد'),('quantities_shot','كميات'),('location_shot','موقع')] %}
+          <td>
+            {% if p[key] and p[key].startswith('/media/') %}
+              <a href="{{ p[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ p[key] }}" alt="{{ label }}"></a>
+            {% elif p[key] == 'نعم' %}
+              <span class="badge ok">نعم</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          {% endfor %}
           <td>
             {% if p.complete == 'مكتمل' %}<span class="badge ok">مكتمل</span>
             {% else %}<span class="badge danger">ناقص</span>{% endif %}

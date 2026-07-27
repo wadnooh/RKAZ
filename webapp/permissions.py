@@ -253,6 +253,12 @@ def required_perm_for_request() -> str | None:
         if ep == "module_delete":
             return None if has_perm("modules.delete") else "modules.delete"
 
+    if ep == "media_serve":
+        # صور العمليات: يحتاج قراءة وحدات أو قراءة أعطال + قسم العمليات
+        if has_perm("modules.read") or (has_perm("tickets.read") and has_perm("section.ops")):
+            return None
+        return "modules.read"
+
     # الأعطال
     ticket_map = {
         "tickets_list": "tickets.read",

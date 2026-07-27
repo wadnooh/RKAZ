@@ -462,6 +462,74 @@ body {
 }
 .flash.warn { background: #fff4c6; border-color: #f0d98a; }
 
+/* سجل الصور — خانات الرفع قبل / أثناء / بعد */
+.photo-slot {
+  display: grid;
+  gap: 8px;
+}
+.photo-slot .photo-preview {
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #f3f7fb;
+}
+.photo-slot .photo-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  max-width: 220px;
+  aspect-ratio: 4 / 3;
+  border-radius: 10px;
+  border: 1px dashed #c5d5e6;
+  background: #f7fafc;
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.photo-slot input[type="file"] {
+  font-size: 0.85rem;
+  padding: 6px;
+}
+.photo-slot .photo-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  font-size: 0.85rem;
+  color: #3d5f82;
+}
+.photo-thumb {
+  width: 56px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  vertical-align: middle;
+  background: #f3f7fb;
+}
+.photo-thumbs-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.photo-cell-label {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.photo-storage-hint {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+
 .login-wrap {
   min-height: 70vh;
   display: flex;

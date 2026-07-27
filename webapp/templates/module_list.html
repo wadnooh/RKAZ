@@ -60,6 +60,14 @@
           <td>
             {% if key == 'ticket_no' and r[key] %}
               <a href="{{ url_for('tickets_list', q=r[key]) }}">{{ r[key] }}</a>
+            {% elif ftype == 'image' %}
+              {% if r[key] and r[key].startswith('/media/') %}
+                <a href="{{ r[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ r[key] }}" alt="{{ label }}"></a>
+              {% elif r[key] == 'نعم' %}
+                <span class="badge ok">نعم</span>
+              {% else %}
+                —
+              {% endif %}
             {% elif ftype == 'number' and r[key] is not none %}
               {% if 'value' in key or 'price' in key or 'collected' in key or 'approved' in key %}
                 {{ r[key]|money }}

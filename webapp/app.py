@@ -7,6 +7,7 @@ from functools import wraps
 
 from flask import (
     Flask,
+    abort,
     flash,
     g,
     redirect,
@@ -26,6 +27,7 @@ from webapp import permissions
 from webapp import warehouse_excel
 from webapp import tickets_excel
 from webapp import backup as backup_svc
+from webapp import media as media_svc
 
 app = Flask(__name__, instance_relative_config=True)
 # يجب أن يبقى SECRET_KEY ثابتاً على Render — تغييره يُبطل جلسات الجميع
@@ -36,6 +38,8 @@ app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 # Render يضبط RENDER=true ويعمل خلف HTTPS
 app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
+# صور سجل الصور: عدة ملفات حتى ~6MB لكل منها
+app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 app.url_map.strict_slashes = False
 # Render / reverse proxies
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -247,8 +251,7 @@ def dashboard_stats():
             tickets_value += fv
 
     def photo_incomplete(p):
-        keys = ["before_shot", "during_shot", "after_shot", "quantities_shot", "location_shot"]
-        return not all(p.get(k) == "نعم" for k in keys)
+        return not media_svc.photos_complete(p)
 
     cash = calc_cashflow()
     liquidity = abs(min(0, min(r["cumulative"] for r in cash)))
@@ -768,9 +771,8 @@ def ticket_view(ticket_id):
     conn.close()
     for q in related["quantities"]:
         q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
-    photo_keys = ["before_shot", "during_shot", "after_shot", "quantities_shot", "location_shot"]
     for p in related["photos"]:
-        p["complete"] = "مكتمل" if all(p.get(k) == "نعم" for k in photo_keys) else "ناقص"
+        p["complete"] = "مكتمل" if media_svc.photos_complete(p) else "ناقص"
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
     ticket["final_value"] = final_value(ticket.get("items_value"))
     return render_template("ticket_view.html", ticket=ticket, related=related)
@@ -858,9 +860,25 @@ def _module_form_data(module):
         val = (request.form.get(key) or "").strip()
         if ftype == "number":
             data[key] = float(val) if val != "" else None
+        elif ftype == "image":
+            # تُعالَج لاحقاً عبر media_svc.apply_photo_uploads
+            data[key] = val
         else:
             data[key] = val
     return data
+
+
+def _apply_photos_from_request(data: dict) -> None:
+    clear_flags = {
+        f: str(request.form.get(f"clear_{f}") or "").strip() in {"1", "on", "yes", "true"}
+        for f in media_svc.PHOTO_FIELDS
+    }
+    media_svc.apply_photo_uploads(
+        data,
+        request.files,
+        ticket_no=data.get("ticket_no"),
+        clear_flags=clear_flags,
+    )
 
 
 def _redirect_after_module(name, data):
@@ -876,6 +894,20 @@ def _redirect_after_module(name, data):
         return redirect(url_for("module_list", name=name, ticket_no=tno))
     return redirect(url_for("module_list", name=name))
 
+
+@app.route("/media/<storage>/<path:key>")
+@login_required
+def media_serve(storage, key):
+    """عرض صورة مرفوعة (S3 أو محلي) لمستخدم مسجّل."""
+    try:
+        stream, mime, filename = media_svc.load_media(storage, key)
+    except FileNotFoundError:
+        abort(404)
+    except PermissionError:
+        abort(403)
+    except Exception:
+        abort(404)
+    return send_file(stream, mimetype=mime, download_name=filename, as_attachment=False)
 
 @app.route("/module/<name>")
 @login_required
@@ -893,8 +925,7 @@ def module_list(name):
             r["total"] = (float(r.get("qty") or 0) * float(r.get("unit_price") or 0))
     if name == "photos":
         for r in rows:
-            keys = ["before_shot", "during_shot", "after_shot", "quantities_shot", "location_shot"]
-            r["complete"] = "مكتمل" if all(r.get(k) == "نعم" for k in keys) else "ناقص"
+            r["complete"] = "مكتمل" if media_svc.photos_complete(r) else "ناقص"
     if name == "invoices":
         for r in rows:
             r["remaining"] = float(r.get("value") or 0) - float(r.get("collected") or 0)
@@ -938,6 +969,27 @@ def module_new(name):
         prefill["ticket_no"] = request.args.get("ticket_no")
     if request.method == "POST":
         data = _module_form_data(module)
+        if name == "photos":
+            try:
+                _apply_photos_from_request(data)
+            except ValueError as exc:
+                conn.close()
+                flash(str(exc), "danger")
+                section = module.get("section")
+                return render_template(
+                    "module_form.html",
+                    name=name,
+                    module=module,
+                    row=data,
+                    tickets=tickets,
+                    warehouse_items=[],
+                    mode="new",
+                    section=section,
+                    section_meta=SECTION_META.get(section),
+                    section_modules=modules_for_section(section) if section else [],
+                    photo_storage=media_svc.storage_backend(),
+                    photo_ephemeral=backup_svc.is_trial_free(),
+                )
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
         keys = [f[0] for f in module["fields"]]
@@ -969,6 +1021,8 @@ def module_new(name):
         section=section,
         section_meta=SECTION_META.get(section),
         section_modules=modules_for_section(section) if section else [],
+        photo_storage=media_svc.storage_backend() if name == "photos" else None,
+        photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
     )
 
 
@@ -987,6 +1041,27 @@ def module_edit(name, row_id):
         return redirect(url_for("module_list", name=name))
     if request.method == "POST":
         data = _module_form_data(module)
+        if name == "photos":
+            try:
+                _apply_photos_from_request(data)
+            except ValueError as exc:
+                conn.close()
+                flash(str(exc), "danger")
+                section = module.get("section")
+                return render_template(
+                    "module_form.html",
+                    name=name,
+                    module=module,
+                    row={**dict(row), **data},
+                    tickets=tickets,
+                    warehouse_items=[],
+                    mode="edit",
+                    section=section,
+                    section_meta=SECTION_META.get(section),
+                    section_modules=modules_for_section(section) if section else [],
+                    photo_storage=media_svc.storage_backend(),
+                    photo_ephemeral=backup_svc.is_trial_free(),
+                )
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
         keys = [f[0] for f in module["fields"]]
@@ -1016,6 +1091,8 @@ def module_edit(name, row_id):
         section=section,
         section_meta=SECTION_META.get(section),
         section_modules=modules_for_section(section) if section else [],
+        photo_storage=media_svc.storage_backend() if name == "photos" else None,
+        photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
     )
 
 
