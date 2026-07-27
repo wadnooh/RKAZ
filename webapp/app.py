@@ -671,7 +671,7 @@ def ticket_new():
             conn.commit()
             db.log_audit(current_user_name(), "إضافة", "بلاغ", cur.lastrowid, data.get("ticket_no"))
             flash("تم إنشاء المعاملة بنجاح", "ok")
-        _after_data_change()
+            _after_data_change()
             return redirect(url_for("tickets_list"))
         except Exception as exc:
             flash(f"تعذر الحفظ: {exc}", "danger")
