@@ -3,7 +3,7 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 echo.
-echo تثبيت سحب الحفظ التلقائي على الجهاز الرئيسي
+echo Install automatic backup pull on the main PC
 echo.
 
 set "PS1=%~dp0سحب_الحفظ_التلقائي.ps1"
@@ -12,8 +12,7 @@ set "EX=%~dp0sync_config.example.json"
 
 if not exist "%CFG%" (
   if exist "%EX%" copy /Y "%EX%" "%CFG%" >nul
-  echo تم إنشاء sync_config.json — افتحه وضع رمز المزامنة من صفحة حفظ البيانات في الموقع.
-  echo ثم أعد تشغيل هذا الملف.
+  echo Created sync_config.json - put the sync token from the backups page, then rerun.
   notepad "%CFG%"
   pause
   exit /b 2
@@ -21,22 +20,22 @@ if not exist "%CFG%" (
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%PS1%"
 if errorlevel 1 (
-  echo فشل السحب التجريبي — راجع sync_config.json ورمز المزامنة.
+  echo Pull failed - check sync_config.json token.
   pause
   exit /b 1
 )
 
 schtasks /Create /TN "RekazAutoBackupPull" /TR "powershell -NoProfile -ExecutionPolicy Bypass -File \"%PS1%\"" /SC MINUTE /MO 15 /F >nul
 if errorlevel 1 (
-  echo تعذر إنشاء مهمة المجدول — شغّل هذا الملف كمسؤول.
+  echo Could not create scheduled task - run as Administrator.
   pause
   exit /b 1
 )
 
 echo.
-echo تم:
-echo  - سحب تجريبي ناجح
-echo  - مهمة Windows كل 15 دقيقة: RekazAutoBackupPull
-echo  - المجلد: %~dp0حِفظات
+echo Done:
+echo  - Test pull OK
+echo  - Windows task every 15 min: RekazAutoBackupPull
+echo  - Folder: %~dp0backups_inbox
 echo.
 pause
