@@ -697,6 +697,16 @@ def list_warehouse_items():
     return rows
 
 
+def clear_warehouse_balances() -> int:
+    """يمسح كل حركات المستودع فيصفر الأرصدة (لا يحذف أصناف المواد)."""
+    conn = connect()
+    cur = conn.execute("DELETE FROM warehouse_tx")
+    deleted = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+    conn.commit()
+    conn.close()
+    return int(deleted)
+
+
 def enrich_warehouse_tx_from_item(data: dict) -> dict:
     """يربط حركة المستودع ببيانات الصنف (اسم/وحدة) من رقم المادة."""
     item_no = (data.get("item_no") or "").strip()

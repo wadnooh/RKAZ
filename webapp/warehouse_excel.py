@@ -153,9 +153,10 @@ def build_items_template() -> bytes:
     ncol = len(ITEM_HEADERS)
     header_row = brand.apply_brand_header(ws, title="قالب استيراد مواد المستودع", ncol=ncol)
     brand.write_header_row(ws, ITEM_HEADERS, header_row)
+    # أمثلة بنفس أسلوب قالب مواد المستودع المعتمد (SEC)
     samples = [
-        ["M-001", "كيبل 4×16", "متر", "كيابل", 100, "مثال", 500],
-        ["M-002", "قاطع 63 أمبير", "عدد", "مواد كهربائية", 5, "", 20],
+        ["908111006", "CABLE, PWR, 600V/1KV, AL, 4C, 185MM2, XLPE", "KM", "CABLE, PWR, 600V/1KV, AL, 4C, 185MM2, XLPE", 50, "", ""],
+        ["908202053", "ROD,GRD,CUWLD STL,16MM DIA,1200MM LG", "EA", "ROD,GRD,CUWLD STL,16MM DIA,1200MM LG", 50, "", ""],
     ]
     for offset, sample in enumerate(samples):
         r = header_row + 1 + offset
@@ -207,9 +208,16 @@ def build_tx_template() -> bytes:
     return brand.save_workbook_bytes(wb)
 
 
+def _pick_sheet(wb, preferred: tuple[str, ...]):
+    for name in preferred:
+        if name in wb.sheetnames:
+            return wb[name]
+    return wb.active
+
+
 def import_items_from_excel(file_storage) -> dict:
     wb = load_workbook(file_storage, data_only=True)
-    ws = wb.active
+    ws = _pick_sheet(wb, ("المواد", "مواد", "Items", "items"))
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         return {"ok": 0, "updated": 0, "opening": 0, "errors": ["الملف فارغ"]}
@@ -304,7 +312,7 @@ def import_items_from_excel(file_storage) -> dict:
 
 def import_tx_from_excel(file_storage) -> dict:
     wb = load_workbook(file_storage, data_only=True)
-    ws = wb.active
+    ws = _pick_sheet(wb, ("الحركات", "حركات", "Transactions", "tx"))
     rows = list(ws.iter_rows(values_only=True))
     if not rows:
         return {"ok": 0, "linked": 0, "errors": ["الملف فارغ"]}

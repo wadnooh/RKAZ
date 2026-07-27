@@ -1497,6 +1497,25 @@ def warehouse_items_import():
     return redirect(url_for("warehouse_balances"))
 
 
+@app.route("/warehouses/balances/clear", methods=["POST"])
+@login_required
+def warehouse_balances_clear():
+    """مسح كل حركات المستودع → أرصدة صفرية مع الإبقاء على أصناف المواد."""
+    if not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    confirm = (request.form.get("confirm") or "").strip()
+    if confirm != "مسح":
+        flash('للتأكيد اكتب كلمة «مسح» في خانة التأكيد ثم أعد المحاولة.', "danger")
+        return redirect(url_for("warehouse_balances"))
+    try:
+        deleted = db.clear_warehouse_balances()
+        flash(f"تم مسح الأرصدة: حُذفت {deleted} حركة مستودع. الأصناف بقيت كما هي.", "ok")
+        db.log_audit(current_user_name(), "مسح أرصدة", "معاملات المستودع", details=f"deleted={deleted}")
+    except Exception as exc:
+        flash(f"تعذر مسح الأرصدة: {exc}", "danger")
+    return redirect(url_for("warehouse_balances"))
+
+
 @app.route("/warehouses/tx/import", methods=["POST"])
 @login_required
 def warehouse_tx_import():

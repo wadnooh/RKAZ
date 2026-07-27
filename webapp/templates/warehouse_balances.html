@@ -33,9 +33,17 @@
       </div>
       <button class="btn primary" type="submit">رفع الحركات</button>
     </form>
+    <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;" onsubmit="return confirm('سيتم حذف كل حركات المستودع وتصفير الأرصدة. الأصناف لن تُحذف. هل تريد المتابعة؟');">
+      <div style="flex:1;min-width:220px;">
+        <label>مسح الأرصدة الحالية (حذف الحركات)</label>
+        <input type="text" name="confirm" placeholder="اكتب: مسح" required autocomplete="off">
+      </div>
+      <button class="btn ghost" type="submit" style="border-color:#c45c5c;color:#a33;">مسح الأرصدة</button>
+    </form>
   </div>
   <p class="meta" style="margin-top:-6px;margin-bottom:12px;">
     في قالب الحركات ضع <strong>رقم المادة</strong> و<strong>رقم العطل</strong> لربط المنصرف/الوارد بالمعاملة تلقائياً.
+    مسح الأرصدة يحذف الحركات فقط ولا يمس قائمة المواد.
   </p>
   {% endif %}
 
