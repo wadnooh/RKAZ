@@ -3,7 +3,7 @@
   <div class="actions" data-tab-strip="1" data-tab-strip-key="ops_rakaz_tabs">
     <a class="btn ghost{% if active=='ops' %} primary{% endif %}" href="{{ url_for('ops_home') }}">لوحة العمليات</a>
     {% if can('tickets.read') %}
-    <a class="btn ghost{% if active=='tickets' %} primary{% endif %}" href="{{ url_for('tickets_list') }}">بلاغات الأعمال</a>
+    <a class="btn ghost{% if active=='tickets' %} primary{% endif %}" href="{{ url_for('tickets_list') }}">الأعطال</a>
     {% endif %}
     {% if can('modules.read') %}
     <a class="btn ghost{% if active=='quantities' %} primary{% endif %}" href="{{ url_for('module_list', name='quantities') }}">الكميات</a>

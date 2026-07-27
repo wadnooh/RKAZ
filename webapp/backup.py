@@ -734,7 +734,7 @@ def send_backup_email(meta: dict, zip_path: Path) -> dict:
     msg.set_content(
         "حفظة تلقائية من نظام ركاز.\n"
         f"الوقت: {meta.get('created_at')}\n"
-        f"البلاغات: {(meta.get('progress') or {}).get('tickets_total', 0)}\n"
+        f"الأعطال: {(meta.get('progress') or {}).get('tickets_total', 0)}\n"
         f"المعرّف: {meta.get('id')}\n"
         "أرفق الملف على الجهاز الرئيسي في مجلد الحفظات.\n"
     )

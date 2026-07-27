@@ -21,9 +21,9 @@ PERM_LABELS = {
     "section.maintenance": "الورشة",
     "section.hr": "الموارد البشرية",
     "section.contracts": "إدارة العقود",
-    "tickets.read": "عرض البلاغات",
-    "tickets.write": "إضافة/تعديل البلاغات",
-    "tickets.delete": "حذف البلاغات",
+    "tickets.read": "عرض الأعطال",
+    "tickets.write": "إضافة/تعديل الأعطال",
+    "tickets.delete": "حذف الأعطال",
     "modules.read": "عرض سجلات الأقسام",
     "modules.write": "إضافة/تعديل السجلات",
     "modules.delete": "حذف السجلات",
@@ -253,7 +253,7 @@ def required_perm_for_request() -> str | None:
         if ep == "module_delete":
             return None if has_perm("modules.delete") else "modules.delete"
 
-    # البلاغات
+    # الأعطال
     ticket_map = {
         "tickets_list": "tickets.read",
         "ticket_view": "tickets.read",
@@ -366,7 +366,7 @@ def filter_jump_items(items: list[dict]) -> list[dict]:
         path = item.get("path") or item.get("href") or item.get("url") or ""
         perm = _perm_for_path(path)
         if perm is None or has_perm(perm):
-            # بلاغ جديد يحتاج كتابة
+            # عطل جديد يحتاج كتابة
             if path.rstrip("/").endswith("/tickets/new") and not has_perm("tickets.write"):
                 continue
             if path.rstrip("/").endswith("/lists") and not (has_perm("lists.write") or has_perm("section.ops")):

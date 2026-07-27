@@ -5,13 +5,13 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">معاملات البلاغات</h2>
-      <div class="meta">متابعة بلاغات الطوارئ — عرض / تعديل / طباعة تقرير المعاملة</div>
+      <h2 class="section-title">الأعطال</h2>
+      <div class="meta">متابعة أعطال الطوارئ — عرض / تعديل / طباعة تقرير العطل</div>
     </div>
     <div class="actions">
       {% if can('tickets.write') %}
       <a class="btn ghost" href="{{ url_for('tickets_template') }}">قالب Excel</a>
-      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ بلاغ جديد</a>
+      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ عطل جديد</a>
       {% endif %}
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>
@@ -21,7 +21,7 @@
   <div class="form-grid" style="margin-bottom:14px;">
     <form method="post" action="{{ url_for('tickets_import') }}" enctype="multipart/form-data" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
       <div style="flex:1;min-width:220px;">
-        <label>استيراد البلاغات من Excel</label>
+        <label>استيراد الأعطال من Excel</label>
         <input type="file" name="file" accept=".xlsx,.xlsm" required>
       </div>
       <button class="btn primary" type="submit">استيراد</button>
@@ -91,7 +91,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11">لا توجد بلاغات</td></tr>
+        <tr><td colspan="11">لا توجد أعطال</td></tr>
         {% endfor %}
       </tbody>
     </table>

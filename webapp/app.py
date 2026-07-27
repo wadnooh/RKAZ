@@ -410,7 +410,7 @@ def dashboard():
 @login_required
 def ops_home():
     links = [
-        {"label": "بلاغات الأعمال", "href": url_for("tickets_list"), "count": _count("tickets")},
+        {"label": "الأعطال", "href": url_for("tickets_list"), "count": _count("tickets")},
         {"label": "الكميات", "href": url_for("module_list", name="quantities"), "count": _count("quantities")},
         {"label": "قائمة الصور", "href": url_for("module_list", name="photos"), "count": _count("photos")},
         {"label": "التمتير", "href": url_for("module_list", name="metering"), "count": _count("metering")},
@@ -433,7 +433,7 @@ def constructions_home():
     return render_template(
         "section_hub.html",
         title="الإنشاءات - التنفيذ",
-        subtitle="متابعة معاملات الإنشاءات والتنفيذ وربطها ببلاغات المكتب.",
+        subtitle="متابعة معاملات الإنشاءات والتنفيذ وربطها بأعطال المكتب.",
         links=links,
         section="constructions",
         section_modules=modules_for_section("constructions"),
@@ -449,7 +449,7 @@ def contractors_home():
     return render_template(
         "section_hub.html",
         title="المقاولين",
-        subtitle="متابعة أعمال المقاولين وربطها ببلاغات المكتب — بنفس تبويب تقارير رسملة.",
+        subtitle="متابعة أعمال المقاولين وربطها بأعطال المكتب — بنفس تبويب تقارير رسملة.",
         links=links,
         section="contractors",
         section_modules=modules_for_section("contractors"),
@@ -609,7 +609,7 @@ def audit_log_home():
     return redirect(url_for("audit_log_page"))
 
 
-# ---------- Tickets (معاملات البلاغات) ----------
+# ---------- Tickets (الأعطال) ----------
 TICKET_FIELDS = [
     "ticket_no",
     "receive_date",
@@ -678,7 +678,7 @@ def tickets_template():
     return send_file(
         io.BytesIO(data),
         as_attachment=True,
-        download_name="قالب_البلاغات.xlsx",
+        download_name="قالب_الأعطال.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 
@@ -690,17 +690,17 @@ def tickets_import():
         return permissions.deny_redirect()
     f = request.files.get("file")
     if not f or not f.filename:
-        flash("اختر ملف Excel للبلاغات", "danger")
+        flash("اختر ملف Excel للأعطال", "danger")
         return redirect(url_for("tickets_list"))
     try:
         result = tickets_excel.import_tickets_from_excel(f)
         flash(
-            f"استيراد البلاغات: جديد {result['ok']} | محدّث {result['updated']}",
+            f"استيراد الأعطال: جديد {result['ok']} | محدّث {result['updated']}",
             "ok",
         )
         if result.get("errors"):
             flash(" / ".join(result["errors"][:5]), "danger")
-        db.log_audit(current_user_name(), "استيراد Excel", "بلاغات", details=str(result)[:240])
+        db.log_audit(current_user_name(), "استيراد Excel", "أعطال", details=str(result)[:240])
         if result["ok"] or result["updated"]:
             _after_data_change()
     except Exception as exc:
@@ -725,8 +725,8 @@ def ticket_new():
                 [data[f] for f in TICKET_FIELDS],
             )
             conn.commit()
-            db.log_audit(current_user_name(), "إضافة", "بلاغ", cur.lastrowid, data.get("ticket_no"))
-            flash("تم إنشاء المعاملة بنجاح", "ok")
+            db.log_audit(current_user_name(), "إضافة", "عطل", cur.lastrowid, data.get("ticket_no"))
+            flash("تم إنشاء العطل بنجاح", "ok")
             _after_data_change()
             return redirect(url_for("tickets_list"))
         except Exception as exc:
@@ -746,7 +746,7 @@ def ticket_view(ticket_id):
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
-        flash("المعاملة غير موجودة", "danger")
+        flash("العطل غير موجود", "danger")
         return redirect(url_for("tickets_list"))
     ticket = dict(row)
     tno = ticket["ticket_no"]
@@ -769,7 +769,7 @@ def ticket_edit(ticket_id):
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
-        flash("المعاملة غير موجودة", "danger")
+        flash("العطل غير موجود", "danger")
         return redirect(url_for("tickets_list"))
     if request.method == "POST":
         data = ticket_from_form()
@@ -780,8 +780,8 @@ def ticket_edit(ticket_id):
         )
         conn.commit()
         conn.close()
-        db.log_audit(current_user_name(), "تعديل", "بلاغ", ticket_id, data.get("ticket_no"))
-        flash("تم حفظ المعاملة", "ok")
+        db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
+        flash("تم حفظ العطل", "ok")
         _after_data_change()
         return redirect(url_for("ticket_view", ticket_id=ticket_id))
     ticket = dict(row)
@@ -797,8 +797,8 @@ def ticket_delete(ticket_id):
     conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
     conn.commit()
     conn.close()
-    db.log_audit(current_user_name(), "حذف", "بلاغ", ticket_id, row["ticket_no"] if row else "")
-    flash("تم حذف المعاملة", "ok")
+    db.log_audit(current_user_name(), "حذف", "عطل", ticket_id, row["ticket_no"] if row else "")
+    flash("تم حذف العطل", "ok")
     _after_data_change()
     return redirect(url_for("tickets_list"))
 
@@ -810,7 +810,7 @@ def ticket_print(ticket_id):
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
-        flash("المعاملة غير موجودة", "danger")
+        flash("العطل غير موجود", "danger")
         return redirect(url_for("tickets_list"))
     ticket = dict(row)
     tno = ticket["ticket_no"]
@@ -1164,7 +1164,7 @@ def backups_create():
             current_user_name(),
             "حفظ بيانات",
             "نسخة احتياطية",
-            details=f"{meta.get('purpose_label')} — {meta.get('label')} — بلاغات {meta.get('progress', {}).get('tickets_total', 0)}",
+            details=f"{meta.get('purpose_label')} — {meta.get('label')} — أعطال {meta.get('progress', {}).get('tickets_total', 0)}",
         )
         flash(f"تم إنشاء الحفظة: {meta.get('label') or meta.get('purpose_label')}", "ok")
     except Exception as exc:
@@ -1405,7 +1405,7 @@ def warehouse_tx_import():
     try:
         result = warehouse_excel.import_tx_from_excel(f)
         flash(
-            f"استيراد الحركات: {result['ok']} حركة | مربوطة ببلاغات: {result['linked']}",
+            f"استيراد الحركات: {result['ok']} حركة | مربوطة بأعطال: {result['linked']}",
             "ok",
         )
         if result.get("errors"):
@@ -1557,7 +1557,7 @@ def global_search():
             results.append(
                 {
                     "scope": "العمليات",
-                    "tab": "بلاغات",
+                    "tab": "الأعطال",
                     "label": t["ticket_no"],
                     "detail": f"{t['district'] or ''} — {t['fault_type'] or ''} — {t['status'] or ''}",
                     "url": url_for("ticket_view", ticket_id=t["id"]),
@@ -1620,7 +1620,7 @@ def export_tickets_excel():
         "رقم الفيدر",
         "الموقع",
         "نوع العطل",
-        "تصنيف البلاغ",
+        "تصنيف العطل",
         "الفرقة",
         "وقت التوجيه",
         "وقت الوصول",

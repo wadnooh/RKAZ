@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <title>تقرير بلاغ {{ ticket.ticket_no }}</title>
+  <title>تقرير عطل {{ ticket.ticket_no }}</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -74,7 +74,7 @@
       <div class="hero">
         <img class="left" src="{{ logo_rekaz }}" alt="شركة ركاز الإنجاز للمقاولات">
         <div>
-          <h1>عرض المعاملة — بلاغ أعمال</h1>
+          <h1>عرض العطل</h1>
           <div class="company">{{ settings.company_name or 'شركة ركاز الإنجاز للمقاولات' }}</div>
           <div class="subtitle">{{ settings.office_name }} | تقرير تشغيلي</div>
         </div>
@@ -82,7 +82,7 @@
       </div>
 
       <div class="section">
-        <h2>بيانات البلاغ</h2>
+        <h2>بيانات العطل</h2>
         <div class="meta-grid">
           <div class="meta-item"><div class="k">رقم العطل</div><div class="v">{{ ticket.ticket_no }}</div></div>
           <div class="meta-item"><div class="k">تاريخ الاستلام</div><div class="v">{{ ticket.receive_date or '—' }}</div></div>

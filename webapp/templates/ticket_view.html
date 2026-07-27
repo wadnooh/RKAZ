@@ -5,15 +5,15 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">عرض المعاملة — بلاغ {{ ticket.ticket_no }}</h2>
-      <div class="meta">رحلة البلاغ وربطها بالأقسام (كميات، صور، تنسيقات، تمتير، مستودع، سلامة)</div>
+      <h2 class="section-title">عرض العطل — {{ ticket.ticket_no }}</h2>
+      <div class="meta">رحلة العطل وربطها بالأقسام (كميات، صور، تنسيقات، تمتير، مستودع، سلامة)</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
       {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=ticket.id) }}">تعديل</a>{% endif %}
       <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
       {% if can('tickets.delete') %}
-      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return confirm('حذف المعاملة؟');">
+      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return confirm('حذف العطل؟');">
         <button class="btn danger" type="submit">حذف</button>
       </form>
       {% endif %}

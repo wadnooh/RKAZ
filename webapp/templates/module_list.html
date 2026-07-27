@@ -11,7 +11,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ module.title }}</h2>
-      <div class="meta">مرتبط بتبويب {{ section_meta.title if section_meta else 'النظام' }} — إضافة / تعديل / ربط بالبلاغات</div>
+      <div class="meta">مرتبط بتبويب {{ section_meta.title if section_meta else 'النظام' }} — إضافة / تعديل / ربط بالأعطال</div>
     </div>
     {% if can('modules.write') %}<a class="btn primary" href="{{ url_for('module_new', name=name) }}">+ إضافة</a>{% endif %}
   </div>
@@ -20,7 +20,7 @@
   <p class="meta" style="margin-bottom:10px;">
     تصفية:
     {% if item_filter %}المادة <strong>{{ item_filter }}</strong>{% endif %}
-    {% if ticket_filter %}{% if item_filter %} | {% endif %}البلاغ <strong>{{ ticket_filter }}</strong>{% endif %}
+    {% if ticket_filter %}{% if item_filter %} | {% endif %}العطل <strong>{{ ticket_filter }}</strong>{% endif %}
     — <a href="{{ url_for('module_list', name='warehouse_tx') }}">إظهار الكل</a>
   </p>
   {% endif %}

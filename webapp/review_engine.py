@@ -1,4 +1,4 @@
-"""محرك المتابعة والمراجعة الشاملة — تنبيهات تلقائية + اكتمال رحلة البلاغ."""
+"""محرك المتابعة والمراجعة الشاملة — تنبيهات تلقائية + اكتمال رحلة العطل."""
 
 from __future__ import annotations
 
@@ -39,7 +39,7 @@ def ticket_journey(ticket_no, conn=None):
         photo_ok = any(all(p.get(k) == "نعم" for k in keys) for p in photos)
 
     checks = [
-        {"key": "registered", "label": "تسجيل البلاغ", "ok": bool(ticket.get("ticket_no")), "required": True},
+        {"key": "registered", "label": "تسجيل العطل", "ok": bool(ticket.get("ticket_no")), "required": True},
         {"key": "dispatched", "label": "توجيه الفرقة", "ok": bool(ticket.get("dispatch_time") and ticket.get("team")), "required": True},
         {"key": "arrived", "label": "وصول الفرقة", "ok": bool(ticket.get("arrival_time")), "required": True},
         {"key": "executed", "label": "تنفيذ / إغلاق", "ok": ticket.get("status") in ("منفذ", "مغلق"), "required": True},
@@ -101,7 +101,7 @@ def build_alerts(settings=None):
                 {
                     "level": "danger",
                     "category": "استجابة متأخرة",
-                    "title": f"بلاغ {tno} — استجابة {mins} دقيقة",
+                    "title": f"عطل {tno} — استجابة {mins} دقيقة",
                     "ticket_no": tno,
                     "href_name": "tickets_list",
                     "href_q": tno,
@@ -114,7 +114,7 @@ def build_alerts(settings=None):
                 {
                     "level": "warn",
                     "category": "صور ناقصة",
-                    "title": f"بلاغ {tno} — الصور غير مكتملة",
+                    "title": f"عطل {tno} — الصور غير مكتملة",
                     "ticket_no": tno,
                     "href_name": "module_list",
                     "href_args": {"name": "photos"},
@@ -125,7 +125,7 @@ def build_alerts(settings=None):
                 {
                     "level": "warn",
                     "category": "تمتير ناقص",
-                    "title": f"بلاغ {tno} — لا يوجد تمتير",
+                    "title": f"عطل {tno} — لا يوجد تمتير",
                     "ticket_no": tno,
                     "href_name": "module_list",
                     "href_args": {"name": "metering"},
@@ -138,7 +138,7 @@ def build_alerts(settings=None):
                     {
                         "level": "info",
                         "category": "استكمال رحلة",
-                        "title": f"بلاغ {tno} — اكتمال {journey['score']}% — ناقص: {', '.join(journey['missing'][:3])}",
+                        "title": f"عطل {tno} — اكتمال {journey['score']}% — ناقص: {', '.join(journey['missing'][:3])}",
                         "ticket_no": tno,
                         "href_name": "ticket_review",
                         "href_args": {"ticket_no": tno},
@@ -203,8 +203,8 @@ def jump_destinations():
     return [
         {"title": "الإنشاءات - التنفيذ", "path": "/constructions", "group": "أقسام", "keywords": "إنشاءات"},
         {"title": "لوحة العمليات", "path": "/ops", "group": "عمليات", "keywords": "لوحة dashboard ops"},
-        {"title": "بلاغات الأعمال", "path": "/tickets", "group": "عمليات", "keywords": "بلاغ ticket طوارئ"},
-        {"title": "بلاغ جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة بلاغ جديد"},
+        {"title": "الأعطال", "path": "/tickets", "group": "عمليات", "keywords": "عطل أعطال ticket fault طوارئ"},
+        {"title": "عطل جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة عطل جديد"},
         {"title": "الكميات", "path": "/module/quantities", "group": "عمليات", "keywords": "كميات boq"},
         {"title": "قائمة الصور", "path": "/module/photos", "group": "عمليات", "keywords": "صور"},
         {"title": "التمتير", "path": "/module/metering", "group": "عمليات", "keywords": "تمتير مستخلص"},

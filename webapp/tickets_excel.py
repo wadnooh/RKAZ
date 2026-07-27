@@ -1,4 +1,4 @@
-"""استيراد وتصدير بلاغات من/إلى Excel."""
+"""استيراد وتصدير أعطال من/إلى Excel."""
 
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ TICKET_HEADERS = [
     "رقم الفيدر",
     "الموقع",
     "نوع العطل",
-    "تصنيف البلاغ",
+    "تصنيف العطل",
     "الفرقة",
     "وقت التوجيه",
     "وقت الوصول",
@@ -79,7 +79,8 @@ _TICKET_ALIASES = {
     "fault no": "ticket_no",
     "fault_no": "ticket_no",
     "تاريخ الاستلام": "receive_date",
-    "تاريخ البلاغ": "receive_date",
+    "تاريخ العطل": "receive_date",
+    "تاريخ البلاغ": "receive_date",  # توافق
     "receive_date": "receive_date",
     "الحي": "district",
     "district": "district",
@@ -99,7 +100,8 @@ _TICKET_ALIASES = {
     "نوع العطل": "fault_type",
     "العطل": "fault_type",
     "fault_type": "fault_type",
-    "تصنيف البلاغ": "classification",
+    "تصنيف العطل": "classification",
+    "تصنيف البلاغ": "classification",  # توافق
     "التصنيف": "classification",
     "classification": "classification",
     "الفرقة": "team",
@@ -229,7 +231,7 @@ def _cell(row, idx, field: str | None = None):
 def build_tickets_template() -> bytes:
     wb = Workbook()
     ws = wb.active
-    ws.title = "البلاغات"
+    ws.title = "الأعطال"
     ws.append(TICKET_HEADERS)
     today = datetime.now().strftime("%Y-%m-%d")
     ws.append(
@@ -266,7 +268,7 @@ def build_tickets_template() -> bytes:
     tip.append(["عمود رقم العطل مطلوب وفريد."])
     tip.append(["عند تكرار رقم العطل يتم تحديث السجل الموجود (upsert)."])
     tip.append(["التواريخ بصيغة YYYY-MM-DD والأوقات HH:MM."])
-    tip.append(["ارفع الملف من صفحة معاملات البلاغات ← استيراد من Excel."])
+    tip.append(["ارفع الملف من صفحة الأعطال ← استيراد من Excel."])
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
