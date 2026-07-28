@@ -7,7 +7,6 @@ import os
 import re
 import secrets
 import shutil
-import smtplib
 import sqlite3
 import tempfile
 import threading
@@ -15,7 +14,6 @@ import urllib.error
 import urllib.request
 import zipfile
 from datetime import datetime, timedelta
-from email.message import EmailMessage
 from pathlib import Path
 
 from webapp import db
@@ -486,12 +484,12 @@ def latest_backup(purpose: str | None = None) -> dict | None:
 
 
 def email_delivery_configured() -> bool:
-    return bool(
-        os.environ.get("BACKUP_EMAIL_TO", "").strip()
-        and os.environ.get("SMTP_HOST", "").strip()
-        and os.environ.get("SMTP_USER", "").strip()
-        and os.environ.get("SMTP_PASS", "").strip()
-    )
+    # تم إيقاف إرسال النسخ الاحتياطية بالبريد — لا يُستخدم في النظام.
+    return False
+
+
+def send_backup_email(meta: dict, zip_path: Path) -> dict:
+    return {"ok": False, "skipped": True, "reason": "إرسال البريد موقوف"}
 
 
 def s3_configured() -> bool:
@@ -736,40 +734,6 @@ def upload_backup_to_s3(meta: dict, zip_path: Path) -> dict:
         return {"ok": False, "error": str(exc)}
 
 
-def send_backup_email(meta: dict, zip_path: Path) -> dict:
-    to_addr = os.environ.get("BACKUP_EMAIL_TO", "").strip()
-    host = os.environ.get("SMTP_HOST", "").strip()
-    port = int(os.environ.get("SMTP_PORT", "587") or 587)
-    user = os.environ.get("SMTP_USER", "").strip()
-    password = os.environ.get("SMTP_PASS", "").strip()
-    from_addr = os.environ.get("SMTP_FROM", "").strip() or user
-    if not (to_addr and host and user and password):
-        return {"ok": False, "skipped": True, "reason": "البريد غير مُعد"}
-
-    msg = EmailMessage()
-    msg["Subject"] = f"حفظة ركاز تلقائية — {meta.get('created_at')}"
-    msg["From"] = from_addr
-    msg["To"] = to_addr
-    msg.set_content(
-        "حفظة تلقائية من نظام ركاز.\n"
-        f"الوقت: {meta.get('created_at')}\n"
-        f"الأعطال: {(meta.get('progress') or {}).get('tickets_total', 0)}\n"
-        f"المعرّف: {meta.get('id')}\n"
-        "أرفق الملف على الجهاز الرئيسي في مجلد الحفظات.\n"
-    )
-    msg.add_attachment(
-        zip_path.read_bytes(),
-        maintype="application",
-        subtype="zip",
-        filename=f"rekaz-auto-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip",
-    )
-    with smtplib.SMTP(host, port, timeout=60) as smtp:
-        smtp.starttls()
-        smtp.login(user, password)
-        smtp.send_message(msg)
-    return {"ok": True, "to": to_addr}
-
-
 def post_backup_webhook(meta: dict, download_url: str = "") -> dict:
     url = os.environ.get("BACKUP_WEBHOOK_URL", "").strip()
     if not url:
@@ -800,8 +764,8 @@ def post_backup_webhook(meta: dict, download_url: str = "") -> dict:
 
 
 def deliver_backup(meta: dict, *, download_url: str = "") -> dict:
-    """إرسال الحفظة: S3 أولاً (بدون جهاز دائم) + بريد/webhook اختياري + جاهز للسحب المحلي."""
-    result = {"s3": None, "email": None, "webhook": None, "ready_for_pull": True}
+    """إرسال الحفظة: S3 أولاً + webhook اختياري + جاهز للسحب المحلي."""
+    result = {"s3": None, "webhook": None, "ready_for_pull": True}
     if not meta.get("_rel"):
         path = meta.get("path") or ""
         if path.startswith("backups/"):
@@ -815,15 +779,6 @@ def deliver_backup(meta: dict, *, download_url: str = "") -> dict:
         return {"ready_for_pull": False, "error": str(exc)}
 
     result["s3"] = upload_backup_to_s3(meta, zip_path)
-
-    if email_delivery_configured():
-        try:
-            result["email"] = send_backup_email(meta, zip_path)
-        except Exception as exc:
-            result["email"] = {"ok": False, "error": str(exc)}
-    else:
-        result["email"] = {"ok": False, "skipped": True, "reason": "البريد غير مُعد"}
-
     result["webhook"] = post_backup_webhook(meta, download_url=download_url)
     result["zip_size"] = zip_path.stat().st_size if zip_path.exists() else 0
     return result
@@ -917,7 +872,7 @@ def auto_status() -> dict:
         "last_backup_id": state.get("last_backup_id"),
         "last_backup_rel": state.get("last_backup_rel"),
         "next_due_minutes": next_due,
-        "email_configured": email_delivery_configured(),
+        "email_configured": False,
         "s3_configured": s3_configured(),
         "s3": s3_settings(),
         "aws_link": aws,

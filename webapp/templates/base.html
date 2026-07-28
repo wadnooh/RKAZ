@@ -47,7 +47,7 @@
 
   {% if session.get('user_id') and not is_login_page %}
   {% set p = request.path or '' %}
-  {# ترتيب التبويبات مطابق لتقارير رسملة #}
+  {# تبويبات النظام الرئيسية #}
   <nav class="tabs">
     {% if can('section.constructions') %}
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">الإنشاءات - التنفيذ</a>

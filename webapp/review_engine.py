@@ -4,7 +4,7 @@ from __future__ import annotations
 
 
 def jump_destinations():
-    """قائمة وجهات نافذة القفز السريع — بنفس ترتيب تبويبات تقارير رسملة."""
+    """قائمة وجهات نافذة القفز السريع."""
     return [
         {"title": "الإنشاءات - التنفيذ", "path": "/constructions", "group": "أقسام", "keywords": "إنشاءات"},
         {"title": "لوحة العمليات", "path": "/ops", "group": "عمليات", "keywords": "لوحة dashboard ops"},

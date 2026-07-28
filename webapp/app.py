@@ -142,7 +142,6 @@ def inject_globals():
         "lists": g.get("lists") or db.get_lists(),
         "current_year": g.get("year") or datetime.now().year,
         "logo_rekaz": url_for("static", filename="brand/rekaz.png"),
-        "logo_rtc": url_for("static", filename="brand/rtc.jpg"),
         "logo_sec": url_for("static", filename="brand/sec.jpg"),
         "app_title": tr("app_title"),
         "lang": lang,
@@ -335,7 +334,7 @@ def logout():
     return redirect(url_for("login"))
 
 
-# ---------- Main hubs (نفس تبويبات تقارير رسملة) ----------
+# ---------- Main hubs ----------
 def _count(table):
     conn = db.connect()
     try:
@@ -474,7 +473,7 @@ def contractors_home():
     return render_template(
         "section_hub.html",
         title="المقاولين",
-        subtitle="متابعة أعمال المقاولين وربطها بأعطال المكتب — بنفس تبويب تقارير رسملة.",
+        subtitle="متابعة أعمال المقاولين وربطها بأعطال المكتب.",
         links=links,
         section="contractors",
         section_modules=modules_for_section("contractors"),
@@ -523,7 +522,7 @@ def warehouses_home():
     return render_template(
         "section_hub.html",
         title="المستودعات",
-        subtitle="الأصناف ومعاملات المستودع وأرصدة المواد — بنفس فكرة تقارير رسملة.",
+        subtitle="الأصناف للمعاملات، والحركات والأرصدة لمتابعة الوارد والمنصرف.",
         links=links,
         section="warehouses",
         section_modules=modules_for_section("warehouses"),
@@ -564,7 +563,7 @@ def financial_home():
     return render_template(
         "section_hub.html",
         title="المتابعات المالية",
-        subtitle="المستخلصات و SAP والتدفق النقدي — بنفس تبويب تقارير رسملة.",
+        subtitle="المستخلصات و SAP والتدفق النقدي.",
         links=links,
         section="financial",
         section_modules=modules_for_section("financial"),
@@ -597,7 +596,7 @@ def hr_home():
     return render_template(
         "section_hub.html",
         title="الموارد البشرية",
-        subtitle="سجل الموظفين والأقسام وحالات الالتحاق — بنفس تبويب تقارير رسملة.",
+        subtitle="سجل الموظفين والأقسام وحالات الالتحاق.",
         links=links,
         section="hr",
         section_modules=modules_for_section("hr"),
@@ -1463,16 +1462,23 @@ def warehouse_balances():
     )
 
 
-@app.route("/warehouses/balances/template.xlsx")
+@app.route("/warehouses/items/template.xlsx")
 @login_required
 def warehouse_items_template():
     data = warehouse_excel.build_items_template()
     return send_file(
         io.BytesIO(data),
         as_attachment=True,
-        download_name="قالب_مواد_المستودع.xlsx",
+        download_name="قالب_أصناف_المستودع.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
+
+
+@app.route("/warehouses/balances/template.xlsx")
+@login_required
+def warehouse_items_template_legacy():
+    """توافق مع الروابط القديمة — يوجّه لقالب الأصناف."""
+    return redirect(url_for("warehouse_items_template"))
 
 
 @app.route("/warehouses/tx/template.xlsx")
@@ -1487,7 +1493,7 @@ def warehouse_tx_template():
     )
 
 
-@app.route("/warehouses/balances/import", methods=["POST"])
+@app.route("/warehouses/items/import", methods=["POST"])
 @login_required
 def warehouse_items_import():
     if not permissions.can("modules.write"):
@@ -1495,11 +1501,11 @@ def warehouse_items_import():
     f = request.files.get("file")
     if not f or not f.filename:
         flash("اختر ملف Excel للمواد", "danger")
-        return redirect(url_for("warehouse_balances"))
+        return redirect(url_for("module_list", name="warehouse_items"))
     try:
         result = warehouse_excel.import_items_from_excel(f)
         flash(
-            f"استيراد المواد: جديد {result['ok']} | محدّث {result['updated']} | أرصدة افتتاحية {result['opening']}",
+            f"استيراد الأصناف: جديد {result['ok']} | محدّث {result['updated']} | أرصدة افتتاحية {result['opening']}",
             "ok",
         )
         if result.get("errors"):
@@ -1507,7 +1513,14 @@ def warehouse_items_import():
         db.log_audit(current_user_name(), "استيراد Excel", "أصناف المستودع", details=str(result)[:240])
     except Exception as exc:
         flash(f"تعذر الاستيراد: {exc}", "danger")
-    return redirect(url_for("warehouse_balances"))
+    return redirect(url_for("module_list", name="warehouse_items"))
+
+
+@app.route("/warehouses/balances/import", methods=["POST"])
+@login_required
+def warehouse_items_import_legacy():
+    """توافق قديم — الاستيراد أصبح من أصناف المستودع."""
+    return warehouse_items_import()
 
 
 @app.route("/warehouses/balances/clear", methods=["POST"])
@@ -1541,7 +1554,7 @@ def warehouse_tx_import():
     try:
         result = warehouse_excel.import_tx_from_excel(f)
         flash(
-            f"استيراد الحركات: {result['ok']} حركة | مربوطة بأعطال: {result['linked']}",
+            f"استيراد الحركات: {result['ok']} حركة | مربوطة ببلاغات: {result['linked']}",
             "ok",
         )
         if result.get("errors"):

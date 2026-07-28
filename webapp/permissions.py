@@ -325,14 +325,16 @@ def required_perm_for_request() -> str | None:
 
     if ep in {
         "warehouse_items_template",
+        "warehouse_items_template_legacy",
         "warehouse_tx_template",
         "warehouse_items_import",
+        "warehouse_items_import_legacy",
         "warehouse_tx_import",
         "warehouse_balances_clear",
     }:
         if not has_perm("section.warehouses"):
             return "section.warehouses"
-        if ep.endswith(("_import", "_clear")) and not has_perm("modules.write"):
+        if ep.endswith(("_import", "_clear", "_import_legacy")) and not has_perm("modules.write"):
             return "modules.write"
         return None
 

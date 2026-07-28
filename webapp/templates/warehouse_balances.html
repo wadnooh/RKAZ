@@ -6,11 +6,11 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">أرصدة المواد</h2>
-      <div class="meta">الرصيد = الوارد − المنصرف — مع ربط الحركات بالمواد والمعاملات (الأعطال)</div>
+      <div class="meta">متابعة الوارد والمنصرف والرصيد الحالي — الأصناف تُدار من «أصناف المستودع»</div>
     </div>
     <div class="actions">
+      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_items') }}">أصناف المستودع</a>
       {% if can('modules.write') %}
-      <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">قالب المواد Excel</a>
       <a class="btn ghost" href="{{ url_for('warehouse_tx_template') }}">قالب الحركات Excel</a>
       <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx') }}">+ حركة مستودع</a>
       {% endif %}
@@ -19,13 +19,6 @@
 
   {% if can('modules.write') %}
   <div class="form-grid" style="margin-bottom:14px;">
-    <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
-      <div style="flex:1;min-width:220px;">
-        <label>استيراد المواد من Excel</label>
-        <input type="file" name="file" accept=".xlsx,.xlsm" required>
-      </div>
-      <button class="btn primary" type="submit">رفع المواد</button>
-    </form>
     <form method="post" action="{{ url_for('warehouse_tx_import') }}" enctype="multipart/form-data" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
       <div style="flex:1;min-width:220px;">
         <label>استيراد الوارد / المنصرف وربطه بالمعاملات</label>
@@ -42,8 +35,8 @@
     </form>
   </div>
   <p class="meta" style="margin-top:-6px;margin-bottom:12px;">
-    في قالب الحركات ضع <strong>رقم المادة</strong> و<strong>رقم العطل</strong> لربط المنصرف/الوارد بالمعاملة تلقائياً.
-    مسح الأرصدة يحذف الحركات فقط ولا يمس قائمة المواد.
+    في قالب الحركات ضع <strong>رقم المادة</strong> و<strong>رقم البلاغ</strong> لربط المنصرف/الوارد بالمعاملة.
+    إدارة قائمة المواد من شاشة <a href="{{ url_for('module_list', name='warehouse_items') }}">أصناف المستودع</a>.
   </p>
   {% endif %}
 
@@ -65,7 +58,7 @@
           <th>منصرف</th>
           <th>الرصيد</th>
           <th>حد أدنى</th>
-          <th>أعطال مربوطة</th>
+          <th>بلاغات مربوطة</th>
           <th></th>
         </tr>
       </thead>
@@ -101,7 +94,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="10">لا توجد أصناف — حمّل قالب المواد ثم استورد ملف Excel</td></tr>
+        <tr><td colspan="10">لا توجد أصناف — أضف المواد من <a href="{{ url_for('module_list', name='warehouse_items') }}">أصناف المستودع</a></td></tr>
         {% endfor %}
       </tbody>
     </table>

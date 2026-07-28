@@ -12,7 +12,7 @@ I18N = {
         "footer": "شركة ركاز الإنجاز للمقاولات — مكتب خدمات خريص — جميع الحقوق محفوظة {year}",
         "bad_login": "اسم المستخدم أو كلمة المرور غير صحيحة",
         "inactive_user": "الحساب موقوف",
-        "forgot_hint": "لإعادة تعيين كلمة المرور تواصل مع الدعم: 0596266407",
+        "forgot_hint": "لإعادة تعيين كلمة المرور تواصل مع مدير النظام",
     },
     "en": {
         "app_title": "General Works Tracking — Khurais Services Office",
@@ -27,7 +27,7 @@ I18N = {
         "footer": "شركة ركاز الإنجاز للمقاولات — Khurais Services Office — All rights reserved {year}",
         "bad_login": "Invalid username or password",
         "inactive_user": "Account is inactive",
-        "forgot_hint": "To reset your password contact support: 0596266407",
+        "forgot_hint": "To reset your password contact the system administrator",
     },
 }
 

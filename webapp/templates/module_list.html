@@ -12,7 +12,9 @@
     <div>
       <h2 class="section-title">{{ module.title }}</h2>
       <div class="meta">
-        {% if ticket_filter %}
+        {% if name == 'warehouse_items' %}
+        سجل المواد المستخدمة في المعاملات — الاستيراد والإضافة من هنا
+        {% elif ticket_filter %}
         سجلات مرتبطة برقم العطل <strong>{{ ticket_filter }}</strong>
         {% else %}
         مرتبط بتبويب {{ section_meta.title if section_meta else 'النظام' }} — إضافة / تعديل / ربط بالأعطال
@@ -21,6 +23,10 @@
     </div>
     <div class="actions">
       {% if can('modules.write') %}
+        {% if name == 'warehouse_items' %}
+        <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">قالب المواد Excel</a>
+        <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">عرض الأرصدة</a>
+        {% endif %}
         {% if ticket_filter %}
         <a class="btn primary" href="{{ url_for('module_new', name=name, ticket_no=ticket_filter) }}">+ إضافة</a>
         {% else %}
@@ -29,6 +35,20 @@
       {% endif %}
     </div>
   </div>
+
+  {% if name == 'warehouse_items' and can('modules.write') %}
+  <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:220px;">
+      <label style="display:block;margin-bottom:6px;font-weight:700;">استيراد المواد (أصناف المستودع) من Excel</label>
+      <input type="file" name="file" accept=".xlsx,.xlsm" required>
+    </div>
+    <button class="btn primary" type="submit">رفع المواد</button>
+  </form>
+  <p class="meta" style="margin-top:-4px;margin-bottom:12px;">
+    الأصناف هنا هي المواد المستخدمة في المعاملات. لمتابعة الوارد والمنصرف والرصيد افتح
+    <a href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>.
+  </p>
+  {% endif %}
 
   {% if ticket_filter or (name == 'warehouse_tx' and item_filter) %}
   <p class="meta" style="margin-bottom:10px;">
