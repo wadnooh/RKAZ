@@ -483,15 +483,6 @@ def latest_backup(purpose: str | None = None) -> dict | None:
     return None
 
 
-def email_delivery_configured() -> bool:
-    return False
-
-
-def send_backup_email(meta: dict, zip_path: Path) -> dict:
-    """غير مستخدم — نظام ركاز لا يرسل بريداً ولا يرتبط بأي نظام تقارير خارجي."""
-    return {"ok": False, "skipped": True, "reason": "البريد غير مفعّل في نظام ركاز"}
-
-
 def s3_configured() -> bool:
     return bool(
         os.environ.get("AWS_S3_BUCKET", "").strip()
@@ -872,7 +863,6 @@ def auto_status() -> dict:
         "last_backup_id": state.get("last_backup_id"),
         "last_backup_rel": state.get("last_backup_rel"),
         "next_due_minutes": next_due,
-        "email_configured": False,
         "s3_configured": s3_configured(),
         "s3": s3_settings(),
         "aws_link": aws,
