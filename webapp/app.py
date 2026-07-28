@@ -372,12 +372,24 @@ def section_links(section):
 def health():
     """فحص نبض للإبقاء على الخدمة مستيقظة على Render."""
     auto = {}
+    aws_extra = {}
     try:
         st = backup_svc.auto_status()
+        last_up = st.get("last_s3_upload") or {}
+        delivery_s3 = ((st.get("last_delivery") or {}).get("s3") or {})
         auto = {
             "enabled": st.get("enabled"),
             "last_backup_at": st.get("last_backup_at"),
             "next_due_minutes": st.get("next_due_minutes"),
+            "last_s3_key": last_up.get("key") or delivery_s3.get("key"),
+            "last_s3_at": last_up.get("at") or st.get("last_backup_at"),
+            "last_s3_ok": bool(last_up.get("key") or delivery_s3.get("ok")),
+        }
+        link = st.get("aws_link") or {}
+        aws_extra = {
+            "ok": link.get("ok"),
+            "latest_key": link.get("latest_key"),
+            "latest_modified": link.get("latest_modified"),
         }
     except Exception:
         auto = {"enabled": backup_svc.auto_backup_enabled()}
@@ -401,6 +413,7 @@ def health():
             "linked": backup_svc.s3_configured(),
             "bucket": (backup_svc.s3_settings() or {}).get("bucket"),
             "region": (backup_svc.s3_settings() or {}).get("region"),
+            **aws_extra,
         },
     }, 200
 

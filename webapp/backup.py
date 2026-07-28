@@ -558,32 +558,51 @@ def probe_aws_link() -> dict:
 
 
 def list_s3_backups(limit: int = 40) -> list[dict]:
-    """قائمة حفظات Amazon S3 من الأحدث للأقدم."""
+    """قائمة حفظات Amazon S3 من الأحدث للأقدم.
+
+    مهم: list_objects_v2 يرتّب حسب المفتاح (أبجدياً) وليس LastModified.
+    مع بادئة وقت ISO يأتي الأقدم أولاً — لذا يجب جلب كل الكائنات ثم الفرز،
+    وإلا استعادة الإقلاع تختار أقدم حفظة وتمسح بيانات أحدث.
+    """
     if not s3_configured():
         return []
     cfg = s3_settings()
     try:
         client = _s3_client()
         prefix = f"{cfg['prefix']}/"
-        resp = client.list_objects_v2(Bucket=cfg["bucket"], Prefix=prefix, MaxKeys=max(1, min(limit, 100)))
         items = []
-        for obj in resp.get("Contents") or []:
-            key = obj.get("Key") or ""
-            if not key.endswith(".zip"):
-                continue
-            lm = obj.get("LastModified")
-            items.append(
-                {
-                    "key": key,
-                    "name": key.split("/")[-1],
-                    "size": int(obj.get("Size") or 0),
-                    "size_label": human_size(int(obj.get("Size") or 0)),
-                    "last_modified": lm.isoformat() if hasattr(lm, "isoformat") else str(lm or ""),
-                    "uri": f"s3://{cfg['bucket']}/{key}",
-                }
-            )
+        token = None
+        while True:
+            kwargs: dict = {
+                "Bucket": cfg["bucket"],
+                "Prefix": prefix,
+                "MaxKeys": 1000,
+            }
+            if token:
+                kwargs["ContinuationToken"] = token
+            resp = client.list_objects_v2(**kwargs)
+            for obj in resp.get("Contents") or []:
+                key = obj.get("Key") or ""
+                if not key.endswith(".zip"):
+                    continue
+                lm = obj.get("LastModified")
+                items.append(
+                    {
+                        "key": key,
+                        "name": key.split("/")[-1],
+                        "size": int(obj.get("Size") or 0),
+                        "size_label": human_size(int(obj.get("Size") or 0)),
+                        "last_modified": lm.isoformat() if hasattr(lm, "isoformat") else str(lm or ""),
+                        "uri": f"s3://{cfg['bucket']}/{key}",
+                    }
+                )
+            if not resp.get("IsTruncated"):
+                break
+            token = resp.get("NextContinuationToken")
+            if not token:
+                break
         items.sort(key=lambda x: x.get("last_modified") or "", reverse=True)
-        return items[:limit]
+        return items[: max(1, min(int(limit or 40), 500))]
     except Exception:
         return []
 
@@ -848,6 +867,8 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
         )
         meta["_rel"] = str((data_root() / meta["path"]).relative_to(backups_root())).replace("\\", "/")
         delivery = deliver_backup(meta)
+        # أعد التحميل بعد الرفع حتى لا نمسح last_s3_upload الذي كتبه upload_backup_to_s3
+        state = load_auto_state()
         state.update(
             {
                 "last_backup_at": now.isoformat(timespec="seconds"),
@@ -857,6 +878,14 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
                 "interval_minutes": interval,
             }
         )
+        s3_info = (delivery or {}).get("s3") or {}
+        if s3_info.get("ok") and s3_info.get("key"):
+            state["last_s3_upload"] = {
+                "key": s3_info.get("key"),
+                "at": now.isoformat(timespec="seconds"),
+                "uri": s3_info.get("uri"),
+                "size": s3_info.get("size") or 0,
+            }
         save_auto_state(state)
         return {
             "created": True,
