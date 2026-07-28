@@ -91,7 +91,7 @@ def _load_context():
     g.lists = db.get_lists()
     g.year = datetime.now().year
     g.lang = session.get("lang") or "ar"
-    # حماية الصفحات بنفس أسلوب أنظمة التقارير المشابهة
+    # حماية الصفحات — يتطلب تسجيل دخول
     if request.endpoint and request.endpoint not in PUBLIC_ENDPOINTS and not session.get("user_id"):
         if request.endpoint != "static":
             return redirect(url_for("login", next=request.path))

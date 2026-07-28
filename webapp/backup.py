@@ -484,12 +484,12 @@ def latest_backup(purpose: str | None = None) -> dict | None:
 
 
 def email_delivery_configured() -> bool:
-    # تم إيقاف إرسال النسخ الاحتياطية بالبريد — لا يُستخدم في النظام.
     return False
 
 
 def send_backup_email(meta: dict, zip_path: Path) -> dict:
-    return {"ok": False, "skipped": True, "reason": "إرسال البريد موقوف"}
+    """غير مستخدم — نظام ركاز لا يرسل بريداً ولا يرتبط بأي نظام تقارير خارجي."""
+    return {"ok": False, "skipped": True, "reason": "البريد غير مفعّل في نظام ركاز"}
 
 
 def s3_configured() -> bool:

@@ -153,7 +153,7 @@ def build_items_template() -> bytes:
     ncol = len(ITEM_HEADERS)
     header_row = brand.apply_brand_header(ws, title="قالب استيراد مواد المستودع", ncol=ncol)
     brand.write_header_row(ws, ITEM_HEADERS, header_row)
-    # أمثلة بنفس أسلوب قالب مواد المستودع المعتمد (SEC)
+    # صفوف أمثلة للقالب
     samples = [
         ["908111006", "CABLE, PWR, 600V/1KV, AL, 4C, 185MM2, XLPE", "KM", "CABLE, PWR, 600V/1KV, AL, 4C, 185MM2, XLPE", 50, "", ""],
         ["908202053", "ROD,GRD,CUWLD STL,16MM DIA,1200MM LG", "EA", "ROD,GRD,CUWLD STL,16MM DIA,1200MM LG", 50, "", ""],
