@@ -15,6 +15,11 @@
     <div>
       <h2 class="section-title">{% if mode=='new' %}إضافة — {{ module.title }}{% else %}تعديل — {{ module.title }}{% endif %}</h2>
       {% if row.get('ticket_no') %}<div class="meta">مرتبط برقم العطل {{ row.ticket_no }}</div>{% endif %}
+      {% if name == 'metering' and boq_approved_total is defined and boq_approved_total is not none %}
+      <div class="meta">مبلغ الكميات (القيمة المعتمدة من البنود): <strong>{{ boq_approved_total|money }}</strong></div>
+      {% elif name == 'metering' and row.get('ticket_no') %}
+      <div class="meta">لا توجد بنود كميات لهذا العطل بعد — أدخل القيمة المعتمدة يدوياً أو أضف البنود أولاً.</div>
+      {% endif %}
     </div>
     {% if row.get('ticket_no') and name in ['quantities','photos','metering'] %}
     <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=row.ticket_no) }}">رجوع</a>
@@ -84,7 +89,12 @@
       {% elif ftype == 'textarea' %}
         <textarea name="{{ key }}">{{ row[key] or '' }}</textarea>
       {% elif ftype == 'number' %}
+        {% if name == 'metering' and key == 'approved_value' and boq_approved_total is defined and boq_approved_total is not none %}
+        <input type="number" step="0.01" name="{{ key }}" value="{{ boq_approved_total }}" readonly>
+        <div class="meta" style="margin-top:4px;">مرتبطة بمبلغ الكميات من بنود العقد (القيمة النهائية بعد التصنيف/الطوارئ). تُحدَّث تلقائياً عند الحفظ.</div>
+        {% else %}
         <input type="number" step="0.01" name="{{ key }}" value="{{ row[key] if row[key] is not none else '' }}">
+        {% endif %}
       {% elif ftype == 'date' %}
         <input type="date" name="{{ key }}" value="{{ row[key] or '' }}">
       {% else %}

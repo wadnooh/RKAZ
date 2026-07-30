@@ -47,7 +47,7 @@ MODULES = {
             ("submit_date", "تاريخ رفع للاستشاري", "date"),
             ("approve_date", "تاريخ الاعتماد", "date"),
             ("status", "الحالة", "list:metering_status"),
-            ("approved_value", "قيمة معتمدة", "number"),
+            ("approved_value", "قيمة معتمدة (مبلغ الكميات)", "number"),
             ("reject_ratio", "نسبة رفض", "number"),
             ("notes", "ملاحظات الاستشاري", "textarea"),
         ],

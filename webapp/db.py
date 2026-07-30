@@ -1109,6 +1109,33 @@ def list_ticket_boq_lines(ticket_id: int | None = None, ticket_no: str | None = 
     return rows
 
 
+def ticket_boq_final_total(
+    ticket_id: int | None = None, ticket_no: str | None = None, conn=None
+) -> float | None:
+    """مجموع final_total لبنود العقد (القيمة المعتمدة / مبلغ الكميات). None إن لم تُوجد بنود."""
+    own = conn is None
+    conn = conn or connect()
+    if ticket_id:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(final_total),0) AS total "
+            "FROM ticket_boq_lines WHERE ticket_id=?",
+            (ticket_id,),
+        ).fetchone()
+    elif ticket_no:
+        row = conn.execute(
+            "SELECT COUNT(*) AS n, COALESCE(SUM(final_total),0) AS total "
+            "FROM ticket_boq_lines WHERE ticket_no=?",
+            (str(ticket_no).strip(),),
+        ).fetchone()
+    else:
+        row = None
+    if own:
+        conn.close()
+    if not row or int(row["n"] or 0) <= 0:
+        return None
+    return round(float(row["total"] or 0), 2)
+
+
 def sync_ticket_items_value(ticket_id: int, conn=None) -> float:
     """يحدّث قيمة البنود على العطل من مجموع final_total لبنود العقد."""
     own = conn is None

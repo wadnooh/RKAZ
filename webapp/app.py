@@ -1239,6 +1239,22 @@ def _module_form_data(module):
     return data
 
 
+def _metering_boq_approved_total(ticket_no, conn=None) -> float | None:
+    """القيمة المعتمدة من بنود العقد (مبلغ الكميات النهائي بعد التصنيف/الطوارئ)."""
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return None
+    return db.ticket_boq_final_total(ticket_no=tno, conn=conn)
+
+
+def _apply_metering_approved_from_boq(data: dict, conn=None) -> float | None:
+    """يربط قيمة التمتير المعتمدة بمبلغ الكميات من بنود العقد عند وجودها."""
+    total = _metering_boq_approved_total(data.get("ticket_no"), conn=conn)
+    if total is not None:
+        data["approved_value"] = total
+    return total
+
+
 def _apply_photos_from_request(data: dict) -> None:
     clear_flags = {
         f: str(request.form.get(f"clear_{f}") or "").strip() in {"1", "on", "yes", "true"}
@@ -1350,11 +1366,16 @@ def module_new(name):
     ticket_options = db.list_ticket_options(conn)
     tickets = [t["value"] for t in ticket_options]
     prefill = {f[0]: "" for f in module["fields"]}
+    boq_approved_total = None
     if request.args.get("ticket_no") and "ticket_no" in prefill:
         prefill["ticket_no"] = request.args.get("ticket_no")
         ticket = db.resolve_ticket_ref(prefill["ticket_no"], conn)
         if ticket and "rekaz_code" in prefill:
             prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+        if name == "metering":
+            boq_approved_total = _metering_boq_approved_total(prefill["ticket_no"], conn)
+            if boq_approved_total is not None and prefill.get("approved_value") in ("", None):
+                prefill["approved_value"] = boq_approved_total
     if name == "warehouse_tx" and request.args.get("ticket_no"):
         prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
         prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
@@ -1425,6 +1446,8 @@ def module_new(name):
                     section_modules=modules_for_section(section) if section else [],
                 )
             data = db.enrich_quantity_from_boq(data, conn)
+        if name == "metering":
+            _apply_metering_approved_from_boq(data, conn)
         if name == "quality_clearances" and not (data.get("rekaz_code") or "").strip():
             data["rekaz_code"] = db.next_series_code("rr", conn)
             if not (data.get("clearance_no") or "").strip():
@@ -1468,6 +1491,7 @@ def module_new(name):
         section_modules=modules_for_section(section) if section else [],
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
+        boq_approved_total=boq_approved_total,
     )
 
 
@@ -1552,6 +1576,8 @@ def module_edit(name, row_id):
                     section_modules=modules_for_section(section) if section else [],
                 )
             data = db.enrich_quantity_from_boq(data, conn)
+        if name == "metering":
+            _apply_metering_approved_from_boq(data, conn)
         if name == "quality_clearances" and not (data.get("rekaz_code") or "").strip():
             data["rekaz_code"] = db.next_series_code("rr", conn)
         if name == "projects" and not (data.get("project_code") or "").strip():
@@ -1571,6 +1597,11 @@ def module_edit(name, row_id):
     data = dict(row)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     boq_items = []
+    boq_approved_total = None
+    if name == "metering":
+        boq_approved_total = _metering_boq_approved_total(data.get("ticket_no"), conn)
+        if boq_approved_total is not None and data.get("approved_value") in (None, ""):
+            data["approved_value"] = boq_approved_total
     conn.close()
     section = module.get("section")
     return render_template(
@@ -1588,6 +1619,7 @@ def module_edit(name, row_id):
         section_modules=modules_for_section(section) if section else [],
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
+        boq_approved_total=boq_approved_total,
     )
 
 

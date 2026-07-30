@@ -363,6 +363,9 @@
       <div class="meta">
         {% if editing and step=='metering' %}<strong>الخطوة الحالية: التمتير</strong> — {% endif %}
         {{ related.metering|length }} سجل تمتير مرتبط بهذا العطل
+        {% if ticket.boq_final_total %}
+        — مبلغ الكميات (القيمة المعتمدة): <strong>{{ ticket.boq_final_total|money }}</strong>
+        {% endif %}
       </div>
     </div>
     <div class="actions">
@@ -377,7 +380,7 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>المسؤول</th><th>بداية</th><th>الحالة</th><th>قيمة معتمدة</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>المسؤول</th><th>بداية</th><th>الحالة</th><th>قيمة معتمدة (مبلغ الكميات)</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for m in related.metering %}
