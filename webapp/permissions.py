@@ -23,7 +23,8 @@ PERM_LABELS = {
     "section.hr": "الموارد البشرية",
     "section.contracts": "إدارة العقود",
     "tickets.read": "عرض الأعطال",
-    "tickets.write": "إضافة/تعديل الأعطال",
+    # يتحكم بتعديل بيانات العطل وبنود العقد والكميات والصور/التمتير المرتبطة بالعطل
+    "tickets.write": "إضافة/تعديل الأعطال والبنود",
     "tickets.delete": "حذف الأعطال",
     "modules.read": "عرض سجلات الأقسام",
     "modules.write": "إضافة/تعديل السجلات",
@@ -42,6 +43,9 @@ PERM_LABELS = {
 }
 
 ALL_PERMS = set(PERM_LABELS)
+
+# وحدات مرتبطة بالعطل: أي إضافة/تعديل/حذف لها يتطلب tickets.write (بالإضافة إلى modules.*)
+TICKET_LINKED_WRITE_MODULES = frozenset({"quantities", "photos", "metering"})
 
 # كل أقسام العرض
 SECTION_PERMS = {
@@ -178,6 +182,14 @@ def role_matrix() -> list[dict]:
     return rows
 
 
+def deny_ticket_mutate(message: str | None = None):
+    """رفض تعديل عطل/بند بدون صلاحية tickets.write."""
+    return deny_redirect(
+        message
+        or "ليس لديك صلاحية لتعديل العطل أو بنوده. يلزم: إضافة/تعديل الأعطال والبنود."
+    )
+
+
 def deny_redirect(message: str | None = None):
     flash(message or "ليس لديك صلاحية للوصول إلى هذه الصفحة.", "danger")
     # وجّه لأول قسم مسموح
@@ -247,12 +259,16 @@ def required_perm_for_request() -> str | None:
 
     # الوحدات العامة
     if ep in {"module_list", "module_new", "module_edit", "module_delete"}:
-        section = _module_section(args.get("name"))
+        mod_name = args.get("name")
+        section = _module_section(mod_name)
         section_perm = SECTION_PERMS.get(section or "")
         if section_perm and not has_perm(section_perm):
             return section_perm
         if ep == "module_list":
             return "modules.read" if not has_perm("modules.read") else None
+        # كميات/صور/تمتير مرتبطة بالعطل: لا تُعدَّل دون tickets.write
+        if mod_name in TICKET_LINKED_WRITE_MODULES and not has_perm("tickets.write"):
+            return "tickets.write"
         if ep in {"module_new", "module_edit"}:
             return None if has_perm("modules.write") else "modules.write"
         if ep == "module_delete":

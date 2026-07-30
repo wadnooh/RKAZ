@@ -823,7 +823,7 @@ def tickets_template():
 @login_required
 def tickets_import():
     if not permissions.can("tickets.write"):
-        return permissions.deny_redirect()
+        return permissions.deny_ticket_mutate()
     f = request.files.get("file")
     if not f or not f.filename:
         flash("اختر ملف Excel للأعطال", "danger")
@@ -847,6 +847,8 @@ def tickets_import():
 @app.route("/tickets/new", methods=["GET", "POST"])
 @login_required
 def ticket_new():
+    if not permissions.can("tickets.write"):
+        return permissions.deny_ticket_mutate()
     if request.method == "POST":
         data = ticket_from_form()
         if not data["ticket_no"]:
@@ -952,8 +954,13 @@ def ticket_view(ticket_id):
     ticket["final_value"] = final_value(ticket.get("items_value"))
     ticket["boq_base_total"] = boq_base
     ticket["boq_final_total"] = boq_final
-    can_mutate = permissions.can("tickets.write") or permissions.can("modules.write")
-    edit_mode = request.args.get("edit") == "1" and can_mutate
+    # تعديل العطل/البنود يتطلب tickets.write فقط (ليس modules.write)
+    can_mutate = permissions.can("tickets.write")
+    wants_edit = request.args.get("edit") == "1"
+    if wants_edit and not can_mutate:
+        flash("ليس لديك صلاحية لتعديل العطل أو بنوده. العرض متاح للقراءة فقط.", "danger")
+        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+    edit_mode = wants_edit and can_mutate
     wizard_steps = _ticket_wizard_steps() if edit_mode else []
     step_keys = [s[0] for s in wizard_steps]
     raw_step = (request.args.get("step") or "data").strip()
@@ -978,6 +985,8 @@ def ticket_view(ticket_id):
 @app.route("/tickets/<int:ticket_id>/edit", methods=["GET", "POST"])
 @login_required
 def ticket_edit(ticket_id):
+    if not permissions.can("tickets.write"):
+        return permissions.deny_ticket_mutate()
     conn = db.connect()
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
@@ -1008,6 +1017,8 @@ def ticket_edit(ticket_id):
 @app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
 @login_required
 def ticket_delete(ticket_id):
+    if not permissions.can("tickets.delete"):
+        return permissions.deny_redirect("ليس لديك صلاحية لحذف الأعطال.")
     conn = db.connect()
     row = conn.execute("SELECT ticket_no FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
@@ -1023,7 +1034,7 @@ def ticket_delete(ticket_id):
 @login_required
 def ticket_boq_add(ticket_id):
     if not permissions.can("tickets.write"):
-        return permissions.deny_redirect()
+        return permissions.deny_ticket_mutate("ليس لديك صلاحية لإضافة بنود العقد على العطل.")
     conn = db.connect()
     ticket = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not ticket:
@@ -1113,7 +1124,7 @@ def ticket_boq_add(ticket_id):
 @login_required
 def ticket_boq_delete(ticket_id, line_id):
     if not permissions.can("tickets.write"):
-        return permissions.deny_redirect()
+        return permissions.deny_ticket_mutate("ليس لديك صلاحية لحذف بنود العقد من العطل.")
     conn = db.connect()
     line = conn.execute(
         "SELECT * FROM ticket_boq_lines WHERE id=? AND ticket_id=?",

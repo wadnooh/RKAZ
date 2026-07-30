@@ -22,7 +22,9 @@
       </div>
     </div>
     <div class="actions">
-      {% if can('modules.write') %}
+      {% set can_mod_write = can('modules.write') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
+      {% set can_mod_delete = can('modules.delete') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
+      {% if can_mod_write %}
         {% if name == 'warehouse_items' %}
         <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">قالب المواد Excel</a>
         <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">عرض الأرصدة</a>
@@ -104,8 +106,8 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
-            {% if can('modules.write') %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">تعديل</a>{% endif %}
-            {% if can('modules.delete') %}
+            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">تعديل</a>{% endif %}
+            {% if can_mod_delete %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" onsubmit="return confirm('حذف؟');" style="display:inline">
               <button class="btn danger" type="submit">حذف</button>
             </form>

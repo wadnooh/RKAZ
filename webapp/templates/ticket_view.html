@@ -34,6 +34,7 @@
         {% if step=='data' %}الخطوة 1: بيانات المعاملة — احفظ للانتقال لإضافة الكمية{% else %}وضع التعديل — يمكن التنقل بين الخطوات أعلاه{% endif %}
         {% else %}
         تفاصيل العطل والسجلات المرتبطة به (بنود/كميات، صور، تمتير) — للعرض فقط حتى طلب التعديل
+        {% if not can_mutate %}<br>لا تملك صلاحية التعديل (يلزم: إضافة/تعديل الأعطال والبنود).{% endif %}
         {% endif %}
       </div>
     </div>
@@ -306,7 +307,7 @@
       </div>
     </div>
     <div class="actions">
-      {% if editing and can('modules.write') and can('section.ops') %}
+      {% if editing and can('tickets.write') and can('modules.write') and can('section.ops') %}
       <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">+ سجل صور</a>
       {% endif %}
       {% if can('modules.read') %}
@@ -317,7 +318,7 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>قبل</th><th>أثناء</th><th>بعد</th><th>كميات</th><th>موقع</th><th>الحالة</th>{% if editing and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>قبل</th><th>أثناء</th><th>بعد</th><th>كميات</th><th>موقع</th><th>الحالة</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for p in related.photos %}
@@ -337,7 +338,7 @@
             {% if p.complete == 'مكتمل' %}<span class="badge ok">مكتمل</span>
             {% else %}<span class="badge danger">ناقص</span>{% endif %}
           </td>
-          {% if editing and can('modules.write') %}
+          {% if editing and can('tickets.write') and can('modules.write') %}
           <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">تعديل</a></td>
           {% endif %}
         </tr>
@@ -365,7 +366,7 @@
       </div>
     </div>
     <div class="actions">
-      {% if editing and can('modules.write') and can('section.ops') %}
+      {% if editing and can('tickets.write') and can('modules.write') and can('section.ops') %}
       <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">+ تمتير</a>
       {% endif %}
       {% if can('modules.read') %}
@@ -376,7 +377,7 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>المسؤول</th><th>بداية</th><th>الحالة</th><th>قيمة معتمدة</th>{% if editing and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>المسؤول</th><th>بداية</th><th>الحالة</th><th>قيمة معتمدة</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for m in related.metering %}
@@ -385,7 +386,7 @@
           <td>{{ m.start_date or '—' }}</td>
           <td>{{ m.status or '—' }}</td>
           <td>{% if m.approved_value is not none %}{{ m.approved_value|money }}{% else %}—{% endif %}</td>
-          {% if editing and can('modules.write') %}
+          {% if editing and can('tickets.write') and can('modules.write') %}
           <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">تعديل</a></td>
           {% endif %}
         </tr>
@@ -414,7 +415,7 @@
       </div>
     </div>
     <div class="actions">
-      {% if editing and can('modules.write') %}
+      {% if editing and can('tickets.write') and can('modules.write') %}
       <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ صرف / حركة</a>
       {% endif %}
       {% if can('modules.read') %}
@@ -425,7 +426,7 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>السند</th><th>التاريخ</th><th>النوع</th><th>المادة</th><th>الكمية</th><th>كود ER</th>{% if editing and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>السند</th><th>التاريخ</th><th>النوع</th><th>المادة</th><th>الكمية</th><th>كود ER</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for w in related.warehouse_tx %}
@@ -436,7 +437,7 @@
           <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
           <td>{{ w.rekaz_code or ticket.rekaz_code or '—' }}</td>
-          {% if editing and can('modules.write') %}
+          {% if editing and can('tickets.write') and can('modules.write') %}
           <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}">تعديل</a></td>
           {% endif %}
         </tr>
@@ -468,7 +469,7 @@
     </div>
   </div>
   {% endif %}
-  {% if editing and can('modules.write') %}
+  {% if editing and can('tickets.write') and can('modules.write') %}
   <div class="toolbar" {% if step!='done' %}style="margin:0"{% endif %}>
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">ربط بأقسام أخرى</h3>
