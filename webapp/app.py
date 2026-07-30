@@ -921,6 +921,8 @@ def ticket_view(ticket_id):
     ticket["final_value"] = final_value(ticket.get("items_value"))
     ticket["boq_base_total"] = boq_base
     ticket["boq_final_total"] = boq_final
+    can_mutate = permissions.can("tickets.write") or permissions.can("modules.write")
+    edit_mode = request.args.get("edit") == "1" and can_mutate
     return render_template(
         "ticket_view.html",
         ticket=ticket,
@@ -928,6 +930,8 @@ def ticket_view(ticket_id):
         has_boq_catalog=has_boq,
         boq_file=boq_file,
         emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
+        edit_mode=edit_mode,
+        can_mutate=can_mutate,
     )
 
 
@@ -955,10 +959,10 @@ def ticket_edit(ticket_id):
         db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
         flash("تم حفظ العطل", "ok")
         _after_data_change()
-        return redirect(url_for("ticket_view", ticket_id=ticket_id))
-    ticket = dict(row)
+        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
     conn.close()
-    return render_template("ticket_form.html", row=ticket, mode="edit")
+    # التعديل يتم على صفحة العرض الكاملة (صور / بنود / …) بعد طلب التعديل
+    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
 
 
 @app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
@@ -994,13 +998,13 @@ def ticket_boq_add(ticket_id):
     if not item_no:
         conn.close()
         flash("أدخل رقم البند من دليل العقد", "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
     try:
         qty = float(qty_raw) if qty_raw != "" else 0.0
     except ValueError:
         conn.close()
         flash("الكمية غير صالحة", "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
     try:
         ratio = float(ratio_raw) if ratio_raw != "" else None
     except ValueError:
@@ -1009,7 +1013,7 @@ def ticket_boq_add(ticket_id):
     if not catalog:
         conn.close()
         flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط — تحقق من الرقم أو ارفع الدليل من إدارة العقود", "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
     active = db.active_contract_boq_file(conn)
     unit_price = catalog.get("unit_price")
     totals = db.calc_boq_line_totals(qty, unit_price, work_class, ratio)
@@ -1062,7 +1066,7 @@ def ticket_boq_add(ticket_id):
     db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
     flash("تمت إضافة البند وحساب التكلفة", "ok")
     _after_data_change()
-    return redirect(url_for("ticket_view", ticket_id=ticket_id))
+    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
 
 
 @app.route("/tickets/<int:ticket_id>/boq/<int:line_id>/delete", methods=["POST"])
@@ -1094,7 +1098,7 @@ def ticket_boq_delete(ticket_id, line_id):
     conn.close()
     flash("تم حذف البند", "ok")
     _after_data_change()
-    return redirect(url_for("ticket_view", ticket_id=ticket_id))
+    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
 
 
 @app.route("/api/boq-item")
