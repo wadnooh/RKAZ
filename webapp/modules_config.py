@@ -9,7 +9,7 @@ MODULES = {
         "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
-            ("item_no", "رقم البند (من الدليل)", "boq_item"),
+            ("item_no", "رقم البند", "boq_item"),
             ("description", "وصف البند", "text"),
             ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),

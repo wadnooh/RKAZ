@@ -105,7 +105,7 @@
       </div>
 
       <div class="section">
-        <h2>الكميات</h2>
+        <h2>بنود العقد / الكميات</h2>
         <table>
           <thead>
             <tr><th>#</th><th>رقم البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr>
@@ -122,7 +122,7 @@
               <td>{{ '%.2f'|format(q.total or 0) }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="7">لا توجد بنود كميات</td></tr>
+            <tr><td colspan="7">لا توجد بنود</td></tr>
             {% endfor %}
           </tbody>
         </table>

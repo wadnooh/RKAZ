@@ -381,6 +381,9 @@ def required_perm_for_request() -> str | None:
     if ep == "api_jump_destinations":
         return None  # يُفلتر المحتوى حسب الصلاحيات
 
+    if ep == "api_boq_item":
+        return None  # بحث قراءة بعد تسجيل الدخول
+
     return None
 
 

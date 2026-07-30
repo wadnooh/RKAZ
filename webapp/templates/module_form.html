@@ -37,18 +37,8 @@
           {% endfor %}
         </select>
       {% elif ftype == 'boq_item' %}
-        <select name="{{ key }}" id="boqItemSelect">
-          <option value="">— اختر من دليل العقد —</option>
-          {% for it in boq_items or [] %}
-          <option value="{{ it.item_no }}"
-                  data-desc="{{ it.short_desc or it.description or '' }}"
-                  data-unit="{{ it.unit or '' }}"
-                  data-price="{{ it.unit_price if it.unit_price is not none else '' }}"
-                  {% if row[key]==it.item_no %}selected{% endif %}>
-            {{ it.item_no }} — {{ it.short_desc or it.description or '' }}
-          </option>
-          {% endfor %}
-        </select>
+        <input type="text" name="{{ key }}" id="boqItemNo" value="{{ row[key] or '' }}" required autocomplete="off" placeholder="اكتب رقم البند من الدليل" dir="ltr" style="text-align:left">
+        <div class="meta" id="boqItemPreview" style="margin-top:4px;"></div>
       {% elif ftype == 'warehouse_item' %}
         <select name="{{ key }}" id="warehouseItemSelect">
           <option value="">— اختر مادة —</option>
@@ -134,19 +124,50 @@
 {% if name == 'quantities' %}
 <script>
 (function () {
-  var sel = document.getElementById("boqItemSelect");
-  if (!sel) return;
-  function fill() {
-    var opt = sel.options[sel.selectedIndex];
-    if (!opt || !opt.value) return;
+  var input = document.getElementById("boqItemNo");
+  var preview = document.getElementById("boqItemPreview");
+  if (!input) return;
+  var timer = null;
+  var url = {{ url_for('api_boq_item')|tojson }};
+  function apply(data) {
     var desc = document.querySelector('input[name="description"]');
     var unit = document.querySelector('input[name="unit"]');
     var price = document.querySelector('input[name="unit_price"]');
-    if (desc && opt.dataset.desc) desc.value = opt.dataset.desc;
-    if (unit && opt.dataset.unit) unit.value = opt.dataset.unit;
-    if (price && opt.dataset.price) price.value = opt.dataset.price;
+    if (desc && data.description) desc.value = data.description;
+    if (unit && data.unit) unit.value = data.unit;
+    if (price && data.unit_price != null && data.unit_price !== "") price.value = data.unit_price;
   }
-  sel.addEventListener("change", fill);
+  function lookup() {
+    var code = (input.value || "").trim();
+    if (!code) {
+      if (preview) { preview.textContent = ""; preview.style.color = ""; }
+      return;
+    }
+    fetch(url + "?item_no=" + encodeURIComponent(code))
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!preview) return;
+        if (data.ok) {
+          var parts = [];
+          if (data.description) parts.push(data.description);
+          if (data.unit) parts.push("الوحدة: " + data.unit);
+          if (data.unit_price != null && data.unit_price !== "") parts.push("السعر: " + data.unit_price);
+          preview.textContent = parts.join(" — ") || "بند موجود في الدليل";
+          preview.style.color = "";
+          apply(data);
+        } else {
+          preview.textContent = data.error || "البند غير موجود في الدليل";
+          preview.style.color = "var(--danger, #b42318)";
+        }
+      })
+      .catch(function () {});
+  }
+  input.addEventListener("blur", lookup);
+  input.addEventListener("input", function () {
+    clearTimeout(timer);
+    timer = setTimeout(lookup, 350);
+  });
+  if ((input.value || "").trim()) lookup();
 })();
 </script>
 {% endif %}

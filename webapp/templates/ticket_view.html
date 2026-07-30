@@ -6,7 +6,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">عرض العطل — {{ ticket.ticket_no }}</h2>
-      <div class="meta">تفاصيل العطل والسجلات المرتبطة به (كميات، صور، تمتير)</div>
+      <div class="meta">تفاصيل العطل والسجلات المرتبطة به (بنود/كميات، صور، تمتير)</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
@@ -42,11 +42,11 @@
   </div>
 </div>
 
-{# —— بنود العقد —— #}
+{# —— بنود العقد والكميات (موحّد) —— #}
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">بنود العقد</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">بنود العقد والكميات</h3>
       <div class="meta">
         {% if boq_file %}مرتبط بالدليل: {{ boq_file.filename }} — {% endif %}
         {{ related.boq_lines|length }} بند |
@@ -57,21 +57,12 @@
   </div>
 
   {% if can('tickets.write') %}
-  {% if boq_catalog %}
-  <form method="post" action="{{ url_for('ticket_boq_add', ticket_id=ticket.id) }}" class="form-grid" style="margin-bottom:14px;">
+  {% if has_boq_catalog %}
+  <form method="post" action="{{ url_for('ticket_boq_add', ticket_id=ticket.id) }}" class="form-grid" style="margin-bottom:14px;" id="ticketBoqForm">
     <div class="field">
-      <label>البند من دليل العقد</label>
-      <select name="item_no" id="ticketBoqItem" required>
-        <option value="">— اختر بنداً —</option>
-        {% for it in boq_catalog %}
-        <option value="{{ it.item_no }}"
-                data-desc="{{ it.short_desc or it.description or '' }}"
-                data-unit="{{ it.unit or '' }}"
-                data-price="{{ it.unit_price if it.unit_price is not none else '' }}">
-          {{ it.item_no }} — {{ it.short_desc or it.description or '' }}{% if it.unit_price is not none %} ({{ it.unit_price }}){% endif %}
-        </option>
-        {% endfor %}
-      </select>
+      <label>رقم البند</label>
+      <input type="text" name="item_no" id="ticketBoqItemNo" required autocomplete="off" placeholder="اكتب رقم البند من الدليل" dir="ltr" style="text-align:left">
+      <div class="meta" id="ticketBoqPreview" style="margin-top:4px;"></div>
     </div>
     <div class="field"><label>الكمية</label><input type="number" step="0.01" name="qty" value="1" required></div>
     <div class="field">
@@ -91,6 +82,46 @@
       <button class="btn primary" type="submit">+ إضافة بند وحساب التكلفة</button>
     </div>
   </form>
+  <script>
+  (function () {
+    var input = document.getElementById("ticketBoqItemNo");
+    var preview = document.getElementById("ticketBoqPreview");
+    if (!input || !preview) return;
+    var timer = null;
+    var url = {{ url_for('api_boq_item')|tojson }};
+    function lookup() {
+      var code = (input.value || "").trim();
+      if (!code) {
+        preview.textContent = "";
+        preview.style.color = "";
+        return;
+      }
+      fetch(url + "?item_no=" + encodeURIComponent(code))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            var parts = [];
+            if (data.description) parts.push(data.description);
+            if (data.unit) parts.push("الوحدة: " + data.unit);
+            if (data.unit_price != null && data.unit_price !== "") parts.push("السعر: " + data.unit_price);
+            preview.textContent = parts.join(" — ") || "بند موجود في الدليل";
+            preview.style.color = "";
+          } else {
+            preview.textContent = data.error || "البند غير موجود في الدليل";
+            preview.style.color = "var(--danger, #b42318)";
+          }
+        })
+        .catch(function () {
+          preview.textContent = "";
+        });
+    }
+    input.addEventListener("blur", lookup);
+    input.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(lookup, 350);
+    });
+  })();
+  </script>
   {% else %}
   <p class="meta" style="margin-bottom:12px;">
     لا يوجد دليل بنود عقد نشط.
@@ -131,49 +162,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="10" class="meta">لا توجد بنود عقد لهذا العطل بعد.</td></tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-</div>
-
-{# —— الكميات —— #}
-<div class="card" style="margin-top:14px;">
-  <div class="toolbar">
-    <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">الكميات</h3>
-      <div class="meta">{{ related.quantities|length }} بند مرتبط بهذا العطل</div>
-    </div>
-    <div class="actions">
-      {% if can('modules.write') and can('section.ops') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='quantities', ticket_no=ticket.ticket_no) }}">+ بند كمية</a>
-      {% endif %}
-      {% if can('modules.read') %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='quantities', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
-      {% endif %}
-    </div>
-  </div>
-  <div class="table-wrap">
-    <table class="table" style="min-width:0">
-      <thead>
-        <tr><th>البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th>{% if can('modules.write') %}<th></th>{% endif %}</tr>
-      </thead>
-      <tbody>
-        {% for q in related.quantities %}
-        <tr>
-          <td>{{ q.item_no or '—' }}</td>
-          <td>{{ q.description or '—' }}</td>
-          <td>{{ q.unit or '—' }}</td>
-          <td>{{ q.qty if q.qty is not none else '—' }}</td>
-          <td>{% if q.unit_price is not none %}{{ q.unit_price|money }}{% else %}—{% endif %}</td>
-          <td>{% if q.total is not none %}{{ q.total|money }}{% else %}—{% endif %}</td>
-          {% if can('modules.write') %}
-          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='quantities', row_id=q.id) }}">تعديل</a></td>
-          {% endif %}
-        </tr>
-        {% else %}
-        <tr><td colspan="7" class="meta">لا توجد كميات لهذا العطل بعد.</td></tr>
+        <tr><td colspan="10" class="meta">لا توجد بنود لهذا العطل بعد — أدخل رقم البند أعلاه.</td></tr>
         {% endfor %}
       </tbody>
     </table>

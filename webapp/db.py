@@ -960,6 +960,25 @@ def list_boq_items(conn=None):
     return rows
 
 
+def has_boq_catalog(conn=None) -> bool:
+    """هل يوجد أي بند في الدليل النشط (بدون تحميل القائمة كاملة)."""
+    own = conn is None
+    conn = conn or connect()
+    active = conn.execute(
+        "SELECT id FROM contract_boq_files WHERE is_active=1 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    if active:
+        row = conn.execute(
+            "SELECT 1 FROM contract_boq_items WHERE file_id=? LIMIT 1",
+            (active["id"],),
+        ).fetchone()
+    else:
+        row = conn.execute("SELECT 1 FROM boq_items LIMIT 1").fetchone()
+    if own:
+        conn.close()
+    return bool(row)
+
+
 def active_contract_boq_file(conn=None):
     own = conn is None
     conn = conn or connect()
@@ -1016,7 +1035,7 @@ def boq_display_label(item: dict | None) -> str:
 
 
 def enrich_quantity_from_boq(data: dict, conn=None) -> dict:
-    """يملأ رقم البند والوصف والوحدة والسعر من دليل بنود العقد عند اختيار البند."""
+    """يملأ الوصف والوحدة والسعر من دليل بنود العقد عند إدخال رقم البند."""
     item_no = (data.get("item_no") or "").strip()
     if not item_no:
         return data

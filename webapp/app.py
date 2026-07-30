@@ -10,6 +10,7 @@ from flask import (
     abort,
     flash,
     g,
+    jsonify,
     redirect,
     render_template,
     request,
@@ -906,8 +907,8 @@ def ticket_view(ticket_id):
         ),
         "boq_lines": db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn),
     }
-    boq_catalog = db.list_boq_items(conn)
     boq_file = db.active_contract_boq_file(conn)
+    has_boq = db.has_boq_catalog(conn)
     conn.close()
     for q in related["quantities"]:
         q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
@@ -923,7 +924,7 @@ def ticket_view(ticket_id):
         "ticket_view.html",
         ticket=ticket,
         related=related,
-        boq_catalog=boq_catalog,
+        has_boq_catalog=has_boq,
         boq_file=boq_file,
         emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
     )
@@ -991,7 +992,7 @@ def ticket_boq_add(ticket_id):
     notes = (request.form.get("notes") or "").strip()
     if not item_no:
         conn.close()
-        flash("اختر بنداً من دليل العقد", "danger")
+        flash("أدخل رقم البند من دليل العقد", "danger")
         return redirect(url_for("ticket_view", ticket_id=ticket_id))
     try:
         qty = float(qty_raw) if qty_raw != "" else 0.0
@@ -1006,7 +1007,7 @@ def ticket_boq_add(ticket_id):
     catalog = db.get_contract_boq_item(item_no, conn)
     if not catalog:
         conn.close()
-        flash("البند غير موجود في دليل العقد النشط — ارفع ملف بنود العقد من إدارة العقود", "danger")
+        flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط — تحقق من الرقم أو ارفع الدليل من إدارة العقود", "danger")
         return redirect(url_for("ticket_view", ticket_id=ticket_id))
     active = db.active_contract_boq_file(conn)
     unit_price = catalog.get("unit_price")
@@ -1038,11 +1039,27 @@ def ticket_boq_add(ticket_id):
             notes,
         ),
     )
+    # مزامنة صف كميات للتوافق مع الطباعة والتقارير القديمة
+    conn.execute(
+        """
+        INSERT INTO quantities(ticket_no, item_no, description, unit, qty, unit_price, notes)
+        VALUES (?,?,?,?,?,?,?)
+        """,
+        (
+            ticket["ticket_no"],
+            catalog.get("item_no"),
+            desc,
+            catalog.get("unit"),
+            qty,
+            unit_price,
+            notes,
+        ),
+    )
     db.sync_ticket_items_value(ticket_id, conn)
     conn.commit()
     conn.close()
     db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
-    flash("تمت إضافة بند العقد وحساب التكلفة", "ok")
+    flash("تمت إضافة البند وحساب التكلفة", "ok")
     _after_data_change()
     return redirect(url_for("ticket_view", ticket_id=ticket_id))
 
@@ -1053,13 +1070,52 @@ def ticket_boq_delete(ticket_id, line_id):
     if not permissions.can("tickets.write"):
         return permissions.deny_redirect()
     conn = db.connect()
+    line = conn.execute(
+        "SELECT * FROM ticket_boq_lines WHERE id=? AND ticket_id=?",
+        (line_id, ticket_id),
+    ).fetchone()
+    if line:
+        # حذف صف كميات مطابق (أحدث صف بنفس رقم البند والكمية)
+        qty_row = conn.execute(
+            """
+            SELECT id FROM quantities
+            WHERE ticket_no=? AND lower(item_no)=lower(?)
+              AND ABS(COALESCE(qty,0) - ?) < 0.0001
+            ORDER BY id DESC LIMIT 1
+            """,
+            (line["ticket_no"], line["item_no"] or "", float(line["qty"] or 0)),
+        ).fetchone()
+        if qty_row:
+            conn.execute("DELETE FROM quantities WHERE id=?", (qty_row["id"],))
     conn.execute("DELETE FROM ticket_boq_lines WHERE id=? AND ticket_id=?", (line_id, ticket_id))
     db.sync_ticket_items_value(ticket_id, conn)
     conn.commit()
     conn.close()
-    flash("تم حذف بند العقد", "ok")
+    flash("تم حذف البند", "ok")
     _after_data_change()
     return redirect(url_for("ticket_view", ticket_id=ticket_id))
+
+
+@app.route("/api/boq-item")
+@login_required
+def api_boq_item():
+    """بحث سريع عن بند في دليل العقد برقم البند (لإدخال نصي)."""
+    item_no = (request.args.get("item_no") or "").strip()
+    if not item_no:
+        return jsonify({"ok": False, "error": "أدخل رقم البند"})
+    item = db.get_contract_boq_item(item_no)
+    if not item:
+        return jsonify({"ok": False, "error": f"رقم البند «{item_no}» غير موجود في دليل العقد النشط"})
+    desc = (item.get("short_desc") or item.get("description") or "").strip()
+    return jsonify(
+        {
+            "ok": True,
+            "item_no": item.get("item_no"),
+            "description": desc,
+            "unit": item.get("unit") or "",
+            "unit_price": item.get("unit_price"),
+        }
+    )
 
 
 @app.route("/tickets/<int:ticket_id>/print")
@@ -1073,15 +1129,31 @@ def ticket_print(ticket_id):
         return redirect(url_for("tickets_list"))
     ticket = dict(row)
     tno = ticket["ticket_no"]
-    quantities = db.rows_to_dicts(conn.execute("SELECT * FROM quantities WHERE ticket_no=?", (tno,)).fetchall())
+    boq_lines = db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn)
+    legacy_qty = db.rows_to_dicts(conn.execute("SELECT * FROM quantities WHERE ticket_no=?", (tno,)).fetchall())
     photos = db.rows_to_dicts(conn.execute("SELECT * FROM photos WHERE ticket_no=?", (tno,)).fetchall())
     coordination = db.rows_to_dicts(conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall())
     metering = db.rows_to_dicts(conn.execute("SELECT * FROM metering WHERE ticket_no=?", (tno,)).fetchall())
     conn.close()
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
     ticket["final_value"] = final_value(ticket.get("items_value"))
-    for q in quantities:
-        q["total"] = (float(q.get("qty") or 0) * float(q.get("unit_price") or 0))
+    if boq_lines:
+        quantities = [
+            {
+                "item_no": x.get("item_no"),
+                "description": x.get("description"),
+                "unit": x.get("unit"),
+                "qty": x.get("qty"),
+                "unit_price": x.get("unit_price"),
+                "total": x.get("final_total") if x.get("final_total") is not None else x.get("line_total"),
+                "work_class": x.get("work_class"),
+            }
+            for x in boq_lines
+        ]
+    else:
+        quantities = legacy_qty
+        for q in quantities:
+            q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
     return render_template(
         "ticket_print.html",
         ticket=ticket,
@@ -1265,6 +1337,24 @@ def module_new(name):
                     section_modules=modules_for_section(section) if section else [],
                 )
         if name == "quantities":
+            item_no = (data.get("item_no") or "").strip()
+            if item_no and not db.get_contract_boq_item(item_no, conn):
+                flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط", "danger")
+                section = module.get("section")
+                return render_template(
+                    "module_form.html",
+                    name=name,
+                    module=module,
+                    row=data,
+                    tickets=tickets,
+                    ticket_options=ticket_options,
+                    warehouse_items=[],
+                    boq_items=[],
+                    mode="new",
+                    section=section,
+                    section_meta=SECTION_META.get(section),
+                    section_modules=modules_for_section(section) if section else [],
+                )
             data = db.enrich_quantity_from_boq(data, conn)
         if name == "quality_clearances" and not (data.get("rekaz_code") or "").strip():
             data["rekaz_code"] = db.next_series_code("rr", conn)
@@ -1285,7 +1375,7 @@ def module_new(name):
         _after_data_change()
         return _redirect_after_module(name, data)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
-    boq_items = db.list_boq_items(conn) if name == "quantities" else []
+    boq_items = []
     if request.args.get("item_no") and "item_no" in prefill:
         prefill["item_no"] = request.args.get("item_no")
         if name == "warehouse_tx":
@@ -1374,6 +1464,24 @@ def module_edit(name, row_id):
                     section_modules=modules_for_section(section) if section else [],
                 )
         if name == "quantities":
+            item_no = (data.get("item_no") or "").strip()
+            if item_no and not db.get_contract_boq_item(item_no, conn):
+                flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط", "danger")
+                section = module.get("section")
+                return render_template(
+                    "module_form.html",
+                    name=name,
+                    module=module,
+                    row=data,
+                    tickets=tickets,
+                    ticket_options=ticket_options,
+                    warehouse_items=[],
+                    boq_items=[],
+                    mode="edit",
+                    section=section,
+                    section_meta=SECTION_META.get(section),
+                    section_modules=modules_for_section(section) if section else [],
+                )
             data = db.enrich_quantity_from_boq(data, conn)
         if name == "quality_clearances" and not (data.get("rekaz_code") or "").strip():
             data["rekaz_code"] = db.next_series_code("rr", conn)
@@ -1393,7 +1501,7 @@ def module_edit(name, row_id):
         return _redirect_after_module(name, data)
     data = dict(row)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
-    boq_items = db.list_boq_items(conn) if name == "quantities" else []
+    boq_items = []
     conn.close()
     section = module.get("section")
     return render_template(
