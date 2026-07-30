@@ -65,10 +65,10 @@
         <option value="">— اختر بنداً —</option>
         {% for it in boq_catalog %}
         <option value="{{ it.item_no }}"
-                data-desc="{{ it.description or '' }}"
+                data-desc="{{ it.short_desc or it.description or '' }}"
                 data-unit="{{ it.unit or '' }}"
                 data-price="{{ it.unit_price if it.unit_price is not none else '' }}">
-          {{ it.item_no }} — {{ it.description or '' }}{% if it.unit_price is not none %} ({{ it.unit_price }}){% endif %}
+          {{ it.item_no }} — {{ it.short_desc or it.description or '' }}{% if it.unit_price is not none %} ({{ it.unit_price }}){% endif %}
         </option>
         {% endfor %}
       </select>

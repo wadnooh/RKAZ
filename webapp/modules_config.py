@@ -138,13 +138,18 @@ MODULES = {
         "section": "contracts",
         "fields": [
             ("item_no", "رقم البند", "text"),
-            ("description", "وصف البند", "text"),
+            ("line_type", "نوع البند", "text"),
+            ("short_desc", "التوصيف المختصر", "text"),
+            ("long_desc", "التوصيف الكامل", "textarea"),
+            ("description", "الوصف (متوافق)", "text"),
             ("unit", "الوحدة", "text"),
             ("unit_price", "سعر الوحدة", "number"),
+            ("currency", "العملة", "text"),
+            ("payment_type", "نوع الدفع", "text"),
             ("category", "التصنيف", "text"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["item_no", "description", "unit", "unit_price", "category"],
+        "list_cols": ["item_no", "short_desc", "unit", "unit_price", "currency", "line_type"],
     },
     # ---- التنسيقات والجودة ----
     "coordination": {

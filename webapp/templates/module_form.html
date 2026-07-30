@@ -41,11 +41,11 @@
           <option value="">— اختر من دليل العقد —</option>
           {% for it in boq_items or [] %}
           <option value="{{ it.item_no }}"
-                  data-desc="{{ it.description or '' }}"
+                  data-desc="{{ it.short_desc or it.description or '' }}"
                   data-unit="{{ it.unit or '' }}"
                   data-price="{{ it.unit_price if it.unit_price is not none else '' }}"
                   {% if row[key]==it.item_no %}selected{% endif %}>
-            {{ it.item_no }} — {{ it.description or '' }}
+            {{ it.item_no }} — {{ it.short_desc or it.description or '' }}
           </option>
           {% endfor %}
         </select>

@@ -703,12 +703,22 @@ def contract_boq_activate(file_id):
     conn.execute("DELETE FROM boq_items")
     for it in items:
         conn.execute(
-            "INSERT INTO boq_items(item_no, description, unit, unit_price, category, notes) VALUES (?,?,?,?,?,?)",
+            """
+            INSERT INTO boq_items(
+              item_no, description, short_desc, long_desc, line_type,
+              unit, unit_price, currency, payment_type, category, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+            """,
             (
                 it.get("item_no"),
-                it.get("description"),
+                it.get("description") or it.get("short_desc") or "",
+                it.get("short_desc") or "",
+                it.get("long_desc") or "",
+                it.get("line_type") or "",
                 it.get("unit"),
                 it.get("unit_price"),
+                it.get("currency") or "",
+                it.get("payment_type") or "",
                 it.get("category"),
                 it.get("notes"),
             ),
@@ -1001,6 +1011,10 @@ def ticket_boq_add(ticket_id):
     active = db.active_contract_boq_file(conn)
     unit_price = catalog.get("unit_price")
     totals = db.calc_boq_line_totals(qty, unit_price, work_class, ratio)
+    desc = (
+        (catalog.get("short_desc") or "").strip()
+        or (catalog.get("description") or "").strip()
+    )
     conn.execute(
         """
         INSERT INTO ticket_boq_lines(
@@ -1013,7 +1027,7 @@ def ticket_boq_add(ticket_id):
             ticket["ticket_no"],
             (active or {}).get("id") if active else catalog.get("file_id"),
             catalog.get("item_no"),
-            catalog.get("description"),
+            desc,
             catalog.get("unit"),
             qty,
             unit_price,

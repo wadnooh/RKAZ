@@ -147,8 +147,13 @@ EXTRA_TABLE_DDL = {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_no TEXT,
             description TEXT,
+            short_desc TEXT,
+            long_desc TEXT,
+            line_type TEXT,
             unit TEXT,
             unit_price REAL,
+            currency TEXT,
+            payment_type TEXT,
             category TEXT,
             notes TEXT
         )
@@ -170,9 +175,14 @@ EXTRA_TABLE_DDL = {
             file_id INTEGER,
             item_no TEXT,
             description TEXT,
+            short_desc TEXT,
+            long_desc TEXT,
+            line_type TEXT,
             unit TEXT,
             unit_price REAL,
+            currency TEXT,
             amount REAL,
+            payment_type TEXT,
             category TEXT,
             notes TEXT
         )
@@ -232,6 +242,18 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "warehouse_tx" in existing or "warehouse_tx" in created:
             if _ensure_column(conn, "warehouse_tx", "rekaz_code"):
                 created.append("warehouse_tx.rekaz_code")
+        # أعمدة دليل بنود العقد الموسّع (قالب Excel ثنائي اللغة)
+        for table in ("boq_items", "contract_boq_items"):
+            if table in existing or table in created:
+                for col, ddl in (
+                    ("short_desc", "TEXT"),
+                    ("long_desc", "TEXT"),
+                    ("line_type", "TEXT"),
+                    ("currency", "TEXT"),
+                    ("payment_type", "TEXT"),
+                ):
+                    if _ensure_column(conn, table, col, ddl):
+                        created.append(f"{table}.{col}")
         # تعبئة أكواد ER للأعطال القديمة الفارغة
         if "tickets" in existing or "tickets" in created:
             missing = conn.execute(
@@ -605,8 +627,13 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             item_no TEXT,
             description TEXT,
+            short_desc TEXT,
+            long_desc TEXT,
+            line_type TEXT,
             unit TEXT,
             unit_price REAL,
+            currency TEXT,
+            payment_type TEXT,
             category TEXT,
             notes TEXT
         );
@@ -624,9 +651,14 @@ def init_db():
             file_id INTEGER,
             item_no TEXT,
             description TEXT,
+            short_desc TEXT,
+            long_desc TEXT,
+            line_type TEXT,
             unit TEXT,
             unit_price REAL,
+            currency TEXT,
             amount REAL,
+            payment_type TEXT,
             category TEXT,
             notes TEXT
         );
@@ -656,6 +688,9 @@ def init_db():
     _ensure_column(conn, "tickets", "rekaz_code")
     _ensure_column(conn, "quality_clearances", "rekaz_code")
     _ensure_column(conn, "warehouse_tx", "rekaz_code")
+    for _boq_table in ("boq_items", "contract_boq_items"):
+        for _col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
+            _ensure_column(conn, _boq_table, _col)
 
     # تأكيد الجداول المضافة لاحقاً (حتى لو استُعيدت قاعدة قديمة)
     ensure_schema(conn)
@@ -969,6 +1004,17 @@ def get_contract_boq_item(item_no: str, conn=None):
     return dict(row) if row else None
 
 
+def boq_display_label(item: dict | None) -> str:
+    """نص العرض في قوائم الاختيار: رقم البند + التوصيف المختصر."""
+    if not item:
+        return ""
+    item_no = (item.get("item_no") or "").strip()
+    short = (item.get("short_desc") or item.get("description") or "").strip()
+    if item_no and short:
+        return f"{item_no} — {short}"
+    return item_no or short
+
+
 def enrich_quantity_from_boq(data: dict, conn=None) -> dict:
     """يملأ رقم البند والوصف والوحدة والسعر من دليل بنود العقد عند اختيار البند."""
     item_no = (data.get("item_no") or "").strip()
@@ -981,7 +1027,9 @@ def enrich_quantity_from_boq(data: dict, conn=None) -> dict:
         conn.close()
     if item:
         if not data.get("description"):
-            data["description"] = item.get("description") or ""
+            data["description"] = (
+                item.get("short_desc") or item.get("description") or ""
+            )
         if not data.get("unit"):
             data["unit"] = item.get("unit") or ""
         if data.get("unit_price") in (None, "", 0, 0.0):
