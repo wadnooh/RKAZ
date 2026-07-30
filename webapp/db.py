@@ -751,7 +751,14 @@ def init_db():
             SOP_ROWS,
         )
 
-    if cur.execute("SELECT COUNT(*) FROM tickets").fetchone()[0] == 0:
+    # على السحابة مع S3: لا تزرع عطل تجريبي — حتى لا تُحسب القاعدة «ممتلئة» وتُتخطّى الاستعادة
+    _seed_demo = os.environ.get("RAKAZ_SEED_DEMO", "").strip().lower() in {"1", "true", "yes", "on"}
+    _cloudish = bool(
+        os.environ.get("RENDER")
+        or os.environ.get("RAKAZ_CLOUD", "").strip()
+        or os.environ.get("AWS_S3_BUCKET", "").strip()
+    )
+    if (_seed_demo or not _cloudish) and cur.execute("SELECT COUNT(*) FROM tickets").fetchone()[0] == 0:
         cur.execute(
             """
             INSERT INTO tickets(

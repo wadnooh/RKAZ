@@ -381,6 +381,7 @@ def health():
             "enabled": st.get("enabled"),
             "last_backup_at": st.get("last_backup_at"),
             "next_due_minutes": st.get("next_due_minutes"),
+            "activity_delay_seconds": backup_svc.activity_backup_delay_seconds(),
             "last_s3_key": last_up.get("key") or delivery_s3.get("key"),
             "last_s3_at": last_up.get("at") or st.get("last_backup_at"),
             "last_s3_ok": bool(last_up.get("key") or delivery_s3.get("ok")),
@@ -1534,6 +1535,7 @@ def module_delete(name, row_id):
     conn.close()
     db.log_audit(current_user_name(), "حذف", module["title"], row_id)
     flash("تم الحذف", "ok")
+    _after_data_change()
     return redirect(url_for("module_list", name=name))
 
 

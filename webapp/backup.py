@@ -33,6 +33,11 @@ PURPOSE_CHOICES = [
 
 _auto_lock = threading.Lock()
 _scheduler_started = False
+_silent_timer = None
+_silent_lock = threading.Lock()
+
+# رقم العطل التجريبي الذي يُزرع محلياً — لا يُعتبر بيانات مستخدم على السحابة
+SEED_TICKET_NO = "43656357"
 
 
 def is_cloud() -> bool:
@@ -637,10 +642,51 @@ def restore_from_s3(key: str, *, user_name: str = "نظام AWS") -> dict:
     return imported
 
 
+def _table_count(conn: sqlite3.Connection, table: str) -> int:
+    try:
+        return int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+    except Exception:
+        return 0
+
+
+def local_db_is_blank_or_seed() -> bool:
+    """
+    True إذا كانت القاعدة غير موجودة أو مجرّد بذرة init_db بدون عمل مستخدم.
+    مهم: لا نعتمد على حجم الملف — البذرة وحدها ~180 ك.ب وقد تمنع الاستعادة خطأً.
+    """
+    if not db.DB_PATH.exists():
+        return True
+    conn = db.connect()
+    try:
+        tickets = _table_count(conn, "tickets")
+        if tickets == 0:
+            return True
+        if tickets == 1:
+            row = conn.execute("SELECT ticket_no FROM tickets LIMIT 1").fetchone()
+            if row and str(row[0]) == SEED_TICKET_NO:
+                extras = (
+                    _table_count(conn, "quantities")
+                    + _table_count(conn, "warehouse_tx")
+                    + _table_count(conn, "photos")
+                    + _table_count(conn, "metering")
+                    + _table_count(conn, "invoices")
+                    + _table_count(conn, "projects")
+                    + _table_count(conn, "contract_boq_items")
+                    + _table_count(conn, "contractor_works")
+                    + _table_count(conn, "hr_employees")
+                    + _table_count(conn, "audit_log")
+                )
+                return extras == 0
+        return False
+    finally:
+        conn.close()
+
+
 def maybe_restore_from_s3_on_boot() -> dict:
     """
-    عند إقلاع Render: إن كانت القاعدة فارغة/جديدة جداً وS3 فيه حفظات،
-    استعد أحدث نسخة تلقائياً (ربط شامل بدون تدخل).
+    عند إقلاع Render: إن كانت القاعدة فارغة/بذرة وS3 فيه حفظات،
+    استعد أحدث نسخة تلقائياً (Newest by LastModified عبر list_s3_backups).
+    لا نستبدل قاعدة فيها عمل مستخدم حقيقي — حتى لا نمسح تعديلات لم تُرفع بعد.
     """
     flag = os.environ.get("AWS_S3_AUTO_RESTORE", "1").strip().lower()
     if flag in {"0", "false", "no", "off"}:
@@ -648,18 +694,8 @@ def maybe_restore_from_s3_on_boot() -> dict:
     if not s3_configured():
         return {"restored": False, "skipped": True, "reason": "S3 غير مربوط"}
 
-    # لا نستعيد إن وُجدت بيانات حقيقية
-    try:
-        if db.DB_PATH.exists() and db.DB_PATH.stat().st_size > 40_000:
-            conn = db.connect()
-            try:
-                n = int(conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0])
-            finally:
-                conn.close()
-            if n > 1:
-                return {"restored": False, "skipped": True, "reason": "القاعدة تحتوي بيانات"}
-    except Exception:
-        pass
+    if not local_db_is_blank_or_seed():
+        return {"restored": False, "skipped": True, "reason": "القاعدة تحتوي بيانات"}
 
     remote = list_s3_backups(limit=1)
     if not remote:
@@ -919,25 +955,56 @@ def start_auto_backup_scheduler(app=None) -> None:
     t.start()
 
 
+def activity_backup_delay_seconds() -> int:
+    """
+    مهلة التجميع قبل الرفع بعد تعديل.
+    على Render Free يجب أن تكون قصيرة جداً — السيرفر قد ينام قبل 30 دقيقة.
+    """
+    raw_s = os.environ.get("AUTO_BACKUP_ACTIVITY_SECONDS", "").strip()
+    if raw_s.isdigit():
+        delay = max(5, int(raw_s))
+    else:
+        raw_m = os.environ.get("AUTO_BACKUP_ACTIVITY_MINUTES", "").strip()
+        if raw_m.isdigit():
+            delay = max(5, int(raw_m) * 60)
+        elif is_trial_free() or is_cloud():
+            delay = 45
+        else:
+            delay = 30 * 60
+    # قرص غير دائم: ارفع خلال 90 ثانية كحد أقصى حتى لا تُفقد التعديلات عند السكون
+    ephemeral = is_trial_free() or (is_cloud() and not os.environ.get("RAKAZ_DATA_DIR", "").strip())
+    if ephemeral:
+        delay = min(delay, 90)
+    return delay
+
+
 def silent_backup_after_change() -> None:
-    """حفظ صامت في الخلفية بعد تعديل بيانات — بدون واجهة أو أزرار."""
+    """حفظ صامت Debounced بعد تعديل — يرفع إلى S3 قبل أن ينام Render Free."""
     if not auto_backup_enabled():
         return
 
+    delay = activity_backup_delay_seconds()
+
     def _run():
         try:
-            activity_min = int(os.environ.get("AUTO_BACKUP_ACTIVITY_MINUTES", "30") or 30)
-            state = load_auto_state()
-            last_raw = state.get("last_backup_at")
-            if last_raw:
-                try:
-                    last = datetime.fromisoformat(last_raw)
-                    if datetime.now() - last < timedelta(minutes=max(5, activity_min)):
-                        return
-                except Exception:
-                    pass
-            create_auto_backup(force=True)
-        except Exception:
-            pass
+            create_auto_backup(force=True, user_name="حفظ بعد تعديل")
+        except Exception as exc:
+            try:
+                state = load_auto_state()
+                state["last_error"] = str(exc)
+                state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
+                save_auto_state(state)
+            except Exception:
+                pass
 
-    threading.Thread(target=_run, name="rekaz-silent-backup", daemon=True).start()
+    global _silent_timer
+    with _silent_lock:
+        if _silent_timer is not None:
+            try:
+                _silent_timer.cancel()
+            except Exception:
+                pass
+        _silent_timer = threading.Timer(float(delay), _run)
+        _silent_timer.daemon = True
+        _silent_timer.name = "rekaz-silent-backup"
+        _silent_timer.start()
