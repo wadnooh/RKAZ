@@ -2,14 +2,36 @@
 {% block content %}
 {% set active = 'tickets' %}
 {% set editing = edit_mode %}
+{% set step = edit_step if editing else '' %}
 {% include "_ops_subnav.html" %}
-<div class="card">
+
+{% if editing and wizard_steps %}
+<div class="card ticket-wizard">
+  <div class="toolbar" style="margin-bottom:8px;">
+    <div>
+      <h2 class="section-title" style="font-size:1.05rem;margin:0;">خطوات المعاملة</h2>
+      <div class="meta">احفظ كل مرحلة للانتقال تلقائياً للخطوة التالية</div>
+    </div>
+  </div>
+  <nav class="ticket-steps" aria-label="خطوات تعديل العطل">
+    {% for key, label in wizard_steps %}
+    <a class="ticket-step{% if step==key %} is-active{% endif %}"
+       href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=key) }}#step-{{ key }}">
+      <span class="ticket-step-num">{{ loop.index }}</span>
+      <span>{{ label }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+</div>
+{% endif %}
+
+<div class="card{% if editing and step=='data' %} ticket-step-panel is-active{% endif %}" id="step-data" style="margin-top:{% if editing %}14px{% else %}0{% endif %};">
   <div class="toolbar">
     <div>
       <h2 class="section-title">{% if editing %}تعديل العطل{% else %}عرض العطل{% endif %} — {{ ticket.ticket_no }}</h2>
       <div class="meta">
         {% if editing %}
-        وضع التعديل — يمكن تعديل البيانات والبنود والصور ثم الحفظ
+        {% if step=='data' %}الخطوة 1: بيانات المعاملة — احفظ للانتقال لإضافة الكمية{% else %}وضع التعديل — يمكن التنقل بين الخطوات أعلاه{% endif %}
         {% else %}
         تفاصيل العطل والسجلات المرتبطة به (بنود/كميات، صور، تمتير) — للعرض فقط حتى طلب التعديل
         {% endif %}
@@ -20,7 +42,7 @@
       {% if editing %}
       <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">إنهاء التعديل</a>
       {% elif can_mutate %}
-      <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1) }}">طلب التعديل</a>
+      <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step='data') }}#step-data">طلب التعديل</a>
       {% endif %}
       <a class="btn {% if editing %}ghost{% else %}primary{% endif %}" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
       {% if editing and can('tickets.delete') %}
@@ -112,7 +134,8 @@
     <div class="field"><label>قيمة البنود</label><input type="number" step="0.01" name="items_value" value="{{ ticket.items_value if ticket.items_value is not none else '' }}"></div>
     <div class="field full"><label>ملاحظات</label><textarea name="notes">{{ ticket.notes or '' }}</textarea></div>
     <div class="actions full" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">حفظ بيانات العطل</button>
+      <button class="btn primary" type="submit">حفظ المعاملة</button>
+      <span class="meta">بعد الحفظ → إضافة الكمية</span>
     </div>
   </form>
   {% else %}
@@ -140,11 +163,12 @@
 </div>
 
 {# —— بنود العقد والكميات (موحّد) —— #}
-<div class="card" style="margin-top:14px;">
+<div class="card{% if editing and step=='boq' %} ticket-step-panel is-active{% endif %}" id="step-boq" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">بنود العقد والكميات</h3>
       <div class="meta">
+        {% if editing and step=='boq' %}<strong>الخطوة الحالية: إضافة الكمية</strong> — {% endif %}
         {% if boq_file %}مرتبط بالدليل: {{ boq_file.filename }} — {% endif %}
         {{ related.boq_lines|length }} بند |
         أساس {{ (ticket.boq_base_total or 0)|money }} |
@@ -264,14 +288,22 @@
       </tbody>
     </table>
   </div>
+  {% if editing and step=='boq' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
 
 {# —— الصور —— #}
-<div class="card" style="margin-top:14px;">
+<div class="card{% if editing and step=='photos' %} ticket-step-panel is-active{% endif %}" id="step-photos" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">قائمة الصور</h3>
-      <div class="meta">{{ related.photos|length }} سجل صور مرتبط بهذا العطل</div>
+      <div class="meta">
+        {% if editing and step=='photos' %}<strong>الخطوة الحالية: الصور</strong> — {% endif %}
+        {{ related.photos|length }} سجل صور مرتبط بهذا العطل
+      </div>
     </div>
     <div class="actions">
       {% if editing and can('modules.write') and can('section.ops') %}
@@ -315,14 +347,22 @@
       </tbody>
     </table>
   </div>
+  {% if editing and step=='photos' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
 
 {# —— التمتير —— #}
-<div class="card" style="margin-top:14px;">
+<div class="card{% if editing and step=='metering' %} ticket-step-panel is-active{% endif %}" id="step-metering" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">التمتير</h3>
-      <div class="meta">{{ related.metering|length }} سجل تمتير مرتبط بهذا العطل</div>
+      <div class="meta">
+        {% if editing and step=='metering' %}<strong>الخطوة الحالية: التمتير</strong> — {% endif %}
+        {{ related.metering|length }} سجل تمتير مرتبط بهذا العطل
+      </div>
     </div>
     <div class="actions">
       {% if editing and can('modules.write') and can('section.ops') %}
@@ -355,15 +395,23 @@
       </tbody>
     </table>
   </div>
+  {% if editing and step=='metering' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
 
 {# —— صرف المستودع —— #}
 {% if can('section.warehouses') %}
-<div class="card" style="margin-top:14px;">
+<div class="card{% if editing and step=='warehouse' %} ticket-step-panel is-active{% endif %}" id="step-warehouse" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">حركات المستودع</h3>
-      <div class="meta">{{ related.warehouse_tx|length }} حركة — الصرف مربوط برقم العطل / كود ER</div>
+      <div class="meta">
+        {% if editing and step=='warehouse' %}<strong>الخطوة الحالية: المستودع</strong> — {% endif %}
+        {{ related.warehouse_tx|length }} حركة — الصرف مربوط برقم العطل / كود ER
+      </div>
     </div>
     <div class="actions">
       {% if editing and can('modules.write') %}
@@ -398,13 +446,30 @@
       </tbody>
     </table>
   </div>
+  {% if editing and step=='warehouse' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
-{# —— روابط أقسام أخرى مرتبطة —— #}
-{% if editing and can('modules.write') %}
-<div class="card" style="margin-top:14px;">
+{# —— اكتمال / روابط —— #}
+<div class="card{% if editing and step=='done' %} ticket-step-panel is-active{% endif %}" id="step-done" style="margin-top:14px;">
+  {% if editing and step=='done' %}
   <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">اكتمال المعاملة</h3>
+      <div class="meta">تم المرور على خطوات العطل — يمكنك الطباعة أو الربط بأقسام أخرى</div>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
+      <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">إنهاء التعديل</a>
+    </div>
+  </div>
+  {% endif %}
+  {% if editing and can('modules.write') %}
+  <div class="toolbar" {% if step!='done' %}style="margin:0"{% endif %}>
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">ربط بأقسام أخرى</h3>
       <div class="meta">تنسيقات: {{ related.coordination|length }} سجل</div>
@@ -425,6 +490,23 @@
     <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">+ تصريح سلامة</a>
     {% endif %}
   </div>
+  {% elif not editing %}
+  {# في وضع العرض لا نعرض أزرار الربط — الأقسام ظاهرة أعلاه للقراءة #}
+  {% endif %}
 </div>
+
+{% if editing and step %}
+<script>
+(function () {
+  var id = "step-{{ step }}";
+  var el = document.getElementById(id);
+  if (!el) return;
+  setTimeout(function () {
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    var focusable = el.querySelector("input:not([type=hidden]), select, textarea, button.primary, a.btn.primary");
+    if (focusable) try { focusable.focus({ preventScroll: true }); } catch (e) {}
+  }, 80);
+})();
+</script>
 {% endif %}
 {% endblock %}

@@ -870,9 +870,10 @@ def ticket_new():
                 cur.lastrowid,
                 f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
             )
-            flash(f"تم إنشاء العطل بنجاح — كود ركاز {data.get('rekaz_code')}", "ok")
+            new_id = cur.lastrowid
+            flash(f"تم إنشاء العطل بنجاح — كود ركاز {data.get('rekaz_code')} — الخطوة التالية: إضافة الكمية", "ok")
             _after_data_change()
-            return redirect(url_for("tickets_list"))
+            return _ticket_edit_redirect(new_id, "boq")
         except Exception as exc:
             flash(f"تعذر الحفظ: {exc}", "danger")
         finally:
@@ -882,6 +883,36 @@ def ticket_new():
     blank["status"] = "جديد"
     blank["rekaz_code"] = ""  # يُولَّد تلقائياً عند الحفظ
     return render_template("ticket_form.html", row=blank, mode="new")
+
+
+def _ticket_wizard_steps():
+    """خطوات تعديل العطل بالترتيب (عربي)."""
+    steps = [
+        ("data", "بيانات المعاملة"),
+        ("boq", "إضافة الكمية"),
+        ("photos", "الصور"),
+        ("metering", "التمتير"),
+    ]
+    if permissions.can("section.warehouses"):
+        steps.append(("warehouse", "المستودع"))
+    steps.append(("done", "الاكتمال"))
+    return steps
+
+
+def _ticket_next_step(current):
+    keys = [s[0] for s in _ticket_wizard_steps()]
+    if not keys:
+        return "data"
+    if current not in keys:
+        return keys[0]
+    idx = keys.index(current)
+    return keys[idx + 1] if idx + 1 < len(keys) else keys[-1]
+
+
+def _ticket_edit_redirect(ticket_id, step):
+    """الانتقال لصفحة العطل في وضع التعديل مع التركيز على الخطوة."""
+    step = step or "data"
+    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1, step=step) + f"#step-{step}")
 
 
 @app.route("/tickets/<int:ticket_id>")
@@ -923,6 +954,11 @@ def ticket_view(ticket_id):
     ticket["boq_final_total"] = boq_final
     can_mutate = permissions.can("tickets.write") or permissions.can("modules.write")
     edit_mode = request.args.get("edit") == "1" and can_mutate
+    wizard_steps = _ticket_wizard_steps() if edit_mode else []
+    step_keys = [s[0] for s in wizard_steps]
+    raw_step = (request.args.get("step") or "data").strip()
+    edit_step = raw_step if raw_step in step_keys else (step_keys[0] if step_keys else "data")
+    next_step = _ticket_next_step(edit_step) if edit_mode else None
     return render_template(
         "ticket_view.html",
         ticket=ticket,
@@ -932,6 +968,10 @@ def ticket_view(ticket_id):
         emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
         edit_mode=edit_mode,
         can_mutate=can_mutate,
+        wizard_steps=wizard_steps,
+        edit_step=edit_step,
+        next_step=next_step,
+        step_labels=dict(wizard_steps),
     )
 
 
@@ -957,12 +997,12 @@ def ticket_edit(ticket_id):
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
-        flash("تم حفظ العطل", "ok")
+        flash("تم حفظ المعاملة — انتقل لإضافة الكمية", "ok")
         _after_data_change()
-        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+        return _ticket_edit_redirect(ticket_id, "boq")
     conn.close()
     # التعديل يتم على صفحة العرض الكاملة (صور / بنود / …) بعد طلب التعديل
-    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+    return _ticket_edit_redirect(ticket_id, request.args.get("step") or "data")
 
 
 @app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
@@ -998,13 +1038,13 @@ def ticket_boq_add(ticket_id):
     if not item_no:
         conn.close()
         flash("أدخل رقم البند من دليل العقد", "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+        return _ticket_edit_redirect(ticket_id, "boq")
     try:
         qty = float(qty_raw) if qty_raw != "" else 0.0
     except ValueError:
         conn.close()
         flash("الكمية غير صالحة", "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+        return _ticket_edit_redirect(ticket_id, "boq")
     try:
         ratio = float(ratio_raw) if ratio_raw != "" else None
     except ValueError:
@@ -1013,7 +1053,7 @@ def ticket_boq_add(ticket_id):
     if not catalog:
         conn.close()
         flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط — تحقق من الرقم أو ارفع الدليل من إدارة العقود", "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+        return _ticket_edit_redirect(ticket_id, "boq")
     active = db.active_contract_boq_file(conn)
     unit_price = catalog.get("unit_price")
     totals = db.calc_boq_line_totals(qty, unit_price, work_class, ratio)
@@ -1064,9 +1104,9 @@ def ticket_boq_add(ticket_id):
     conn.commit()
     conn.close()
     db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
-    flash("تمت إضافة البند وحساب التكلفة", "ok")
+    flash("تمت إضافة البند وحساب التكلفة — أضف بنداً آخر أو انتقل للخطوة التالية", "ok")
     _after_data_change()
-    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+    return _ticket_edit_redirect(ticket_id, "boq")
 
 
 @app.route("/tickets/<int:ticket_id>/boq/<int:line_id>/delete", methods=["POST"])
@@ -1098,7 +1138,7 @@ def ticket_boq_delete(ticket_id, line_id):
     conn.close()
     flash("تم حذف البند", "ok")
     _after_data_change()
-    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1))
+    return _ticket_edit_redirect(ticket_id, "boq")
 
 
 @app.route("/api/boq-item")
@@ -1202,14 +1242,27 @@ def _apply_photos_from_request(data: dict) -> None:
 
 
 def _redirect_after_module(name, data):
-    """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل إن أمكن."""
+    """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل والخطوة التالية في المعالج."""
     tno = str((data or {}).get("ticket_no") or "").strip()
-    if tno and name in ("quantities", "photos", "metering"):
+    next_after = {
+        "quantities": "photos",
+        "photos": "metering",
+        "metering": "warehouse" if permissions.can("section.warehouses") else "done",
+        "warehouse_tx": "done",
+    }
+    if tno and name in next_after:
         conn = db.connect()
         row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
         conn.close()
         if row:
-            return redirect(url_for("ticket_view", ticket_id=row["id"]))
+            nxt = next_after[name]
+            # تخطّي المستودع إن لم تكن ضمن خطوات المستخدم
+            allowed = {s[0] for s in _ticket_wizard_steps()}
+            if nxt not in allowed:
+                nxt = "done"
+            label = dict(_ticket_wizard_steps()).get(nxt, nxt)
+            flash(f"تم الحفظ — الخطوة التالية: {label}", "ok")
+            return _ticket_edit_redirect(row["id"], nxt)
     if tno:
         return redirect(url_for("module_list", name=name, ticket_no=tno))
     return redirect(url_for("module_list", name=name))
