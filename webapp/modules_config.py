@@ -3,13 +3,13 @@
 MODULES = {
     # ---- العمليات ----
     "quantities": {
-        "title": "الكميات",
+        "title": "الكميات / ورقة التمتير",
         "table": "quantities",
         "section": "ops",
         "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
-            ("item_no", "رقم البند", "text"),
+            ("item_no", "رقم البند (من الدليل)", "boq_item"),
             ("description", "وصف البند", "text"),
             ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),
@@ -113,6 +113,39 @@ MODULES = {
         ],
         "list_cols": ["work_no", "work_date", "site", "work_type", "status", "value"],
     },
+    # ---- المشاريع ----
+    "projects": {
+        "title": "المشاريع",
+        "table": "projects",
+        "section": "projects",
+        "fields": [
+            ("project_code", "كود المشروع", "text"),
+            ("project_name", "اسم المشروع", "text"),
+            ("project_type", "نوع المشروع", "list:project_types"),
+            ("status", "الحالة", "list:project_status"),
+            ("start_date", "تاريخ البداية", "date"),
+            ("end_date", "تاريخ النهاية", "date"),
+            ("ticket_no", "رقم العطل المرتبط", "ticket"),
+            ("site", "الموقع", "text"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["project_code", "project_name", "project_type", "status", "start_date", "ticket_no"],
+    },
+    # ---- دليل البنود (مرآة للدليل النشط من رفع Excel في العقود) ----
+    "boq_items": {
+        "title": "دليل بنود العقد",
+        "table": "boq_items",
+        "section": "contracts",
+        "fields": [
+            ("item_no", "رقم البند", "text"),
+            ("description", "وصف البند", "text"),
+            ("unit", "الوحدة", "text"),
+            ("unit_price", "سعر الوحدة", "number"),
+            ("category", "التصنيف", "text"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["item_no", "description", "unit", "unit_price", "category"],
+    },
     # ---- التنسيقات والجودة ----
     "coordination": {
         "title": "التنسيقات الفنية",
@@ -132,19 +165,20 @@ MODULES = {
         "list_cols": ["ticket_no", "needs_asphalt", "officer", "request_date", "status"],
     },
     "quality_clearances": {
-        "title": "إخلاءات الأسفلت",
+        "title": "إخلاءات الأسفلت (فسوحات)",
         "table": "quality_clearances",
         "section": "quality",
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("clearance_no", "رقم الإخلاء", "text"),
+            ("rekaz_code", "كود ركاز (RR)", "text"),
             ("request_date", "تاريخ الطلب", "date"),
             ("issue_date", "تاريخ الإصدار", "date"),
             ("contractor", "الجهة", "text"),
             ("status", "الحالة", "list:clearance_status"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["ticket_no", "clearance_no", "request_date", "status"],
+        "list_cols": ["ticket_no", "rekaz_code", "clearance_no", "request_date", "status"],
     },
     "quality_inspections": {
         "title": "فحوصات الجودة",
@@ -220,11 +254,12 @@ MODULES = {
             ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),
             ("recipient", "المستلم / المسلم", "text"),
-            ("ticket_no", "رقم العطل", "ticket"),
+            ("ticket_no", "رقم العطل / كود ER", "ticket"),
+            ("rekaz_code", "كود ركاز (ER)", "text"),
             ("region", "المنطقة", "text"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["voucher_no", "tx_date", "tx_type", "item_no", "item_name", "qty", "ticket_no", "recipient"],
+        "list_cols": ["voucher_no", "tx_date", "tx_type", "item_no", "item_name", "qty", "ticket_no", "rekaz_code", "recipient"],
     },
     # ---- المشتريات والعهد ----
     "external_purchases": {
@@ -328,6 +363,7 @@ MODULES = {
 
 SECTION_META = {
     "constructions": {"title": "الإنشاءات - التنفيذ", "home": "constructions_home"},
+    "projects": {"title": "المشاريع", "home": "projects_home"},
     "ops": {"title": "العمليات والصيانة", "home": "ops_home"},
     "contractors": {"title": "المقاولين", "home": "contractors_home"},
     "quality": {"title": "التنسيقات والجودة", "home": "quality_home"},

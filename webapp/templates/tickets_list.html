@@ -33,7 +33,7 @@
   {% endif %}
 
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q }}" placeholder="بحث برقم العطل / الحي / العطل..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="بحث برقم العطل / كود ER / الحي..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">كل الحالات</option>
       {% for s in lists.execution_status %}
@@ -49,6 +49,7 @@
       <thead>
         <tr>
           <th>رقم العطل</th>
+          <th>كود ER</th>
           <th>التاريخ</th>
           <th>الحي</th>
           <th>المحطة</th>
@@ -65,6 +66,7 @@
         {% for t in rows %}
         <tr>
           <td><strong>{{ t.ticket_no }}</strong></td>
+          <td>{{ t.rekaz_code or '—' }}</td>
           <td>{{ t.receive_date or '—' }}</td>
           <td>{{ t.district or '—' }}</td>
           <td>{{ t.station_no or '—' }}</td>

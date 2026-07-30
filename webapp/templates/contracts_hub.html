@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_section_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ title }}</h2>
+      <div class="meta">{{ subtitle }}</div>
+    </div>
+  </div>
+
+  {% if links %}
+  <div class="actions" style="margin-bottom:14px;" data-tab-strip="1">
+    {% for item in links %}
+    <a class="btn ghost" href="{{ item.href }}">{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.1rem;margin:0;">بنود العقد الموحد</h3>
+      <div class="meta">
+        {% if boq_file %}
+        الدليل النشط: <strong>{{ boq_file.filename }}</strong>
+        — {{ boq_count }} بند
+        — رُفع {{ boq_file.uploaded_at or '—' }}{% if boq_file.uploaded_by %} بواسطة {{ boq_file.uploaded_by }}{% endif %}
+        {% else %}
+        لا يوجد دليل نشط بعد — ارفع ملف Excel لبنود العقد.
+        {% endif %}
+      </div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('contract_boq_template') }}">قالب Excel</a>
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='boq_items') }}">عرض الدليل</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <p class="meta" style="margin-bottom:12px;">
+    الأعمدة المتوقعة: <strong>رقم البند</strong>، <strong>الوصف</strong>، <strong>الوحدة</strong>، <strong>سعر الوحدة</strong>
+    (اختياري: المبلغ، التصنيف، ملاحظات). نسبة الطوارئ الحالية من الإعدادات: {{ (emergency_ratio * 100)|round(1) }}٪.
+  </p>
+
+  {% if can('modules.write') %}
+  <form method="post" action="{{ url_for('contract_boq_import') }}" enctype="multipart/form-data" class="form-grid" style="margin-bottom:16px;">
+    <div class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
+      <div style="flex:1;min-width:240px;">
+        <label>رفع ملف بنود العقد (Excel)</label>
+        <input type="file" name="file" accept=".xlsx,.xlsm" required>
+      </div>
+      <button class="btn primary" type="submit">رفع وتفعيل الدليل</button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if boq_files %}
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr>
+          <th>الملف</th>
+          <th>تاريخ الرفع</th>
+          <th>بواسطة</th>
+          <th>عدد البنود</th>
+          <th>الحالة</th>
+          {% if can('modules.write') %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for f in boq_files %}
+        <tr>
+          <td>{{ f.filename or '—' }}</td>
+          <td>{{ f.uploaded_at or '—' }}</td>
+          <td>{{ f.uploaded_by or '—' }}</td>
+          <td>{{ f.item_count or 0 }}</td>
+          <td>
+            {% if f.is_active %}
+            <span class="badge ok">نشط</span>
+            {% else %}
+            —
+            {% endif %}
+          </td>
+          {% if can('modules.write') %}
+          <td class="actions">
+            {% if not f.is_active %}
+            <form method="post" action="{{ url_for('contract_boq_activate', file_id=f.id) }}" style="display:inline">
+              <button class="btn ghost" type="submit">تفعيل</button>
+            </form>
+            {% endif %}
+          </td>
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

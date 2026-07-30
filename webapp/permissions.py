@@ -11,6 +11,7 @@ from webapp.modules_config import MODULES
 # ---- أكواد الصلاحيات ----
 PERM_LABELS = {
     "section.constructions": "الإنشاءات",
+    "section.projects": "المشاريع",
     "section.ops": "العمليات والصيانة",
     "section.contractors": "المقاولين",
     "section.quality": "التنسيقات والجودة",
@@ -45,6 +46,7 @@ ALL_PERMS = set(PERM_LABELS)
 # كل أقسام العرض
 SECTION_PERMS = {
     "constructions": "section.constructions",
+    "projects": "section.projects",
     "ops": "section.ops",
     "contractors": "section.contractors",
     "quality": "section.quality",
@@ -86,6 +88,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
     "مدخل بيانات": {
         "section.ops",
         "section.constructions",
+        "section.projects",
         "section.contractors",
         "section.quality",
         "section.safety",
@@ -181,6 +184,7 @@ def deny_redirect(message: str | None = None):
     for section, perm in (
         ("ops", "section.ops"),
         ("constructions", "section.constructions"),
+        ("projects", "section.projects"),
         ("contractors", "section.contractors"),
         ("quality", "section.quality"),
         ("safety", "section.safety"),
@@ -195,6 +199,7 @@ def deny_redirect(message: str | None = None):
             endpoint = {
                 "ops": "ops_home",
                 "constructions": "constructions_home",
+                "projects": "projects_home",
                 "contractors": "contractors_home",
                 "quality": "quality_home",
                 "safety": "safety_home",
@@ -282,6 +287,7 @@ def required_perm_for_request() -> str | None:
         "dashboard": "section.ops",
         "ops_home": "section.ops",
         "constructions_home": "section.constructions",
+        "projects_home": "section.projects",
         "contractors_home": "section.contractors",
         "quality_home": "section.quality",
         "safety_home": "section.safety",
@@ -297,13 +303,11 @@ def required_perm_for_request() -> str | None:
         need = section_endpoints[ep]
         return None if has_perm(need) else need
 
-    # المتابعات المالية
+    # المتابعات المالية — التدفق النقدي مخفي من الواجهة ويُعاد توجيهه
     if ep == "cashflow":
         if not has_perm("section.financial"):
             return "section.financial"
-        if method == "POST":
-            return None if has_perm("cashflow.write") else "cashflow.write"
-        return None if has_perm("cashflow.read") else "cashflow.read"
+        return None
 
     if ep == "teams_page":
         if not has_perm("section.ops"):
@@ -337,6 +341,18 @@ def required_perm_for_request() -> str | None:
         if ep.endswith(("_import", "_clear", "_import_legacy")) and not has_perm("modules.write"):
             return "modules.write"
         return None
+
+    if ep in {"contract_boq_template", "contract_boq_import", "contract_boq_activate"}:
+        if not has_perm("section.contracts"):
+            return "section.contracts"
+        if ep in {"contract_boq_import", "contract_boq_activate"} and not has_perm("modules.write"):
+            return "modules.write"
+        return None
+
+    if ep in {"ticket_boq_add", "ticket_boq_delete"}:
+        if not has_perm("section.ops"):
+            return "section.ops"
+        return None if has_perm("tickets.write") else "tickets.write"
 
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
@@ -397,6 +413,7 @@ def _perm_for_path(path: str) -> str | None:
         ("/admin/backups", "backup.manage"),
         ("/admin/audit", "audit.read"),
         ("/constructions", "section.constructions"),
+        ("/projects", "section.projects"),
         ("/contractors", "section.contractors"),
         ("/quality", "section.quality"),
         ("/safety", "section.safety"),

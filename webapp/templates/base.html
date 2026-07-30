@@ -52,6 +52,9 @@
     {% if can('section.constructions') %}
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">الإنشاءات - التنفيذ</a>
     {% endif %}
+    {% if can('section.projects') %}
+    <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">المشاريع</a>
+    {% endif %}
     {% if can('section.ops') %}
     <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/sop') %} active{% endif %}" href="{{ url_for('ops_home') }}">العمليات والصيانة</a>
     {% endif %}
@@ -71,7 +74,7 @@
     <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">المشتريات الخارجية والعهد</a>
     {% endif %}
     {% if can('section.financial') %}
-    <a class="tab{% if p.startswith('/financial') or p.startswith('/module/invoices') or p.startswith('/cashflow') %} active{% endif %}" href="{{ url_for('financial_home') }}">المتابعات المالية</a>
+    <a class="tab{% if p.startswith('/financial') or p.startswith('/module/invoices') %} active{% endif %}" href="{{ url_for('financial_home') }}">المتابعات المالية</a>
     {% endif %}
     {% if can('section.maintenance') %}
     <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">الورشة (سيارات - معدات)</a>
@@ -80,7 +83,7 @@
     <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') %} active{% endif %}" href="{{ url_for('hr_home') }}">الموارد البشرية</a>
     {% endif %}
     {% if can('section.contracts') %}
-    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">إدارة العقود</a>
+    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">إدارة العقود</a>
     {% endif %}
     {% if can('users.manage') or can('settings.write') or can('lists.write') %}
     <a class="tab{% if p.startswith('/users') or p.startswith('/settings') or p.startswith('/lists') or p.startswith('/admin/backups') %} active{% endif %}" href="{% if can('users.manage') %}{{ url_for('users_home') }}{% elif can('settings.write') %}{{ url_for('settings_page') }}{% else %}{{ url_for('lists_page') }}{% endif %}">{% if can('users.manage') %}المستخدمون{% elif can('settings.write') %}الإعدادات{% else %}القوائم{% endif %}</a>

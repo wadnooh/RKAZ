@@ -12,7 +12,12 @@
   </div>
 
   <form method="post" class="form-grid">
-    <div class="field"><label>رقم العطل</label><input name="ticket_no" value="{{ row.ticket_no or '' }}" required></div>
+    <div class="field"><label>رقم العطل (SEC)</label><input name="ticket_no" value="{{ row.ticket_no or '' }}" required></div>
+    <div class="field">
+      <label>كود ركاز (ER)</label>
+      <input name="rekaz_code" value="{{ row.rekaz_code or '' }}" placeholder="{% if mode=='new' %}يُولَّد تلقائياً عند الحفظ{% else %}ER-…{% endif %}">
+      <div class="meta">{% if mode=='new' %}اتركه فارغاً للتوليد التلقائي (ER-1، ER-2…){% else %}يمكن تعديله يدوياً{% endif %}</div>
+    </div>
     <div class="field"><label>تاريخ الاستلام</label><input type="date" name="receive_date" value="{{ row.receive_date or '' }}"></div>
     <div class="field"><label>وقت الاستلام</label><input type="time" name="receive_time" value="{{ row.receive_time or '' }}"></div>
     <div class="field"><label>الحي</label><input name="district" value="{{ row.district or '' }}"></div>

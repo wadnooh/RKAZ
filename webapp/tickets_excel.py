@@ -12,6 +12,7 @@ from webapp import excel_brand as brand
 
 TICKET_HEADERS = [
     "رقم العطل",
+    "كود ركاز",
     "تاريخ الاستلام",
     "الحي",
     "وقت الاستلام",
@@ -41,6 +42,7 @@ TICKET_HEADERS = [
 
 TICKET_FIELDS = [
     "ticket_no",
+    "rekaz_code",
     "receive_date",
     "district",
     "receive_time",
@@ -74,6 +76,7 @@ EXPORT_FIELDS = TICKET_FIELDS
 
 _COL_WIDTHS = {
     "رقم العطل": 14,
+    "كود ركاز": 12,
     "تاريخ الاستلام": 14,
     "الحي": 12,
     "وقت الاستلام": 12,
@@ -112,6 +115,12 @@ _TICKET_ALIASES = {
     "ticket no": "ticket_no",
     "fault no": "ticket_no",
     "fault_no": "ticket_no",
+    "كود ركاز": "rekaz_code",
+    "كود er": "rekaz_code",
+    "كود ER": "rekaz_code",
+    "رقم ركاز": "rekaz_code",
+    "rekaz_code": "rekaz_code",
+    "er code": "rekaz_code",
     "تاريخ الاستلام": "receive_date",
     "تاريخ العطل": "receive_date",
     "تاريخ البلاغ": "receive_date",  # توافق
@@ -412,6 +421,15 @@ def import_tickets_from_excel(file_storage) -> dict:
             data["items_value"] = None
         if not data.get("status"):
             data["status"] = "جديد"
+        if not (data.get("rekaz_code") or "").strip():
+            existing_code = conn.execute(
+                "SELECT rekaz_code FROM tickets WHERE ticket_no=?",
+                (ticket_no,),
+            ).fetchone()
+            if existing_code and existing_code["rekaz_code"]:
+                data["rekaz_code"] = existing_code["rekaz_code"]
+            else:
+                data["rekaz_code"] = db.next_series_code("er", conn)
 
         try:
             existing = conn.execute(

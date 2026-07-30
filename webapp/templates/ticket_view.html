@@ -22,6 +22,7 @@
 
   <div class="meta-grid">
     <div class="meta-item"><div class="k">رقم العطل</div><div class="v">{{ ticket.ticket_no }}</div></div>
+    <div class="meta-item"><div class="k">كود ركاز (ER)</div><div class="v"><strong>{{ ticket.rekaz_code or '—' }}</strong></div></div>
     <div class="meta-item"><div class="k">التاريخ / الوقت</div><div class="v">{{ ticket.receive_date or '—' }} — {{ ticket.receive_time or '—' }}</div></div>
     <div class="meta-item"><div class="k">الحالة</div><div class="v">{{ ticket.status or '—' }}</div></div>
     <div class="meta-item"><div class="k">الحي</div><div class="v">{{ ticket.district or '—' }}</div></div>
@@ -32,12 +33,108 @@
     <div class="meta-item"><div class="k">الفرقة</div><div class="v">{{ ticket.team or '—' }}</div></div>
     <div class="meta-item"><div class="k">التوجيه / الوصول</div><div class="v">{{ ticket.dispatch_time or '—' }} / {{ ticket.arrival_time or '—' }}</div></div>
     <div class="meta-item"><div class="k">زمن الاستجابة</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
-    <div class="meta-item"><div class="k">القيمة النهائية</div><div class="v">{% if ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">تكلفة المعاملة (بنود العقد)</div><div class="v">{% if ticket.boq_final_total %}{{ ticket.boq_final_total|money }}{% elif ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
     <div class="meta-item"><div class="k">تم التصوير</div><div class="v">{{ ticket.photographed or '—' }}</div></div>
     <div class="meta-item"><div class="k">الكميات مكتملة</div><div class="v">{{ ticket.quantities_done or '—' }}</div></div>
     <div class="meta-item"><div class="k">حالة التمتير</div><div class="v">{{ ticket.metering_status or '—' }}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">الموقع</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">ملاحظات</div><div class="v">{{ ticket.notes or '—' }}</div></div>
+  </div>
+</div>
+
+{# —— بنود العقد —— #}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">بنود العقد</h3>
+      <div class="meta">
+        {% if boq_file %}مرتبط بالدليل: {{ boq_file.filename }} — {% endif %}
+        {{ related.boq_lines|length }} بند |
+        أساس {{ (ticket.boq_base_total or 0)|money }} |
+        نهائي {{ (ticket.boq_final_total or 0)|money }}
+      </div>
+    </div>
+  </div>
+
+  {% if can('tickets.write') %}
+  {% if boq_catalog %}
+  <form method="post" action="{{ url_for('ticket_boq_add', ticket_id=ticket.id) }}" class="form-grid" style="margin-bottom:14px;">
+    <div class="field">
+      <label>البند من دليل العقد</label>
+      <select name="item_no" id="ticketBoqItem" required>
+        <option value="">— اختر بنداً —</option>
+        {% for it in boq_catalog %}
+        <option value="{{ it.item_no }}"
+                data-desc="{{ it.description or '' }}"
+                data-unit="{{ it.unit or '' }}"
+                data-price="{{ it.unit_price if it.unit_price is not none else '' }}">
+          {{ it.item_no }} — {{ it.description or '' }}{% if it.unit_price is not none %} ({{ it.unit_price }}){% endif %}
+        </option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>الكمية</label><input type="number" step="0.01" name="qty" value="1" required></div>
+    <div class="field">
+      <label>تصنيف العمل</label>
+      <select name="work_class" id="ticketBoqClass">
+        <option value="اعتيادي">اعتيادي (بدون زيادة)</option>
+        <option value="طوارئ">طوارئ (نسبة زيادة)</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>نسبة الزيادة (طوارئ)</label>
+      <input type="number" step="0.01" min="0" name="increase_ratio" id="ticketBoqRatio" value="{{ emergency_ratio }}" placeholder="{{ emergency_ratio }}">
+      <div class="meta">اعتيادي = 0٪ — طوارئ = من الإعدادات أو عدّل يدوياً (مثال 0.45 = 45٪)</div>
+    </div>
+    <div class="field full"><label>ملاحظات البند</label><input name="notes" value=""></div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">+ إضافة بند وحساب التكلفة</button>
+    </div>
+  </form>
+  {% else %}
+  <p class="meta" style="margin-bottom:12px;">
+    لا يوجد دليل بنود عقد نشط.
+    {% if can('section.contracts') %}
+    <a href="{{ url_for('contracts_admin_home') }}">ارفع ملف Excel من إدارة العقود</a>.
+    {% endif %}
+  </p>
+  {% endif %}
+  {% endif %}
+
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr>
+          <th>رقم البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th>
+          <th>الإجمالي</th><th>التصنيف</th><th>نسبة الزيادة</th><th>النهائي</th>
+          {% if can('tickets.write') %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in related.boq_lines %}
+        <tr>
+          <td>{{ line.item_no or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
+          <td>{{ line.unit or '—' }}</td>
+          <td>{{ line.qty if line.qty is not none else '—' }}</td>
+          <td>{% if line.unit_price is not none %}{{ line.unit_price|money }}{% else %}—{% endif %}</td>
+          <td>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</td>
+          <td>{{ line.work_class or '—' }}</td>
+          <td>{% if line.work_class == 'طوارئ' %}{{ ((line.increase_ratio or 0) * 100)|round(1) }}٪{% else %}—{% endif %}</td>
+          <td><strong>{% if line.final_total is not none %}{{ line.final_total|money }}{% else %}—{% endif %}</strong></td>
+          {% if can('tickets.write') %}
+          <td class="actions">
+            <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" onsubmit="return confirm('حذف البند؟');">
+              <button class="btn ghost" type="submit">حذف</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="10" class="meta">لا توجد بنود عقد لهذا العطل بعد.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
 </div>
 
@@ -174,6 +271,50 @@
   </div>
 </div>
 
+{# —— صرف المستودع —— #}
+{% if can('section.warehouses') %}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">حركات المستودع</h3>
+      <div class="meta">{{ related.warehouse_tx|length }} حركة — الصرف مربوط برقم العطل / كود ER</div>
+    </div>
+    <div class="actions">
+      {% if can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ صرف / حركة</a>
+      {% endif %}
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>السند</th><th>التاريخ</th><th>النوع</th><th>المادة</th><th>الكمية</th><th>كود ER</th>{% if can('modules.write') %}<th></th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for w in related.warehouse_tx %}
+        <tr>
+          <td>{{ w.voucher_no or '—' }}</td>
+          <td>{{ w.tx_date or '—' }}</td>
+          <td>{{ w.tx_type or '—' }}</td>
+          <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
+          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td>{{ w.rekaz_code or ticket.rekaz_code or '—' }}</td>
+          {% if can('modules.write') %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}">تعديل</a></td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">لا توجد حركات مستودع مرتبطة بهذا العطل.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+
 {# —— روابط أقسام أخرى مرتبطة —— #}
 {% if can('modules.write') %}
 <div class="card" style="margin-top:14px;">
@@ -189,7 +330,7 @@
     {% endif %}
     {% if can('section.quality') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">+ تنسيق</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">+ إخلاء أسفلت</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">+ فسوح / إخلاء أسفلت (RR)</a>
     {% endif %}
     {% if can('section.warehouses') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ حركة مستودع</a>

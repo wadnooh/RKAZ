@@ -466,6 +466,22 @@ def constructions_home():
     )
 
 
+@app.route("/projects")
+@login_required
+def projects_home():
+    links = section_links("projects")
+    return render_template(
+        "section_hub.html",
+        title="المشاريع",
+        subtitle="مشاريع خاصة ومشاريع الكهرباء — أكواد PR وترقيم مستقل عن أعطال الطوارئ.",
+        links=links,
+        section="projects",
+        section_modules=modules_for_section("projects"),
+        section_meta=SECTION_META["projects"],
+        total_count=sum(i.get("count") or 0 for i in links),
+    )
+
+
 @app.route("/contractors")
 @login_required
 def contractors_home():
@@ -551,7 +567,6 @@ def external_purchases_home():
 @login_required
 def financial_home():
     links = section_links("financial")
-    links.append({"label": "التدفق النقدي", "href": url_for("cashflow")})
     stats = dashboard_stats()
     finance_stats = {
         "sap_raised": stats["sap_raised"],
@@ -563,7 +578,7 @@ def financial_home():
     return render_template(
         "section_hub.html",
         title="المتابعات المالية",
-        subtitle="المستخلصات و SAP والتدفق النقدي.",
+        subtitle="المستخلصات و SAP ودليل البنود للتمتير.",
         links=links,
         section="financial",
         section_modules=modules_for_section("financial"),
@@ -609,16 +624,100 @@ def hr_home():
 @login_required
 def contracts_admin_home():
     links = section_links("contracts")
+    boq_file = db.active_contract_boq_file()
+    boq_files = db.list_contract_boq_files()
+    boq_count = int((boq_file or {}).get("item_count") or 0)
     return render_template(
-        "section_hub.html",
+        "contracts_hub.html",
         title="إدارة العقود",
-        subtitle="عقود المكتب وحالاتها وقيمها.",
+        subtitle="عقود المكتب وبنود العقد الموحد — ارفع ملف Excel ليصبح الدليل النشط للمعاملات.",
         links=links,
         section="contracts",
         section_modules=modules_for_section("contracts"),
         section_meta=SECTION_META["contracts"],
         total_count=sum(i.get("count") or 0 for i in links),
+        boq_file=boq_file,
+        boq_files=boq_files,
+        boq_count=boq_count,
+        emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
     )
+
+
+@app.route("/contracts-admin/boq/template.xlsx")
+@login_required
+def contract_boq_template():
+    from webapp import contract_boq_excel
+
+    data = contract_boq_excel.build_boq_template()
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name="قالب_بنود_العقد.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/contracts-admin/boq/import", methods=["POST"])
+@login_required
+def contract_boq_import():
+    if not (permissions.can("modules.write") or permissions.can("section.contracts")):
+        return permissions.deny_redirect()
+    f = request.files.get("file")
+    if not f or not f.filename:
+        flash("اختر ملف Excel لبنود العقد", "danger")
+        return redirect(url_for("contracts_admin_home"))
+    try:
+        from webapp import contract_boq_excel
+
+        result = contract_boq_excel.import_boq_from_excel(f, uploaded_by=current_user_name())
+        flash(f"تم رفع بنود العقد: {result['ok']} بند — الملف النشط: {result['filename']}", "ok")
+        db.log_audit(
+            current_user_name(),
+            "رفع بنود عقد",
+            "بنود العقد",
+            result.get("file_id"),
+            f"{result.get('filename')} ({result.get('ok')} بند)",
+        )
+        _after_data_change()
+    except Exception as exc:
+        flash(f"تعذر استيراد بنود العقد: {exc}", "danger")
+    return redirect(url_for("contracts_admin_home"))
+
+
+@app.route("/contracts-admin/boq/<int:file_id>/activate", methods=["POST"])
+@login_required
+def contract_boq_activate(file_id):
+    if not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM contract_boq_files WHERE id=?", (file_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash("الملف غير موجود", "danger")
+        return redirect(url_for("contracts_admin_home"))
+    conn.execute("UPDATE contract_boq_files SET is_active=0")
+    conn.execute("UPDATE contract_boq_files SET is_active=1 WHERE id=?", (file_id,))
+    items = db.rows_to_dicts(
+        conn.execute("SELECT * FROM contract_boq_items WHERE file_id=?", (file_id,)).fetchall()
+    )
+    conn.execute("DELETE FROM boq_items")
+    for it in items:
+        conn.execute(
+            "INSERT INTO boq_items(item_no, description, unit, unit_price, category, notes) VALUES (?,?,?,?,?,?)",
+            (
+                it.get("item_no"),
+                it.get("description"),
+                it.get("unit"),
+                it.get("unit_price"),
+                it.get("category"),
+                it.get("notes"),
+            ),
+        )
+    conn.commit()
+    conn.close()
+    flash("تم تفعيل دليل بنود العقد", "ok")
+    _after_data_change()
+    return redirect(url_for("contracts_admin_home"))
 
 
 @app.route("/users")
@@ -636,6 +735,7 @@ def audit_log_home():
 # ---------- Tickets (الأعطال) ----------
 TICKET_FIELDS = [
     "ticket_no",
+    "rekaz_code",
     "receive_date",
     "district",
     "receive_time",
@@ -680,9 +780,9 @@ def tickets_list():
     sql = "SELECT * FROM tickets WHERE 1=1"
     params = []
     if q:
-        sql += " AND (ticket_no LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ? OR agent LIKE ?)"
+        sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ? OR agent LIKE ?)"
         like = f"%{q}%"
-        params.extend([like, like, like, like, like])
+        params.extend([like, like, like, like, like, like])
     if status:
         sql += " AND status = ?"
         params.append(status)
@@ -742,6 +842,8 @@ def ticket_new():
             return render_template("ticket_form.html", row=data, mode="new")
         conn = db.connect()
         try:
+            if not (data.get("rekaz_code") or "").strip():
+                data["rekaz_code"] = db.next_series_code("er", conn)
             cols = ", ".join(TICKET_FIELDS)
             placeholders = ", ".join(["?"] * len(TICKET_FIELDS))
             cur = conn.execute(
@@ -749,8 +851,14 @@ def ticket_new():
                 [data[f] for f in TICKET_FIELDS],
             )
             conn.commit()
-            db.log_audit(current_user_name(), "إضافة", "عطل", cur.lastrowid, data.get("ticket_no"))
-            flash("تم إنشاء العطل بنجاح", "ok")
+            db.log_audit(
+                current_user_name(),
+                "إضافة",
+                "عطل",
+                cur.lastrowid,
+                f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
+            )
+            flash(f"تم إنشاء العطل بنجاح — كود ركاز {data.get('rekaz_code')}", "ok")
             _after_data_change()
             return redirect(url_for("tickets_list"))
         except Exception as exc:
@@ -760,6 +868,7 @@ def ticket_new():
     blank = {f: "" for f in TICKET_FIELDS}
     blank["receive_date"] = datetime.now().strftime("%Y-%m-%d")
     blank["status"] = "جديد"
+    blank["rekaz_code"] = ""  # يُولَّد تلقائياً عند الحفظ
     return render_template("ticket_form.html", row=blank, mode="new")
 
 
@@ -779,15 +888,35 @@ def ticket_view(ticket_id):
         "photos": db.rows_to_dicts(conn.execute("SELECT * FROM photos WHERE ticket_no=?", (tno,)).fetchall()),
         "coordination": db.rows_to_dicts(conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall()),
         "metering": db.rows_to_dicts(conn.execute("SELECT * FROM metering WHERE ticket_no=?", (tno,)).fetchall()),
+        "warehouse_tx": db.rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM warehouse_tx WHERE ticket_no=? OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?)) ORDER BY id DESC",
+                (tno, ticket.get("rekaz_code") or ""),
+            ).fetchall()
+        ),
+        "boq_lines": db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn),
     }
+    boq_catalog = db.list_boq_items(conn)
+    boq_file = db.active_contract_boq_file(conn)
     conn.close()
     for q in related["quantities"]:
         q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
     for p in related["photos"]:
         p["complete"] = "مكتمل" if media_svc.photos_complete(p) else "ناقص"
+    boq_base = sum(float(x.get("line_total") or 0) for x in related["boq_lines"])
+    boq_final = sum(float(x.get("final_total") or 0) for x in related["boq_lines"])
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
     ticket["final_value"] = final_value(ticket.get("items_value"))
-    return render_template("ticket_view.html", ticket=ticket, related=related)
+    ticket["boq_base_total"] = boq_base
+    ticket["boq_final_total"] = boq_final
+    return render_template(
+        "ticket_view.html",
+        ticket=ticket,
+        related=related,
+        boq_catalog=boq_catalog,
+        boq_file=boq_file,
+        emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
+    )
 
 
 @app.route("/tickets/<int:ticket_id>/edit", methods=["GET", "POST"])
@@ -801,6 +930,9 @@ def ticket_edit(ticket_id):
         return redirect(url_for("tickets_list"))
     if request.method == "POST":
         data = ticket_from_form()
+        if not (data.get("rekaz_code") or "").strip():
+            existing_code = (dict(row).get("rekaz_code") or "").strip()
+            data["rekaz_code"] = existing_code or db.next_series_code("er", conn)
         sets = ", ".join([f"{f}=?" for f in TICKET_FIELDS])
         conn.execute(
             f"UPDATE tickets SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?",
@@ -829,6 +961,91 @@ def ticket_delete(ticket_id):
     flash("تم حذف العطل", "ok")
     _after_data_change()
     return redirect(url_for("tickets_list"))
+
+
+@app.route("/tickets/<int:ticket_id>/boq/add", methods=["POST"])
+@login_required
+def ticket_boq_add(ticket_id):
+    if not permissions.can("tickets.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    ticket = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not ticket:
+        conn.close()
+        flash("العطل غير موجود", "danger")
+        return redirect(url_for("tickets_list"))
+    item_no = (request.form.get("item_no") or "").strip()
+    qty_raw = (request.form.get("qty") or "").strip()
+    work_class = (request.form.get("work_class") or "اعتيادي").strip()
+    ratio_raw = (request.form.get("increase_ratio") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    if not item_no:
+        conn.close()
+        flash("اختر بنداً من دليل العقد", "danger")
+        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+    try:
+        qty = float(qty_raw) if qty_raw != "" else 0.0
+    except ValueError:
+        conn.close()
+        flash("الكمية غير صالحة", "danger")
+        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+    try:
+        ratio = float(ratio_raw) if ratio_raw != "" else None
+    except ValueError:
+        ratio = None
+    catalog = db.get_contract_boq_item(item_no, conn)
+    if not catalog:
+        conn.close()
+        flash("البند غير موجود في دليل العقد النشط — ارفع ملف بنود العقد من إدارة العقود", "danger")
+        return redirect(url_for("ticket_view", ticket_id=ticket_id))
+    active = db.active_contract_boq_file(conn)
+    unit_price = catalog.get("unit_price")
+    totals = db.calc_boq_line_totals(qty, unit_price, work_class, ratio)
+    conn.execute(
+        """
+        INSERT INTO ticket_boq_lines(
+          ticket_id, ticket_no, file_id, item_no, description, unit, qty, unit_price,
+          line_total, work_class, increase_ratio, final_total, notes
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            ticket_id,
+            ticket["ticket_no"],
+            (active or {}).get("id") if active else catalog.get("file_id"),
+            catalog.get("item_no"),
+            catalog.get("description"),
+            catalog.get("unit"),
+            qty,
+            unit_price,
+            totals["line_total"],
+            totals["work_class"],
+            totals["increase_ratio"],
+            totals["final_total"],
+            notes,
+        ),
+    )
+    db.sync_ticket_items_value(ticket_id, conn)
+    conn.commit()
+    conn.close()
+    db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
+    flash("تمت إضافة بند العقد وحساب التكلفة", "ok")
+    _after_data_change()
+    return redirect(url_for("ticket_view", ticket_id=ticket_id))
+
+
+@app.route("/tickets/<int:ticket_id>/boq/<int:line_id>/delete", methods=["POST"])
+@login_required
+def ticket_boq_delete(ticket_id, line_id):
+    if not permissions.can("tickets.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    conn.execute("DELETE FROM ticket_boq_lines WHERE id=? AND ticket_id=?", (line_id, ticket_id))
+    db.sync_ticket_items_value(ticket_id, conn)
+    conn.commit()
+    conn.close()
+    flash("تم حذف بند العقد", "ok")
+    _after_data_change()
+    return redirect(url_for("ticket_view", ticket_id=ticket_id))
 
 
 @app.route("/tickets/<int:ticket_id>/print")
@@ -975,10 +1192,17 @@ def module_new(name):
     if not module:
         return redirect(url_for("ops_home"))
     conn = db.connect()
-    tickets = [r["ticket_no"] for r in conn.execute("SELECT ticket_no FROM tickets ORDER BY id DESC").fetchall()]
+    ticket_options = db.list_ticket_options(conn)
+    tickets = [t["value"] for t in ticket_options]
     prefill = {f[0]: "" for f in module["fields"]}
     if request.args.get("ticket_no") and "ticket_no" in prefill:
         prefill["ticket_no"] = request.args.get("ticket_no")
+        ticket = db.resolve_ticket_ref(prefill["ticket_no"], conn)
+        if ticket and "rekaz_code" in prefill:
+            prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+    if name == "warehouse_tx" and request.args.get("ticket_no"):
+        prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
+        prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
     if request.method == "POST":
         data = _module_form_data(module)
         if name == "photos":
@@ -994,7 +1218,9 @@ def module_new(name):
                     module=module,
                     row=data,
                     tickets=tickets,
+                    ticket_options=ticket_options,
                     warehouse_items=[],
+                    boq_items=[],
                     mode="new",
                     section=section,
                     section_meta=SECTION_META.get(section),
@@ -1004,6 +1230,34 @@ def module_new(name):
                 )
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
+            data = db.enrich_warehouse_tx_codes(data, conn)
+            if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (
+                (data.get("ticket_no") or "").strip() or (data.get("rekaz_code") or "").strip()
+            ):
+                flash("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER", "danger")
+                section = module.get("section")
+                return render_template(
+                    "module_form.html",
+                    name=name,
+                    module=module,
+                    row=data,
+                    tickets=tickets,
+                    ticket_options=ticket_options,
+                    warehouse_items=db.list_warehouse_items(),
+                    boq_items=[],
+                    mode="new",
+                    section=section,
+                    section_meta=SECTION_META.get(section),
+                    section_modules=modules_for_section(section) if section else [],
+                )
+        if name == "quantities":
+            data = db.enrich_quantity_from_boq(data, conn)
+        if name == "quality_clearances" and not (data.get("rekaz_code") or "").strip():
+            data["rekaz_code"] = db.next_series_code("rr", conn)
+            if not (data.get("clearance_no") or "").strip():
+                data["clearance_no"] = data["rekaz_code"]
+        if name == "projects" and not (data.get("project_code") or "").strip():
+            data["project_code"] = db.next_series_code("pr", conn)
         keys = [f[0] for f in module["fields"]]
         cur = conn.execute(
             f"INSERT INTO {module['table']}({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
@@ -1017,9 +1271,13 @@ def module_new(name):
         _after_data_change()
         return _redirect_after_module(name, data)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
+    boq_items = db.list_boq_items(conn) if name == "quantities" else []
     if request.args.get("item_no") and "item_no" in prefill:
         prefill["item_no"] = request.args.get("item_no")
-        prefill = db.enrich_warehouse_tx_from_item(prefill)
+        if name == "warehouse_tx":
+            prefill = db.enrich_warehouse_tx_from_item(prefill)
+        if name == "quantities":
+            prefill = db.enrich_quantity_from_boq(prefill, conn)
     conn.close()
     section = module.get("section")
     return render_template(
@@ -1028,7 +1286,9 @@ def module_new(name):
         module=module,
         row=prefill,
         tickets=tickets,
+        ticket_options=ticket_options,
         warehouse_items=warehouse_items,
+        boq_items=boq_items,
         mode="new",
         section=section,
         section_meta=SECTION_META.get(section),
@@ -1046,7 +1306,8 @@ def module_edit(name, row_id):
         return redirect(url_for("ops_home"))
     conn = db.connect()
     row = conn.execute(f"SELECT * FROM {module['table']} WHERE id=?", (row_id,)).fetchone()
-    tickets = [r["ticket_no"] for r in conn.execute("SELECT ticket_no FROM tickets ORDER BY id DESC").fetchall()]
+    ticket_options = db.list_ticket_options(conn)
+    tickets = [t["value"] for t in ticket_options]
     if not row:
         conn.close()
         flash("السجل غير موجود", "danger")
@@ -1066,7 +1327,9 @@ def module_edit(name, row_id):
                     module=module,
                     row={**dict(row), **data},
                     tickets=tickets,
+                    ticket_options=ticket_options,
                     warehouse_items=[],
+                    boq_items=[],
                     mode="edit",
                     section=section,
                     section_meta=SECTION_META.get(section),
@@ -1076,6 +1339,32 @@ def module_edit(name, row_id):
                 )
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
+            data = db.enrich_warehouse_tx_codes(data, conn)
+            if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (
+                (data.get("ticket_no") or "").strip() or (data.get("rekaz_code") or "").strip()
+            ):
+                flash("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER", "danger")
+                section = module.get("section")
+                return render_template(
+                    "module_form.html",
+                    name=name,
+                    module=module,
+                    row=data,
+                    tickets=tickets,
+                    ticket_options=ticket_options,
+                    warehouse_items=db.list_warehouse_items(),
+                    boq_items=[],
+                    mode="edit",
+                    section=section,
+                    section_meta=SECTION_META.get(section),
+                    section_modules=modules_for_section(section) if section else [],
+                )
+        if name == "quantities":
+            data = db.enrich_quantity_from_boq(data, conn)
+        if name == "quality_clearances" and not (data.get("rekaz_code") or "").strip():
+            data["rekaz_code"] = db.next_series_code("rr", conn)
+        if name == "projects" and not (data.get("project_code") or "").strip():
+            data["project_code"] = db.next_series_code("pr", conn)
         keys = [f[0] for f in module["fields"]]
         sets = ", ".join([f"{k}=?" for k in keys])
         conn.execute(
@@ -1090,6 +1379,7 @@ def module_edit(name, row_id):
         return _redirect_after_module(name, data)
     data = dict(row)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
+    boq_items = db.list_boq_items(conn) if name == "quantities" else []
     conn.close()
     section = module.get("section")
     return render_template(
@@ -1098,7 +1388,9 @@ def module_edit(name, row_id):
         module=module,
         row=data,
         tickets=tickets,
+        ticket_options=ticket_options,
         warehouse_items=warehouse_items,
+        boq_items=boq_items,
         mode="edit",
         section=section,
         section_meta=SECTION_META.get(section),
@@ -1123,32 +1415,12 @@ def module_delete(name, row_id):
     return redirect(url_for("module_list", name=name))
 
 
-# ---------- Cashflow / Teams / Lists / Settings / SOP ----------
+# ---------- Cashflow (مخفي من الواجهة — يوجّه للمتابعات المالية) ----------
 @app.route("/cashflow", methods=["GET", "POST"])
 @login_required
 def cashflow():
-    conn = db.connect()
-    if request.method == "POST":
-        for i in range(12):
-            raw = (request.form.get(f"m{i}") or "").strip()
-            amount = float(raw) if raw != "" else None
-            conn.execute(
-                "INSERT INTO cash_actual(month_index, amount) VALUES (?,?) ON CONFLICT(month_index) DO UPDATE SET amount=excluded.amount",
-                (i, amount),
-            )
-        conn.commit()
-        flash("تم حفظ التحصيل الشهري", "ok")
-        _after_data_change()
-    cash_actual = {r["month_index"]: r["amount"] for r in conn.execute("SELECT * FROM cash_actual").fetchall()}
-    conn.close()
-    rows = calc_cashflow(cash_actual=cash_actual)
-    return render_template(
-        "cashflow.html",
-        rows=rows,
-        section="financial",
-        section_meta=SECTION_META["financial"],
-        section_modules=modules_for_section("financial"),
-    )
+    flash("صفحة التدفق النقدي غير مفعّلة في الواجهة. راجع المستخلصات من المتابعات المالية.", "ok")
+    return redirect(url_for("financial_home"))
 
 
 @app.route("/teams", methods=["GET", "POST"])

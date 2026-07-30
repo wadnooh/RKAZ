@@ -30,7 +30,24 @@
       {% if ftype == 'ticket' %}
         <select name="{{ key }}">
           <option value="">—</option>
+          {% for t in ticket_options or [] %}
+          <option value="{{ t.value }}" {% if row[key]==t.value %}selected{% endif %}>{{ t.label }}</option>
+          {% else %}
           {% for t in tickets %}<option value="{{ t }}" {% if row[key]==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+          {% endfor %}
+        </select>
+      {% elif ftype == 'boq_item' %}
+        <select name="{{ key }}" id="boqItemSelect">
+          <option value="">— اختر من دليل العقد —</option>
+          {% for it in boq_items or [] %}
+          <option value="{{ it.item_no }}"
+                  data-desc="{{ it.description or '' }}"
+                  data-unit="{{ it.unit or '' }}"
+                  data-price="{{ it.unit_price if it.unit_price is not none else '' }}"
+                  {% if row[key]==it.item_no %}selected{% endif %}>
+            {{ it.item_no }} — {{ it.description or '' }}
+          </option>
+          {% endfor %}
         </select>
       {% elif ftype == 'warehouse_item' %}
         <select name="{{ key }}" id="warehouseItemSelect">
@@ -109,6 +126,25 @@
     var unitInput = document.querySelector('input[name="unit"]');
     if (nameInput && opt.dataset.name) nameInput.value = opt.dataset.name;
     if (unitInput && opt.dataset.unit) unitInput.value = opt.dataset.unit;
+  }
+  sel.addEventListener("change", fill);
+})();
+</script>
+{% endif %}
+{% if name == 'quantities' %}
+<script>
+(function () {
+  var sel = document.getElementById("boqItemSelect");
+  if (!sel) return;
+  function fill() {
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt || !opt.value) return;
+    var desc = document.querySelector('input[name="description"]');
+    var unit = document.querySelector('input[name="unit"]');
+    var price = document.querySelector('input[name="unit_price"]');
+    if (desc && opt.dataset.desc) desc.value = opt.dataset.desc;
+    if (unit && opt.dataset.unit) unit.value = opt.dataset.unit;
+    if (price && opt.dataset.price) price.value = opt.dataset.price;
   }
   sel.addEventListener("change", fill);
 })();

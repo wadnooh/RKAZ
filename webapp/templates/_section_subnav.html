@@ -13,9 +13,6 @@
     {% if section == 'warehouses' %}
     <a class="btn ghost{% if p.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>
     {% endif %}
-    {% if section == 'financial' and can('cashflow.read') %}
-    <a class="btn ghost{% if p.startswith('/cashflow') %} primary{% endif %}" href="{{ url_for('cashflow') }}">التدفق النقدي</a>
-    {% endif %}
   </div>
 </div>
 {% endif %}
