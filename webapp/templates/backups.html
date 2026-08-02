@@ -3,19 +3,97 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">المزامنة السحابية — VPS ↔ Amazon S3</h2>
-      <div class="meta">قاعدة دائمة على السيرفر + رفع تلقائي إلى AWS والاستعادة منه عند الحاجة</div>
+      <h2 class="section-title">حفظ البيانات والنسخ الاحتياطي</h2>
+      <div class="meta">نسخ محلية قابلة للتنزيل + رفع تلقائي إلى Amazon S3 — رابط النظام: https://rekaz.wadnooh.com</div>
     </div>
+    <div class="actions">
+      <form method="post" action="{{ url_for('backups_auto_now') }}" style="display:inline;">
+        <button class="btn ghost" type="submit">حفظ تلقائي الآن</button>
+      </form>
+    </div>
+  </div>
+
+  {% if hosting and hosting.client_backup_mandatory %}
+  <div class="flash warning" style="margin-bottom:14px;">
+    <strong>إصدار التجربة — الحفظ على جهازك إلزامي</strong><br>
+    {{ hosting.hint }}<br>
+    <span class="meta">الخطة: {{ hosting.plan_label }}</span>
+  </div>
+  {% elif hosting %}
+  <div class="flash ok" style="margin-bottom:14px;">
+    {{ hosting.hint }}
+    <div class="meta" style="margin-top:6px;">الخطة: {{ hosting.plan_label }}</div>
+  </div>
+  {% endif %}
+
+  <div style="margin-bottom:14px;border:1px solid #c5d6c5;background:#f4faf4;border-radius:12px;padding:14px;">
+    <strong>كيف تحفظ أثناء التجربة؟</strong>
+    <ol class="meta" style="margin:8px 0 0 0;padding-inline-start:22px;line-height:1.8;">
+      <li>بعد إدخال بيانات مهمة: أنشئ حفظة من النموذج أدناه (أو اضغط «حفظ تلقائي الآن»).</li>
+      <li>من جدول <strong>أرشيف الحفظات</strong> اضغط <strong>تنزيل ZIP</strong> واحفظ الملف على جهازك.</li>
+      <li>للاستعادة: ارفع ملف ZIP من قسم «رفع حفظة» مع تفعيل الاستعادة الفورية، أو اختر حفظة من Amazon S3.</li>
+    </ol>
   </div>
 
   <div class="stats-grid" style="margin-bottom:8px;">
     <div class="stat-card"><div>ربط AWS</div><strong>{% if aws_link and aws_link.linked %}متصل{% else %}غير متصل{% endif %}</strong></div>
     <div class="stat-card"><div>الـ Bucket</div><strong style="font-size:0.85rem">{{ (auto.s3.bucket if auto and auto.s3 else '—') }}</strong></div>
-    <div class="stat-card"><div>المنطقة</div><strong>{{ (auto.s3.region if auto and auto.s3 else '—') }}</strong></div>
     <div class="stat-card"><div>دورة الحفظ</div><strong>كل {{ auto.interval_minutes if auto else 120 }} د</strong></div>
     <div class="stat-card"><div>آخر رفع لـ S3</div><strong style="font-size:0.85rem">{% if auto and auto.last_s3_upload %}{{ auto.last_s3_upload.at }}{% else %}—{% endif %}</strong></div>
     <div class="stat-card"><div>حجم القاعدة</div><strong>{{ current_size }}</strong></div>
+    <div class="stat-card"><div>الأعطال الآن</div><strong>{{ current_progress.tickets_total if current_progress else 0 }}</strong></div>
   </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">إنشاء حفظة يدوية</h3>
+      <div class="meta">يُنشئ نسخة على السيرفر ويرفعها إلى S3 عند التوفر — ثم نزّل ZIP إلى جهازك</div>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('backups_create') }}" class="form-grid">
+    <div class="field">
+      <label>نوع الحفظ</label>
+      <select name="purpose">
+        {% for key, label in purposes %}
+        <option value="{{ key }}" {% if hosting and hosting.is_trial_free and key=='trial' %}selected{% elif (not hosting or not hosting.is_trial_free) and key=='manual' %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>عنوان مختصر</label>
+      <input name="label" placeholder="مثال: حفظ نهاية يوم المراجعة" required>
+    </div>
+    <div class="field full">
+      <label>ملاحظة</label>
+      <textarea name="note" rows="2" placeholder="ماذا أُدخل أو رُاجع في هذه الجلسة؟"></textarea>
+    </div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">إنشاء حفظة الآن</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">رفع حفظة ZIP واستعادتها</h3>
+      <div class="meta">أعد البيانات من ملف نزّلته سابقاً على جهازك</div>
+    </div>
+  </div>
+  <form method="post" action="{{ url_for('backups_upload') }}" enctype="multipart/form-data" class="form-grid">
+    <div class="field full">
+      <label>ملف ZIP (يحتوي rakaz.db)</label>
+      <input type="file" name="backup_zip" accept=".zip,application/zip" required>
+    </div>
+    <div class="field full">
+      <label><input type="checkbox" name="also_restore" value="1" checked> استعادة فورية بعد الرفع (مع حفظة أمان تلقائية)</label>
+    </div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">رفع الحفظة</button>
+    </div>
+  </form>
 </div>
 
 {% if s3_backups %}
@@ -23,7 +101,7 @@
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">أرشيف Amazon S3</h3>
-      <div class="meta">الحفظات على السيرفر السحابي — الاستعادة تتم من هنا</div>
+      <div class="meta">الحفظات السحابية — الاستعادة من هنا عند الحاجة</div>
     </div>
   </div>
   <div class="table-wrap">
@@ -56,15 +134,60 @@
 </div>
 {% else %}
 <div class="card" style="margin-top:14px;">
-  <p class="meta">لا توجد حفظات على Amazon S3 بعد — ستظهر تلقائياً بعد أول دورة حفظ.</p>
+  <p class="meta">لا توجد حفظات على Amazon S3 بعد — ستظهر بعد أول حفظة ناجحة (يدوية أو تلقائية).</p>
 </div>
 {% endif %}
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">أرشيف الحفظات (محلي على السيرفر)</h3>
+      <div class="meta">من هنا تنزّل ZIP لجهازك أو تستعيد حفظة سابقة</div>
+    </div>
+  </div>
+  {% if backups %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>الحفظة</th>
+          <th>الأعطال</th>
+          <th>الحجم</th>
+          <th>إجراءات</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for b in backups %}
+        <tr>
+          <td>
+            <strong>{{ b.label or b.purpose_label }}</strong>
+            <div class="meta">{{ b.created_at }} — {{ b.purpose_label }} — {{ b.user_name }}</div>
+            {% if b.note %}<div class="meta">{{ b.note }}</div>{% endif %}
+          </td>
+          <td>{{ (b.progress or {}).get('tickets_total', 0) }}</td>
+          <td>{{ sizes.get(b._rel, '—') }}</td>
+          <td class="actions">
+            <a class="btn primary" href="{{ url_for('backups_download', rel=b._rel) }}">تنزيل ZIP</a>
+            <form method="post" action="{{ url_for('backups_restore') }}" style="display:inline;" onsubmit="return confirm('استعادة هذه الحفظة؟ سيتم إنشاء حفظة أمان أولاً.');">
+              <input type="hidden" name="rel" value="{{ b._rel }}">
+              <button class="btn danger" type="submit">استعادة</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="meta">لا توجد حفظات محلية بعد — أنشئ أول حفظة أعلاه.</p>
+  {% endif %}
+</div>
 
 {% if timeline %}
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">سجل المزامنة المحلي</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">سجل الحفظات الأخيرة</h3>
     </div>
   </div>
   <div class="table-wrap">

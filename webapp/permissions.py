@@ -33,7 +33,7 @@ PERM_LABELS = {
     "cashflow.write": "تعديل التدفق النقدي",
     "teams.write": "إدارة فرق المهام",
     "users.manage": "إدارة المستخدمين",
-    "backup.manage": "المزامنة التلقائية",
+    "backup.manage": "حفظ البيانات والنسخ الاحتياطي",
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",

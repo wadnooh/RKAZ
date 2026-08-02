@@ -52,17 +52,44 @@ def main() -> int:
         assert not backup.local_db_is_blank_or_seed(), "audit trail means real user data"
         print("OK audit_marks_real_data")
 
-        # ephemeral cloud delay cap
+        # ephemeral cloud delay cap (no RAKAZ_DATA_DIR)
+        os.environ.pop("RAKAZ_DATA_DIR", None)
         os.environ["TRIAL_MODE"] = "1"
         os.environ["RENDER"] = "1"
         os.environ["AUTO_BACKUP_ACTIVITY_MINUTES"] = "30"
+        importlib.reload(db)
         importlib.reload(backup)
         delay = backup.activity_backup_delay_seconds()
         assert delay <= 90, delay
-        print(f"OK trial_delay_capped_at_{delay}s")
+        print(f"OK ephemeral_delay_capped_at_{delay}s")
+
+        # trial + persistent disk: data stays persistent, backup still mandatory
+        os.environ["RAKAZ_DATA_DIR"] = td
+        os.environ["TRIAL_MODE"] = "1"
+        os.environ["RAKAZ_CLOUD"] = "1"
+        os.environ["AUTO_BACKUP_ACTIVITY_MINUTES"] = "30"
+        os.environ.pop("AUTO_BACKUP_ACTIVITY_SECONDS", None)
+        os.environ.pop("RENDER", None)
+        importlib.reload(db)
+        importlib.reload(backup)
+        info = backup.hosting_info()
+        assert info["is_trial_free"] is True
+        assert info["data_persistent"] is True
+        assert info["client_backup_mandatory"] is True
+        assert info["is_ephemeral"] is False
+        delay_persistent = backup.activity_backup_delay_seconds()
+        assert delay_persistent == 30 * 60, delay_persistent
+        print("OK trial_with_persistent_disk")
     finally:
         shutil.rmtree(td, ignore_errors=True)
-        for k in ("RAKAZ_DATA_DIR", "RAKAZ_SEED_DEMO", "TRIAL_MODE", "RENDER", "AUTO_BACKUP_ACTIVITY_MINUTES"):
+        for k in (
+            "RAKAZ_DATA_DIR",
+            "RAKAZ_SEED_DEMO",
+            "TRIAL_MODE",
+            "RENDER",
+            "RAKAZ_CLOUD",
+            "AUTO_BACKUP_ACTIVITY_MINUTES",
+        ):
             os.environ.pop(k, None)
 
     print("ALL_SMOKE_OK")

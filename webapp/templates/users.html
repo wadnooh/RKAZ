@@ -4,7 +4,7 @@
   <div class="actions">
     <a class="btn primary" href="{{ url_for('users_list') }}">المستخدمون والصلاحيات</a>
     {% if can('backup.manage') %}
-    <a class="btn ghost" href="{{ url_for('backups_home') }}">المزامنة التلقائية</a>
+    <a class="btn ghost" href="{{ url_for('backups_home') }}">حفظ البيانات</a>
     {% endif %}
   </div>
 </div>

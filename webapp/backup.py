@@ -44,37 +44,55 @@ def is_cloud() -> bool:
     return bool(os.environ.get("RENDER") or os.environ.get("RAKAZ_CLOUD", "").strip())
 
 
+def is_ephemeral_hosting() -> bool:
+    """سحابة بلا قرص دائم (مثل Render Free) — البيانات تُفقد عند إعادة النشر/السكون."""
+    return is_cloud() and not bool(os.environ.get("RAKAZ_DATA_DIR", "").strip())
+
+
 def is_trial_free() -> bool:
-    """وضع التجربة على السيرفر المجاني حتى الانتقال للمدفوع."""
+    """إصدار التجربة للعميل — يؤكد أهمية تنزيل الحفظات يدوياً."""
     flag = os.environ.get("TRIAL_MODE", "").strip().lower()
     if flag in {"0", "false", "no", "off", "paid"}:
         return False
     if flag in {"1", "true", "yes", "on", "trial", "free"}:
         return True
-    # افتراضي: على Render بدون قرص دائم = تجربة مجانية
-    return is_cloud() and not bool(os.environ.get("RAKAZ_DATA_DIR", "").strip())
+    # افتراضي: سحابة بلا قرص دائم = تجربة
+    return is_ephemeral_hosting()
 
 
 def hosting_info() -> dict:
     trial = is_trial_free()
     data_dir = os.environ.get("RAKAZ_DATA_DIR", "").strip()
+    ephemeral = is_ephemeral_hosting()
+    if trial and data_dir:
+        plan_label = "إصدار تجربة (VPS + SQLite دائم)"
+        hint = (
+            "مهم أثناء التجربة: نزّل ملف ZIP من صفحة «حفظ البيانات» بعد كل جلسة عمل. "
+            "الحفظ التلقائي يعمل محلياً وإلى Amazon S3، والتنزيل اليدوي هو نسختك على جهازك."
+        )
+    elif trial:
+        plan_label = "تجربة سحابية مؤقتة"
+        hint = (
+            "القرص غير دائم — احفظ ونزّل ZIP بعد كل تعديل مهم، "
+            "وارفعه لاحقاً من صفحة «حفظ البيانات» عند الحاجة."
+        )
+    elif data_dir:
+        plan_label = "سحابي دائم (VPS + SQLite)"
+        hint = "الحفظ التلقائي يعمل على قرص السيرفر وإلى Amazon S3. يُفضّل تنزيل ZIP دورياً كنسخة إضافية."
+    else:
+        plan_label = "محلي"
+        hint = "الحفظات تُنشأ في مجلد البيانات المحلي."
     return {
         "is_cloud": is_cloud(),
         "is_trial_free": trial,
-        "plan_label": (
-            "تجربة مجانية (Render Free)"
-            if trial
-            else ("سحابي دائم (VPS + SQLite)" if data_dir else "محلي")
-        ),
-        "data_persistent": bool(data_dir) and not trial,
+        "is_ephemeral": ephemeral,
+        "plan_label": plan_label,
+        # القرص الدائم يعتمد على RAKAZ_DATA_DIR فقط — لا يُلغى بوضع التجربة
+        "data_persistent": bool(data_dir),
+        "client_backup_mandatory": trial or ephemeral,
         "data_root": str(data_root()),
         "backups_root": str(backups_root()),
-        "hint": (
-            "الحفظ والاستعادة عبر Amazon S3 تلقائياً. "
-            "راجع: للعميل/الحفظ_والاستعادة_S3.md"
-            if trial
-            else "المزامنة التلقائية مع Amazon S3 تعمل في الخلفية."
-        ),
+        "hint": hint,
     }
 
 
@@ -529,7 +547,7 @@ def probe_aws_link() -> dict:
             "ok": False,
             "linked": False,
             "provider": "aws-s3",
-            "reason": "مفاتيح AWS أو اسم الـ Bucket غير مضبوطة على Render",
+            "reason": "مفاتيح AWS أو اسم الـ Bucket غير مضبوطة في بيئة التشغيل",
             "s3": cfg,
         }
     try:
@@ -688,7 +706,7 @@ def local_db_is_blank_or_seed() -> bool:
 
 def maybe_restore_from_s3_on_boot() -> dict:
     """
-    عند إقلاع Render: إن كانت القاعدة فارغة/بذرة وS3 فيه حفظات،
+    عند الإقلاع: إن كانت القاعدة فارغة/بذرة وS3 فيه حفظات،
     استعد أحدث نسخة تلقائياً (Newest by LastModified عبر list_s3_backups).
     لا نستبدل قاعدة فيها عمل مستخدم حقيقي — حتى لا نمسح تعديلات لم تُرفع بعد.
     """
@@ -707,7 +725,7 @@ def maybe_restore_from_s3_on_boot() -> dict:
 
     key = remote[0]["key"]
     try:
-        result = restore_from_s3(key, user_name="إقلاع Render←AWS")
+        result = restore_from_s3(key, user_name="إقلاع تلقائي←AWS")
         db.ensure_schema()
         return {"restored": True, "key": key, "result": result}
     except Exception as exc:
@@ -851,7 +869,7 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
             purpose=purpose,
             user_name=user_name,
         )
-        meta["_rel"] = str((data_root() / meta["path"]).relative_to(backups_root())).replace("\\", "/")
+        meta["_rel"] = backup_rel_from_meta(meta)
         delivery = deliver_backup(meta)
         # أعد التحميل بعد الرفع حتى لا نمسح last_s3_upload الذي كتبه upload_backup_to_s3
         state = load_auto_state()
@@ -960,10 +978,7 @@ def start_auto_backup_scheduler(app=None) -> None:
 
 
 def activity_backup_delay_seconds() -> int:
-    """
-    مهلة التجميع قبل الرفع بعد تعديل.
-    على Render Free يجب أن تكون قصيرة جداً — السيرفر قد ينام قبل 30 دقيقة.
-    """
+    """مهلة التجميع قبل الرفع بعد تعديل. على الاستضافة المؤقتة تُختصر حتى لا تُفقد البيانات."""
     raw_s = os.environ.get("AUTO_BACKUP_ACTIVITY_SECONDS", "").strip()
     if raw_s.isdigit():
         delay = max(5, int(raw_s))
@@ -971,19 +986,28 @@ def activity_backup_delay_seconds() -> int:
         raw_m = os.environ.get("AUTO_BACKUP_ACTIVITY_MINUTES", "").strip()
         if raw_m.isdigit():
             delay = max(5, int(raw_m) * 60)
-        elif is_trial_free() or is_cloud():
+        elif is_ephemeral_hosting() or is_cloud():
             delay = 45
         else:
             delay = 30 * 60
-    # قرص غير دائم: ارفع خلال 90 ثانية كحد أقصى حتى لا تُفقد التعديلات عند السكون
-    ephemeral = is_trial_free() or (is_cloud() and not os.environ.get("RAKAZ_DATA_DIR", "").strip())
-    if ephemeral:
+    # قرص غير دائم: ارفع خلال 90 ثانية كحد أقصى
+    if is_ephemeral_hosting():
         delay = min(delay, 90)
     return delay
 
 
+def backup_rel_from_meta(meta: dict) -> str:
+    """استخراج المسار النسبي للحفظة داخل مجلد backups."""
+    if meta.get("_rel"):
+        return str(meta["_rel"]).replace("\\", "/")
+    path = str(meta.get("path") or "").replace("\\", "/")
+    if path.startswith("backups/"):
+        return path[len("backups/") :]
+    return path
+
+
 def silent_backup_after_change() -> None:
-    """حفظ صامت Debounced بعد تعديل — يرفع إلى S3 قبل أن ينام Render Free."""
+    """حفظ صامت Debounced بعد تعديل — يرفع إلى S3 عند توفر المفاتيح."""
     if not auto_backup_enabled():
         return
 

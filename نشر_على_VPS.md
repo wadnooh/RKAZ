@@ -53,7 +53,7 @@ sudo systemctl restart rekaz
 SECRET_KEY=...
 RAKAZ_DATA_DIR=/opt/rekaz/data
 RAKAZ_CLOUD=1
-TRIAL_MODE=0
+TRIAL_MODE=1
 SESSION_COOKIE_SECURE=1
 FORCE_HTTPS=1
 AUTO_BACKUP=1
@@ -66,6 +66,10 @@ AWS_S3_REGION=eu-north-1
 AWS_S3_PREFIX=rekaz-backups
 AWS_S3_AUTO_RESTORE=1
 ```
+
+`TRIAL_MODE=1` يُظهر للعميل تنبيهات إلزامية لتنزيل ZIP على جهازه، دون إلغاء ثبات القرص (`RAKAZ_DATA_DIR`).
+بعد الاعتماد النهائي يمكن ضبط `TRIAL_MODE=0`.
+
 
 ---
 

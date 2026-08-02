@@ -71,13 +71,13 @@ def create_app():
     global _DB_READY
     db.init_db()
     _DB_READY = True
-    # استعادة تلقائية من AWS S3 إن كانت القاعدة فارغة بعد إعادة نشر Render
+    # استعادة تلقائية من AWS S3 إن كانت القاعدة فارغة/بذرة فقط
     try:
         backup_svc.maybe_restore_from_s3_on_boot()
         db.ensure_schema()
     except Exception:
         pass
-    # ابدأ الحفظ التلقائي في الخلفية (يرفع إلى S3)
+    # ابدأ الحفظ التلقائي في الخلفية (محلي + رفع إلى S3)
     try:
         backup_svc.start_auto_backup_scheduler(app)
     except Exception:
@@ -1699,15 +1699,30 @@ def teams_page():
 def backups_home():
     current = backup_svc.progress_snapshot()
     auto = backup_svc.auto_status()
+    hosting = backup_svc.hosting_info()
+    backups = backup_svc.list_backups(limit=40)
+    sizes = {}
+    for b in backups:
+        rel = b.get("_rel") or ""
+        try:
+            n = int((b.get("progress") or {}).get("db_size_bytes") or 0)
+            sizes[rel] = backup_svc.human_size(n)
+        except Exception:
+            sizes[rel] = "—"
     return render_template(
         "backups.html",
         timeline=backup_svc.progress_timeline(limit=40),
         current_progress=current,
         current_size=backup_svc.human_size(current.get("db_size_bytes") or 0),
-        hosting=backup_svc.hosting_info(),
+        hosting=hosting,
         auto=auto,
         s3_backups=auto.get("s3_backups") or [],
         aws_link=auto.get("aws_link") or {},
+        backups=backups,
+        sizes=sizes,
+        purposes=backup_svc.PURPOSE_CHOICES,
+        data_root=hosting.get("data_root"),
+        backups_root=hosting.get("backups_root"),
     )
 
 
@@ -1748,6 +1763,9 @@ def backups_create():
             purpose=purpose,
             user_name=current_user_name(),
         )
+        meta["_rel"] = backup_svc.backup_rel_from_meta(meta)
+        delivery = backup_svc.deliver_backup(meta)
+        s3 = (delivery or {}).get("s3") or {}
         db.log_audit(
             current_user_name(),
             "حفظ بيانات",
@@ -1755,6 +1773,11 @@ def backups_create():
             details=f"{meta.get('purpose_label')} — {meta.get('label')} — أعطال {meta.get('progress', {}).get('tickets_total', 0)}",
         )
         flash(f"تم إنشاء الحفظة: {meta.get('label') or meta.get('purpose_label')}", "ok")
+        if s3.get("ok"):
+            flash("رُفعت الحفظة أيضاً إلى Amazon S3.", "ok")
+        elif backup_svc.s3_configured():
+            flash(f"الحفظة محلية — تعذر الرفع إلى S3: {s3.get('error') or s3.get('reason') or '—'}", "warning")
+        flash("مهم: اضغط «تنزيل ZIP» بجانب الحفظة الجديدة واحفظها على جهازك.", "warning")
     except Exception as exc:
         flash(f"تعذر إنشاء الحفظة: {exc}", "danger")
     return redirect(url_for("backups_home"))
