@@ -61,7 +61,11 @@ def hosting_info() -> dict:
     return {
         "is_cloud": is_cloud(),
         "is_trial_free": trial,
-        "plan_label": "تجربة مجانية (Render Free)" if trial else ("سحابي دائم" if data_dir else "محلي"),
+        "plan_label": (
+            "تجربة مجانية (Render Free)"
+            if trial
+            else ("سحابي دائم (VPS + SQLite)" if data_dir else "محلي")
+        ),
         "data_persistent": bool(data_dir) and not trial,
         "data_root": str(data_root()),
         "backups_root": str(backups_root()),

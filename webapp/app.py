@@ -31,14 +31,23 @@ from webapp import backup as backup_svc
 from webapp import media as media_svc
 
 app = Flask(__name__, instance_relative_config=True)
-# يجب أن يبقى SECRET_KEY ثابتاً على Render — تغييره يُبطل جلسات الجميع
+# يجب أن يبقى SECRET_KEY ثابتاً بين إعادة التشغيل — تغييره يُبطل جلسات الجميع
 app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.permanent_session_lifetime = timedelta(days=30)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-# Render يضبط RENDER=true ويعمل خلف HTTPS
-app.config["SESSION_COOKIE_SECURE"] = bool(os.environ.get("RENDER"))
+# HTTPS خلف nginx/Render: SESSION_COOKIE_SECURE=1 أو RENDER أو FORCE_HTTPS
+_secure_cookie = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
+if _secure_cookie in {"1", "true", "yes", "on"}:
+    app.config["SESSION_COOKIE_SECURE"] = True
+elif _secure_cookie in {"0", "false", "no", "off"}:
+    app.config["SESSION_COOKIE_SECURE"] = False
+else:
+    app.config["SESSION_COOKIE_SECURE"] = bool(
+        os.environ.get("RENDER")
+        or os.environ.get("FORCE_HTTPS", "").strip().lower() in {"1", "true", "yes", "on"}
+    )
 # صور سجل الصور: عدة ملفات حتى ~6MB لكل منها
 app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
 app.url_map.strict_slashes = False
@@ -394,6 +403,8 @@ def health():
         }
     except Exception:
         auto = {"enabled": backup_svc.auto_backup_enabled()}
+    hosting = backup_svc.hosting_info()
+    data_dir = os.environ.get("RAKAZ_DATA_DIR", "").strip()
     return {
         "ok": True,
         "app": "rekaz",
@@ -405,7 +416,14 @@ def health():
             "auto_backup": True,
             "s3_backup": backup_svc.s3_configured(),
             "s3_restore": True,
-            "trial_mode": os.environ.get("TRIAL_MODE", "").strip() in {"1", "true", "yes"},
+            "trial_mode": hosting.get("is_trial_free"),
+        },
+        "storage": {
+            "db_path": str(db.DB_PATH),
+            "data_dir": data_dir or None,
+            "data_root": hosting.get("data_root"),
+            "data_persistent": bool(hosting.get("data_persistent")),
+            "plan_label": hosting.get("plan_label"),
         },
         "auto_backup": auto,
         "aws": {

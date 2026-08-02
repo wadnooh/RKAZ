@@ -1,44 +1,10 @@
-# مرحلة التجربة: خطة مجانية على Render
-# بعد الاعتماد: غيّر plan إلى starter وأضف disk + RAKAZ_DATA_DIR=/var/data وTRIAL_MODE=0
-services:
-  - type: web
-    name: rekaz-alenjaz
-    runtime: python
-    plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python -m webapp.app
-    healthCheckPath: /health
-    envVars:
-      # لا تستخدم generateValue هنا — إعادة تطبيق الـ Blueprint قد تُبدّل المفتاح وتُخرج الجميع.
-      # عيّن SECRET_KEY مرة واحدة في لوحة Render (Environment) واتركه كما هو دائماً.
-      - key: SECRET_KEY
-        sync: false
-      - key: HOST
-        value: "0.0.0.0"
-      - key: PORT
-        value: "10000"
-      - key: USE_WAITRESS
-        value: "1"
-      - key: TRIAL_MODE
-        value: "1"
-      - key: AUTO_BACKUP
-        value: "1"
-      - key: AUTO_BACKUP_HOURS
-        value: "2"
-      - key: AWS_S3_AUTO_RESTORE
-        value: "1"
-      # عيّن على Render (Environment) دون وضعها في Git:
-      # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY
-      # AWS_S3_BUCKET=rekaz-alenjaz-backups
-      # AWS_S3_REGION=eu-north-1
-      # AWS_S3_PREFIX=rekaz-backups
-      # AWS_S3_PHOTOS_PREFIX=rekaz-photos
-      - key: PYTHON_VERSION
-        value: "3.12.8"
-      # لا تفعّل RAKAZ_DATA_DIR على المجاني بدون Disk.
-      # عند الترقية للمدفوع أضف:
-      # - key: TRIAL_MODE
-      #   value: "0"
-      # - key: RAKAZ_DATA_DIR
-      #   value: "/var/data"
-      # وDisk على المسار /var/data
+# متقاعد — الاستضافة الرسمية انتقلت إلى VPS:
+#   https://rekaz.wadnooh.com
+#   /opt/rekaz + RAKAZ_DATA_DIR=/opt/rekaz/data
+# راجع: نشر_على_VPS.md
+#
+# أُبقي هذا الملف كأرشيف فقط حتى لا يُعاد إنشاء خدمة Render بالخطأ.
+# خدمة rekaz-alenjaz معلّقة ومُعطّل عليها النشر التلقائي.
+# لا تستخدم هذا الـ Blueprint لنشر جديد.
+
+# services: []

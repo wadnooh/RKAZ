@@ -105,7 +105,7 @@
     {% if name == 'photos' %}
     <p class="photo-storage-hint" style="grid-column:1/-1">
       صيغ مقبولة: JPG / PNG / WebP — حد أقصى 6 ميجا لكل صورة.
-      {% if photo_storage == 's3' %}التخزين: Amazon S3 (دائم).{% else %}التخزين: محلي على السيرفر{% if photo_ephemeral %} — القرص المؤقت على Render قد يُفقد عند إعادة النشر؛ يُفضّل تفعيل S3.{% endif %}.{% endif %}
+      {% if photo_storage == 's3' %}التخزين: Amazon S3 (دائم).{% else %}التخزين: محلي على السيرفر{% if photo_ephemeral %} — إن كان القرص مؤقتاً يُفضّل تفعيل S3.{% endif %}.{% endif %}
     </p>
     {% endif %}
     <div class="actions" style="grid-column:1/-1">
