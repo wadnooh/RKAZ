@@ -6,8 +6,5 @@
     <a class="btn ghost{% if active=='tickets' %} primary{% endif %}" href="{{ url_for('tickets_list') }}">الأعطال</a>
     {% endif %}
     <a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">فرق المهام العاجلة</a>
-    {% if can('sop.read') %}
-    <a class="btn ghost{% if active=='sop' %} primary{% endif %}" href="{{ url_for('sop_page') }}">إجراءات العمل</a>
-    {% endif %}
   </div>
 </div>

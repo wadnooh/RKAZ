@@ -447,8 +447,6 @@ def ops_home():
     tools = [
         {"label": "فرق المهام العاجلة", "href": url_for("teams_page")},
     ]
-    if permissions.can("sop.read"):
-        tools.append({"label": "إجراءات العمل (SOP)", "href": url_for("sop_page")})
 
     conn = db.connect()
     recent = db.rows_to_dicts(
@@ -1918,15 +1916,6 @@ def api_backups_sync_status():
     if not backup_svc.token_matches(token):
         return {"ok": False, "error": "رمز غير صالح"}, 401
     return {"ok": True, **backup_svc.auto_status()}, 200
-
-
-@app.route("/sop")
-@login_required
-def sop_page():
-    conn = db.connect()
-    rows = db.rows_to_dicts(conn.execute("SELECT * FROM sop ORDER BY id").fetchall())
-    conn.close()
-    return render_template("sop.html", rows=rows)
 
 
 @app.route("/warehouses/balances")

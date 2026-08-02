@@ -11,7 +11,6 @@ def jump_destinations():
         {"title": "الأعطال", "path": "/tickets", "group": "عمليات", "keywords": "عطل أعطال ticket fault طوارئ"},
         {"title": "عطل جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة عطل جديد"},
         {"title": "فرق المهام", "path": "/teams", "group": "عمليات", "keywords": "فرقة فريق"},
-        {"title": "إجراءات العمل SOP", "path": "/sop", "group": "عمليات", "keywords": "sop إجراء"},
         {"title": "الكميات (من داخل العطل)", "path": "/module/quantities", "group": "سجلات مرتبطة", "keywords": "كميات boq"},
         {"title": "قائمة الصور (من داخل العطل)", "path": "/module/photos", "group": "سجلات مرتبطة", "keywords": "صور"},
         {"title": "التمتير (من داخل العطل)", "path": "/module/metering", "group": "سجلات مرتبطة", "keywords": "تمتير مستخلص"},

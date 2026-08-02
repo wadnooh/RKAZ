@@ -37,7 +37,6 @@ PERM_LABELS = {
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",
-    "sop.read": "إجراءات العمل",
 }
 
 ALL_PERMS = set(PERM_LABELS)
@@ -81,7 +80,6 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "backup.manage",
             "export",
             "search",
-            "sop.read",
             # بدون users.manage — خاص بمدير النظام
         }
     ),
@@ -104,7 +102,6 @@ _ROLE_PERMS: dict[str, set[str]] = {
         "cashflow.read",
         "export",
         "search",
-        "sop.read",
     },
     "مراقب": _READ_ALL_SECTIONS
     | {
@@ -113,7 +110,6 @@ _ROLE_PERMS: dict[str, set[str]] = {
         "cashflow.read",
         "export",
         "search",
-        "sop.read",
         "audit.read",
     },
 }
@@ -328,9 +324,6 @@ def required_perm_for_request() -> str | None:
             return None if has_perm("teams.write") else "teams.write"
         return None if has_perm("section.ops") else "section.ops"
 
-    if ep == "sop_page":
-        return None if has_perm("sop.read") else "sop.read"
-
     if ep in {
         "warehouse_items_template",
         "warehouse_items_template_legacy",
@@ -430,7 +423,6 @@ def _perm_for_path(path: str) -> str | None:
         ("/tickets", "tickets.read"),
         ("/cashflow", "section.financial"),
         ("/teams", "section.ops"),
-        ("/sop", "sop.read"),
         ("/export", "export"),
         ("/ops", "section.ops"),
         ("/search", "search"),
