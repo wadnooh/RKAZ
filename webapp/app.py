@@ -401,8 +401,6 @@ def health():
         or os.environ.get("RAKAZ_BUILD")
         or "local",
         "features": {
-            "review_removed": True,
-            "rasmalah_tabs": True,
             "backups": True,
             "auto_backup": True,
             "s3_backup": backup_svc.s3_configured(),
