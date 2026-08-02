@@ -67,9 +67,22 @@ AWS_S3_PREFIX=rekaz-backups
 AWS_S3_AUTO_RESTORE=1
 ```
 
-`TRIAL_MODE=1` يُظهر للعميل تنبيهات إلزامية لتنزيل ZIP على جهازه، دون إلغاء ثبات القرص (`RAKAZ_DATA_DIR`).
+`TRIAL_MODE=1` لا يلغي ثبات القرص (`RAKAZ_DATA_DIR`). الحفظ تلقائي صامت بدون واجهة للمستخدم.
 بعد الاعتماد النهائي يمكن ضبط `TRIAL_MODE=0`.
 
+---
+
+## استعادة طارئة (CLI — بدون واجهة)
+
+```bash
+cd /opt/rekaz
+sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/restore_backup.py --list
+sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/restore_backup.py --list-s3
+sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/restore_backup.py --export-zip /tmp/rekaz-latest.zip
+sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/restore_backup.py --s3-latest --yes
+```
+
+سجل الحفظ التلقائي: `/opt/rekaz/data/backups/.auto_backup.log`
 
 ---
 

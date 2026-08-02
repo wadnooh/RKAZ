@@ -33,7 +33,6 @@ PERM_LABELS = {
     "cashflow.write": "تعديل التدفق النقدي",
     "teams.write": "إدارة فرق المهام",
     "users.manage": "إدارة المستخدمين",
-    "backup.manage": "حفظ البيانات والنسخ الاحتياطي",
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",
@@ -77,7 +76,6 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "cashflow.write",
             "teams.write",
             "audit.read",
-            "backup.manage",
             "export",
             "search",
             # بدون users.manage — خاص بمدير النظام
@@ -354,18 +352,6 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
-    if ep in {
-        "backups_home",
-        "backups_create",
-        "backups_download",
-        "backups_restore",
-        "backups_restore_s3",
-        "backups_upload",
-        "backups_auto_now",
-        "backups_regen_token",
-    }:
-        return None if has_perm("backup.manage") else "backup.manage"
-
     if ep in {"audit_log_home", "audit_log_page"}:
         return None if has_perm("audit.read") else "audit.read"
 
@@ -407,7 +393,6 @@ def _perm_for_path(path: str) -> str | None:
         return SECTION_PERMS.get(section or "", "modules.read")
     rules = (
         ("/users", "users.manage"),
-        ("/admin/backups", "backup.manage"),
         ("/admin/audit", "audit.read"),
         ("/constructions", "section.constructions"),
         ("/projects", "section.projects"),

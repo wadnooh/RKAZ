@@ -8,7 +8,7 @@ if (-not (Test-Path $ConfigPath)) {
   if (Test-Path $example) {
     Copy-Item $example $ConfigPath
   }
-  Write-Host "Create sync_config.json and set token from backups page."
+  Write-Host "Create sync_config.json and set BACKUP_SYNC_TOKEN from /etc/rekaz.env (ops only)."
   exit 2
 }
 

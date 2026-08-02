@@ -88,9 +88,6 @@
     {% if can('users.manage') %}
     <a class="tab{% if p.startswith('/users') %} active{% endif %}" href="{{ url_for('users_home') }}">المستخدمون</a>
     {% endif %}
-    {% if can('backup.manage') %}
-    <a class="tab{% if p.startswith('/admin/backups') %} active{% endif %}" href="{{ url_for('backups_home') }}">حفظ البيانات</a>
-    {% endif %}
     {% if can('audit.read') %}
     <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">سجل النشاط</a>
     {% endif %}

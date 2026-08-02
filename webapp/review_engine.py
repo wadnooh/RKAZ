@@ -28,7 +28,6 @@ def jump_destinations():
         {"title": "إدارة العقود وبنود العقد", "path": "/contracts-admin", "group": "عقود", "keywords": "عقد بنود boq"},
         {"title": "دليل بنود العقد", "path": "/module/boq_items", "group": "عقود", "keywords": "بند عقد دليل"},
         {"title": "المستخدمون", "path": "/users/list", "group": "إدارة", "keywords": "مستخدم"},
-        {"title": "حفظ البيانات", "path": "/admin/backups", "group": "إدارة", "keywords": "مزامنة backup حفظ تلقائي تجربة تنزيل"},
         {"title": "سجل النشاط", "path": "/admin/audit-log/view", "group": "إدارة", "keywords": "سجل audit"},
         {"title": "البحث العام", "path": "/search", "group": "إدارة", "keywords": "بحث search"},
     ]

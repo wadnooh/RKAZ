@@ -61,6 +61,7 @@ PUBLIC_ENDPOINTS = {
     "set_lang",
     "static",
     "health",
+    "backups_ui_removed",
     "api_backups_latest",
     "api_backups_auto_run",
     "api_backups_sync_status",
@@ -413,6 +414,7 @@ def health():
         or "local",
         "features": {
             "backups": True,
+            "backups_ui": False,
             "auto_backup": True,
             "s3_backup": backup_svc.s3_configured(),
             "s3_restore": True,
@@ -1692,189 +1694,16 @@ def teams_page():
     return render_template("teams.html", rows=rows)
 
 
-@app.route("/admin/backups")
-@login_required
-def backups_home():
-    current = backup_svc.progress_snapshot()
-    auto = backup_svc.auto_status()
-    hosting = backup_svc.hosting_info()
-    backups = backup_svc.list_backups(limit=40)
-    sizes = {}
-    for b in backups:
-        rel = b.get("_rel") or ""
-        try:
-            n = int((b.get("progress") or {}).get("db_size_bytes") or 0)
-            sizes[rel] = backup_svc.human_size(n)
-        except Exception:
-            sizes[rel] = "—"
-    return render_template(
-        "backups.html",
-        timeline=backup_svc.progress_timeline(limit=40),
-        current_progress=current,
-        current_size=backup_svc.human_size(current.get("db_size_bytes") or 0),
-        hosting=hosting,
-        auto=auto,
-        s3_backups=auto.get("s3_backups") or [],
-        aws_link=auto.get("aws_link") or {},
-        backups=backups,
-        sizes=sizes,
-        purposes=backup_svc.PURPOSE_CHOICES,
-        data_root=hosting.get("data_root"),
-        backups_root=hosting.get("backups_root"),
-    )
-
-
-@app.route("/admin/backups/restore-s3", methods=["POST"])
-@login_required
-def backups_restore_s3():
-    key = (request.form.get("key") or "").strip()
-    if not key:
-        flash("اختر حفظة من Amazon S3.", "danger")
-        return redirect(url_for("backups_home"))
-    try:
-        result = backup_svc.restore_from_s3(key, user_name=current_user_name())
-        db.log_audit(
-            current_user_name(),
-            "استعادة من AWS S3",
-            "نسخة احتياطية",
-            details=key,
-        )
-        flash(
-            f"تمت الاستعادة من Amazon S3: {(result.get('imported') or {}).get('id') or key}",
-            "ok",
-        )
-    except Exception as exc:
-        flash(f"تعذر الاستعادة من S3: {exc}", "danger")
-    return redirect(url_for("backups_home"))
-
-
-@app.route("/admin/backups/create", methods=["POST"])
-@login_required
-def backups_create():
-    try:
-        purpose = request.form.get("purpose") or "manual"
-        if backup_svc.is_trial_free() and purpose == "manual":
-            purpose = "trial"
-        meta = backup_svc.create_backup(
-            label=request.form.get("label") or "",
-            note=request.form.get("note") or "",
-            purpose=purpose,
-            user_name=current_user_name(),
-        )
-        meta["_rel"] = backup_svc.backup_rel_from_meta(meta)
-        delivery = backup_svc.deliver_backup(meta)
-        s3 = (delivery or {}).get("s3") or {}
-        db.log_audit(
-            current_user_name(),
-            "حفظ بيانات",
-            "نسخة احتياطية",
-            details=f"{meta.get('purpose_label')} — {meta.get('label')} — أعطال {meta.get('progress', {}).get('tickets_total', 0)}",
-        )
-        flash(f"تم إنشاء الحفظة: {meta.get('label') or meta.get('purpose_label')}", "ok")
-        if s3.get("ok"):
-            flash("رُفعت الحفظة أيضاً إلى Amazon S3.", "ok")
-        elif backup_svc.s3_configured():
-            flash(f"الحفظة محلية — تعذر الرفع إلى S3: {s3.get('error') or s3.get('reason') or '—'}", "warning")
-        flash("مهم: اضغط «تنزيل ZIP» بجانب الحفظة الجديدة واحفظها على جهازك.", "warning")
-    except Exception as exc:
-        flash(f"تعذر إنشاء الحفظة: {exc}", "danger")
-    return redirect(url_for("backups_home"))
-
-
-@app.route("/admin/backups/download")
-@login_required
-def backups_download():
-    rel = request.args.get("rel") or ""
-    try:
-        zip_path = backup_svc.build_backup_zip(rel)
-        return send_file(
-            zip_path,
-            as_attachment=True,
-            download_name=f"rekaz-backup-{rel.replace('/', '-')}.zip",
-        )
-    except Exception as exc:
-        flash(f"تعذر التنزيل: {exc}", "danger")
-        return redirect(url_for("backups_home"))
-
-
-@app.route("/admin/backups/restore", methods=["POST"])
-@login_required
-def backups_restore():
-    rel = request.form.get("rel") or ""
-    try:
-        result = backup_svc.restore_backup(rel, user_name=current_user_name())
-        db.log_audit(
-            current_user_name(),
-            "استعادة بيانات",
-            "نسخة احتياطية",
-            details=f"استعادة {rel} | أمان: {result['safety'].get('id')}",
-        )
-        flash("تمت الاستعادة بنجاح (مع حفظة أمان تلقائية).", "ok")
-    except Exception as exc:
-        flash(f"تعذر الاستعادة: {exc}", "danger")
-    return redirect(url_for("backups_home"))
-
-
-@app.route("/admin/backups/upload", methods=["POST"])
-@login_required
-def backups_upload():
-    f = request.files.get("backup_zip")
-    if not f or not f.filename:
-        flash("اختر ملف ZIP للحفظة.", "danger")
-        return redirect(url_for("backups_home"))
-    also_restore = request.form.get("also_restore") == "1"
-    try:
-        result = backup_svc.import_backup_zip(
-            f,
-            user_name=current_user_name(),
-            also_restore=also_restore,
-        )
-        db.log_audit(
-            current_user_name(),
-            "رفع حفظة",
-            "نسخة احتياطية",
-            details=f"{result['imported'].get('label')} — استعادة={also_restore}",
-        )
-        flash("تم رفع الحفظة إلى السيرفر.", "ok")
-        if also_restore:
-            flash("تمت استعادة البيانات من الملف المرفوع.", "ok")
-    except Exception as exc:
-        flash(f"تعذر رفع الحفظة: {exc}", "danger")
-    return redirect(url_for("backups_home"))
-
-
-@app.route("/admin/backups/auto-now", methods=["POST"])
-@login_required
-def backups_auto_now():
-    try:
-        result = backup_svc.create_auto_backup(force=True, user_name=current_user_name())
-        if result.get("created"):
-            s3 = (result.get("delivery") or {}).get("s3") or {}
-            if s3.get("ok"):
-                flash("تم الحفظ ورفعه إلى Amazon S3.", "ok")
-            else:
-                flash("تم الحفظ محلياً — تعذر الرفع إلى S3.", "warning")
-        else:
-            flash(result.get("reason") or result.get("error") or "لم تُنشأ حفظة", "warning")
-    except Exception as exc:
-        flash(f"تعذر الحفظ التلقائي: {exc}", "danger")
-    return redirect(url_for("backups_home"))
-
-
-@app.route("/admin/backups/regen-token", methods=["POST"])
-@login_required
-def backups_regen_token():
-    try:
-        backup_svc.regenerate_sync_token()
-        flash("تم توليد رمز مزامنة جديد — حدّث ملف الإعداد على الجهاز الرئيسي.", "ok")
-    except Exception as exc:
-        flash(f"تعذر توليد الرمز: {exc}", "danger")
-    return redirect(url_for("backups_home"))
+@app.route("/admin/backups", defaults={"subpath": ""})
+@app.route("/admin/backups/<path:subpath>")
+def backups_ui_removed(subpath=""):
+    """صفحة الحفظ أُزيلت من واجهة المنتج — الحفظ يعمل تلقائياً في الخلفية."""
+    abort(404)
 
 
 @app.route("/api/backups/latest")
 def api_backups_latest():
-    """سحب أحدث حفظة للجهاز الرئيسي (يتطلب رمز المزامنة)."""
+    """سحب أحدث حفظة للجهاز الرئيسي (يتطلب رمز المزامنة) — للاستخدام التشغيلي فقط."""
     token = request.args.get("token") or request.headers.get("X-Backup-Token")
     if not backup_svc.token_matches(token):
         return {"ok": False, "error": "رمز غير صالح"}, 401

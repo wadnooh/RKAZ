@@ -1,8 +1,9 @@
-"""مسار حفظ منظم للبيانات + لقطات تقدّم العمل للتطوير."""
+"""حفظ تلقائي صامت للبيانات (محلي + S3) — بدون واجهة للمستخدم."""
 
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import secrets
@@ -19,6 +20,8 @@ from pathlib import Path
 from webapp import db
 from webapp.modules_config import MODULES, SECTION_META
 
+log = logging.getLogger("rekaz.backup")
+
 SAFE_LABEL = re.compile(r"[^\w\u0600-\u06FF\-]+", re.UNICODE)
 
 PURPOSE_CHOICES = [
@@ -32,12 +35,20 @@ PURPOSE_CHOICES = [
 ]
 
 _auto_lock = threading.Lock()
+_backup_io_lock = threading.RLock()
 _scheduler_started = False
 _silent_timer = None
 _silent_lock = threading.Lock()
 
 # رقم العطل التجريبي الذي يُزرع محلياً — لا يُعتبر بيانات مستخدم على السحابة
 SEED_TICKET_NO = "43656357"
+# يجب كتابتها حرفياً في نموذج الاستعادة لتأكيد النية
+RESTORE_CONFIRM_PHRASE = "استعادة"
+# حد أقصى لحجم ZIP المرفوع (بايت) — يحمي من ملفات ضخمة بالخطأ
+MAX_UPLOAD_ZIP_BYTES = 512 * 1024 * 1024
+# تحذير إن تجاوز عمر آخر حفظة هذا المضاعف من دورة الحفظ
+STALE_BACKUP_MULTIPLIER = 2.5
+MIN_FREE_DISK_BYTES = 64 * 1024 * 1024
 
 
 def is_cloud() -> bool:
@@ -50,7 +61,7 @@ def is_ephemeral_hosting() -> bool:
 
 
 def is_trial_free() -> bool:
-    """إصدار التجربة للعميل — يؤكد أهمية تنزيل الحفظات يدوياً."""
+    """إصدار التجربة للعميل — القرص قد يكون دائماً مع ذلك عبر RAKAZ_DATA_DIR."""
     flag = os.environ.get("TRIAL_MODE", "").strip().lower()
     if flag in {"0", "false", "no", "off", "paid"}:
         return False
@@ -67,21 +78,21 @@ def hosting_info() -> dict:
     if trial and data_dir:
         plan_label = "إصدار تجربة (VPS + SQLite دائم)"
         hint = (
-            "مهم أثناء التجربة: نزّل ملف ZIP من صفحة «حفظ البيانات» بعد كل جلسة عمل. "
-            "الحفظ التلقائي يعمل محلياً وإلى Amazon S3، والتنزيل اليدوي هو نسختك على جهازك."
+            "القرص على السيرفر دائم — بياناتك لا تُمسح بإعادة التشغيل. "
+            "الحفظ التلقائي يعمل في الخلفية محلياً وإلى Amazon S3 دون تدخل منك."
         )
     elif trial:
         plan_label = "تجربة سحابية مؤقتة"
         hint = (
-            "القرص غير دائم — احفظ ونزّل ZIP بعد كل تعديل مهم، "
-            "وارفعه لاحقاً من صفحة «حفظ البيانات» عند الحاجة."
+            "القرص غير دائم — الحفظ التلقائي يرفع النسخ إلى Amazon S3 في الخلفية. "
+            "اطلب نسخة ZIP من مسؤول التشغيل عند الحاجة."
         )
     elif data_dir:
         plan_label = "سحابي دائم (VPS + SQLite)"
-        hint = "الحفظ التلقائي يعمل على قرص السيرفر وإلى Amazon S3. يُفضّل تنزيل ZIP دورياً كنسخة إضافية."
+        hint = "الحفظ التلقائي يعمل على قرص السيرفر وإلى Amazon S3 دون واجهة للمستخدم."
     else:
         plan_label = "محلي"
-        hint = "الحفظات تُنشأ في مجلد البيانات المحلي."
+        hint = "الحفظات تُنشأ تلقائياً في مجلد البيانات المحلي."
     return {
         "is_cloud": is_cloud(),
         "is_trial_free": trial,
@@ -89,11 +100,75 @@ def hosting_info() -> dict:
         "plan_label": plan_label,
         # القرص الدائم يعتمد على RAKAZ_DATA_DIR فقط — لا يُلغى بوضع التجربة
         "data_persistent": bool(data_dir),
-        "client_backup_mandatory": trial or ephemeral,
+        "client_backup_mandatory": False,
         "data_root": str(data_root()),
         "backups_root": str(backups_root()),
         "hint": hint,
+        "restore_confirm_phrase": RESTORE_CONFIRM_PHRASE,
     }
+
+
+def local_keep_count() -> int:
+    raw = os.environ.get("BACKUP_KEEP_LOCAL", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return max(5, min(int(raw), 500))
+    return 30
+
+
+def s3_keep_count() -> int:
+    raw = os.environ.get("BACKUP_KEEP_S3", "").strip()
+    if raw.isdigit() and int(raw) > 0:
+        return max(5, min(int(raw), 500))
+    return 40
+
+
+def free_disk_bytes(path: Path | None = None) -> int | None:
+    try:
+        usage = shutil.disk_usage(str(path or data_root()))
+        return int(usage.free)
+    except Exception:
+        return None
+
+
+def ensure_disk_space(min_bytes: int = MIN_FREE_DISK_BYTES) -> None:
+    free = free_disk_bytes()
+    if free is not None and free < min_bytes:
+        raise OSError(
+            f"مساحة القرص غير كافية للحفظ (المتبقي {human_size(free)}، المطلوب على الأقل {human_size(min_bytes)})."
+        )
+
+
+def validate_sqlite_file(path: Path) -> dict:
+    """تحقق أن الملف SQLite صالح ويمرّ integrity_check."""
+    path = Path(path)
+    if not path.exists() or path.stat().st_size < 100:
+        raise ValueError("ملف قاعدة البيانات فارغ أو غير موجود")
+    try:
+        conn = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    except Exception:
+        conn = sqlite3.connect(str(path))
+    try:
+        conn.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
+        row = conn.execute("PRAGMA integrity_check").fetchone()
+        ok = bool(row and str(row[0]).lower() == "ok")
+        if not ok:
+            raise ValueError(f"فحص سلامة القاعدة فشل: {row[0] if row else 'unknown'}")
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "tickets" not in tables and "users" not in tables:
+            raise ValueError("الملف لا يشبه قاعدة ركاز (لا جداول أساسية)")
+        return {"ok": True, "tables": len(tables), "size": path.stat().st_size}
+    finally:
+        conn.close()
+
+
+def confirm_restore_phrase(provided: str | None) -> bool:
+    text = (provided or "").strip()
+    return text == RESTORE_CONFIRM_PHRASE
 
 
 def data_root() -> Path:
@@ -182,44 +257,51 @@ def create_backup(
     if not db.DB_PATH.exists():
         raise FileNotFoundError("قاعدة البيانات غير موجودة بعد.")
 
-    now = datetime.now()
-    purpose = purpose if purpose in {p for p, _ in PURPOSE_CHOICES} else "manual"
-    purpose_ar = dict(PURPOSE_CHOICES).get(purpose, purpose)
-    folder_name = f"{now.strftime('%H%M%S')}__{purpose}__{_slug(label or purpose_ar)}"
-    dest = backups_root() / now.strftime("%Y") / now.strftime("%m") / now.strftime("%d") / folder_name
-    dest.mkdir(parents=True, exist_ok=False)
+    with _backup_io_lock:
+        ensure_disk_space()
+        now = datetime.now()
+        purpose = purpose if purpose in {p for p, _ in PURPOSE_CHOICES} else "manual"
+        purpose_ar = dict(PURPOSE_CHOICES).get(purpose, purpose)
+        folder_name = f"{now.strftime('%H%M%S')}__{purpose}__{_slug(label or purpose_ar)}"
+        dest = backups_root() / now.strftime("%Y") / now.strftime("%m") / now.strftime("%d") / folder_name
+        dest.mkdir(parents=True, exist_ok=False)
 
-    dest_db = dest / "rakaz.db"
-    # نسخة آمنة أثناء التشغيل
-    src = sqlite3.connect(str(db.DB_PATH))
-    try:
-        dst = sqlite3.connect(str(dest_db))
+        dest_db = dest / "rakaz.db"
         try:
-            src.backup(dst)
-        finally:
-            dst.close()
-    finally:
-        src.close()
+            # نسخة آمنة أثناء التشغيل
+            src = sqlite3.connect(str(db.DB_PATH))
+            try:
+                dst = sqlite3.connect(str(dest_db))
+                try:
+                    src.backup(dst)
+                finally:
+                    dst.close()
+            finally:
+                src.close()
+            validate_sqlite_file(dest_db)
+        except Exception:
+            shutil.rmtree(dest, ignore_errors=True)
+            raise
 
-    progress = progress_snapshot()
-    meta = {
-        "id": f"{now.strftime('%Y/%m/%d')}/{folder_name}",
-        "created_at": now.isoformat(timespec="seconds"),
-        "purpose": purpose,
-        "purpose_label": purpose_ar,
-        "label": (label or "").strip(),
-        "note": (note or "").strip(),
-        "user_name": user_name or "نظام",
-        "app": "rekaz",
-        "path": str(dest.relative_to(data_root())).replace("\\", "/"),
-        "db_file": "rakaz.db",
-        "progress": progress,
-    }
-    (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
+        progress = progress_snapshot()
+        meta = {
+            "id": f"{now.strftime('%Y/%m/%d')}/{folder_name}",
+            "created_at": now.isoformat(timespec="seconds"),
+            "purpose": purpose,
+            "purpose_label": purpose_ar,
+            "label": (label or "").strip(),
+            "note": (note or "").strip(),
+            "user_name": user_name or "نظام",
+            "app": "rekaz",
+            "path": str(dest.relative_to(data_root())).replace("\\", "/"),
+            "db_file": "rakaz.db",
+            "progress": progress,
+        }
+        (dest / "meta.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
 
-    # فهرس سريع لآخر الحفظات
-    _append_index(meta)
-    return meta
+        # فهرس سريع لآخر الحفظات
+        _append_index(meta)
+        return meta
 
 
 def _index_path() -> Path:
@@ -284,46 +366,111 @@ def build_backup_zip(rel_path: str) -> Path:
     if not meta:
         raise FileNotFoundError("الحفظة غير موجودة")
     folder = Path(meta["_dir"])
-    zip_path = folder / "backup.zip"
+    db_file = folder / "rakaz.db"
+    meta_file = folder / "meta.json"
+    if not db_file.exists():
+        raise FileNotFoundError("ملف قاعدة الحفظة غير موجود")
+    # مجلد تنزيل منفصل حتى لا نعيد ضغط الملف أثناء الإرسال
+    out_dir = backups_root() / "_download"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    safe_name = re.sub(r"[^A-Za-z0-9._\-]+", "-", rel_path.replace("/", "-")).strip("-")[:140]
+    zip_path = out_dir / f"rekaz-backup-{safe_name or 'latest'}.zip"
     if zip_path.exists():
-        zip_path.unlink()
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-        zf.write(folder / "rakaz.db", arcname="rakaz.db")
-        zf.write(folder / "meta.json", arcname="meta.json")
+        try:
+            zip_path.unlink()
+        except OSError:
+            pass
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, allowZip64=True) as zf:
+        zf.write(db_file, arcname="rakaz.db")
+        if meta_file.exists():
+            zf.write(meta_file, arcname="meta.json")
     return zip_path
 
 
-def restore_backup(rel_path: str, *, user_name: str = "") -> dict:
-    """استعادة قاعدة البيانات من حفظة — مع عمل حفظة أمان تلقائية أولاً."""
+def _safe_extract_zip(zf: zipfile.ZipFile, dest: Path) -> None:
+    """استخراج آمن يمنع Zip Slip."""
+    dest = dest.resolve()
+    for info in zf.infolist():
+        name = info.filename.replace("\\", "/")
+        if not name or name.endswith("/"):
+            continue
+        if name.startswith("/") or re.match(r"^[A-Za-z]:", name) or ".." in Path(name).parts:
+            raise ValueError(f"مسار غير آمن داخل ZIP: {info.filename}")
+        target = (dest / name).resolve()
+        if not str(target).startswith(str(dest) + os.sep) and target != dest:
+            raise ValueError(f"مسار غير آمن داخل ZIP: {info.filename}")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with zf.open(info, "r") as src, open(target, "wb") as out:
+            shutil.copyfileobj(src, out)
+
+
+def restore_backup(rel_path: str, *, user_name: str = "", confirm_phrase: str | None = None) -> dict:
+    """استعادة ذرّية: تحقق سلامة → حفظة أمان → نسخ مؤقت → استبدال."""
+    if confirm_phrase is not None and not confirm_restore_phrase(confirm_phrase):
+        raise ValueError(f"للتأكيد اكتب كلمة «{RESTORE_CONFIRM_PHRASE}» حرفياً.")
+
     meta = get_backup(rel_path)
     if not meta:
         raise FileNotFoundError("الحفظة غير موجودة")
 
-    safety = create_backup(
-        label="قبل الاستعادة",
-        note=f"حفظ أمان قبل استعادة: {meta.get('id')}",
-        purpose="before_change",
-        user_name=user_name or "نظام",
-    )
-
     src_db = Path(meta["_db"])
-    tmp = db.DB_PATH.with_suffix(".restore.tmp")
-    shutil.copy2(src_db, tmp)
-    tmp.replace(db.DB_PATH)
-    # الحفظات القديمة قد لا تحتوي جداول المقاولين/الموارد البشرية
-    db.ensure_schema()
+    validate_sqlite_file(src_db)
 
-    return {"restored": meta, "safety": safety}
+    with _backup_io_lock:
+        ensure_disk_space(min_bytes=max(MIN_FREE_DISK_BYTES, src_db.stat().st_size * 3))
+        safety = create_backup(
+            label="قبل الاستعادة",
+            note=f"حفظ أمان قبل استعادة: {meta.get('id')}",
+            purpose="before_change",
+            user_name=user_name or "نظام",
+        )
+
+        tmp = db.DB_PATH.with_suffix(".restore.tmp")
+        bak = db.DB_PATH.with_suffix(".restore.bak")
+        try:
+            if tmp.exists():
+                tmp.unlink()
+            shutil.copy2(src_db, tmp)
+            validate_sqlite_file(tmp)
+            # احتفظ بنسخة لحظية من القاعدة الحية قبل الاستبدال
+            if db.DB_PATH.exists():
+                if bak.exists():
+                    bak.unlink()
+                shutil.copy2(db.DB_PATH, bak)
+            tmp.replace(db.DB_PATH)
+            db.ensure_schema()
+            if bak.exists():
+                try:
+                    bak.unlink()
+                except OSError:
+                    pass
+        except Exception:
+            # حاول الرجوع من .bak إن فشلت الاستعادة بعد الاستبدال
+            if bak.exists() and (not db.DB_PATH.exists() or db.DB_PATH.stat().st_size < 100):
+                try:
+                    bak.replace(db.DB_PATH)
+                except Exception:
+                    pass
+            if tmp.exists():
+                try:
+                    tmp.unlink()
+                except OSError:
+                    pass
+            raise
+
+        return {"restored": meta, "safety": safety}
 
 
-def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool = False) -> dict:
+def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool = False, confirm_phrase: str | None = None) -> dict:
     """
     رفع حفظة ZIP (rakaz.db + meta.json اختيارياً) من جهاز محلي إلى السيرفر.
-    مفيد في التجربة المجانية لإرجاع البيانات بعد إعادة النشر.
+    مفيد في التجربة لإرجاع البيانات عند الحاجة.
     """
     raw = file_storage.read()
     if not raw:
         raise ValueError("الملف فارغ")
+    if len(raw) > MAX_UPLOAD_ZIP_BYTES:
+        raise ValueError(f"ملف ZIP أكبر من الحد المسموح ({human_size(MAX_UPLOAD_ZIP_BYTES)})")
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
@@ -331,8 +478,13 @@ def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool =
         zip_path.write_bytes(raw)
         extract_dir = tmp / "extracted"
         extract_dir.mkdir()
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            zf.extractall(extract_dir)
+        try:
+            with zipfile.ZipFile(zip_path, "r") as zf:
+                if zf.testzip() is not None:
+                    raise ValueError("ملف ZIP تالف")
+                _safe_extract_zip(zf, extract_dir)
+        except zipfile.BadZipFile as exc:
+            raise ValueError("الملف ليس ZIP صالحاً") from exc
 
         db_file = None
         for candidate in extract_dir.rglob("rakaz.db"):
@@ -341,14 +493,12 @@ def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool =
         if not db_file or not db_file.exists():
             raise ValueError("ملف ZIP لا يحتوي على rakaz.db")
 
-        # تحقق سريع أنه SQLite
         try:
-            probe = sqlite3.connect(str(db_file))
-            probe.execute("SELECT name FROM sqlite_master LIMIT 1").fetchone()
-            probe.close()
+            validate_sqlite_file(db_file)
         except Exception as exc:
             raise ValueError(f"ملف قاعدة غير صالح: {exc}") from exc
 
+        ensure_disk_space(min_bytes=max(MIN_FREE_DISK_BYTES, db_file.stat().st_size * 3))
         now = datetime.now()
         folder_name = f"{now.strftime('%H%M%S')}__trial__رفع-من-جهاز"
         dest = backups_root() / now.strftime("%Y") / now.strftime("%m") / now.strftime("%d") / folder_name
@@ -363,11 +513,9 @@ def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool =
                 uploaded_meta = None
             break
 
-        # لقطة من الملف المرفوع
         tmp_conn = sqlite3.connect(str(dest / "rakaz.db"))
         tmp_conn.row_factory = sqlite3.Row
         try:
-            # مؤقتاً نقرأ الأعداد من الملف المرفوع
             progress = {
                 "tickets_total": int(tmp_conn.execute("SELECT COUNT(*) FROM tickets").fetchone()[0])
                 if tmp_conn.execute(
@@ -389,7 +537,7 @@ def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool =
             "purpose_label": "حفظ تجربة سحابية",
             "label": (uploaded_meta or {}).get("label") or "رفع من جهاز",
             "note": (uploaded_meta or {}).get("note")
-            or "حفظة مرفوعة أثناء التجربة المجانية على السيرفر",
+            or "حفظة مرفوعة من جهاز العميل أثناء التجربة",
             "user_name": user_name or "نظام",
             "app": "rekaz",
             "path": str(dest.relative_to(data_root())).replace("\\", "/"),
@@ -405,6 +553,7 @@ def import_backup_zip(file_storage, *, user_name: str = "", also_restore: bool =
             result["restored"] = restore_backup(
                 str(dest.relative_to(backups_root())).replace("\\", "/"),
                 user_name=user_name,
+                confirm_phrase=confirm_phrase if confirm_phrase is not None else RESTORE_CONFIRM_PHRASE,
             )
         return result
 
@@ -580,10 +729,20 @@ def list_s3_backups(limit: int = 40) -> list[dict]:
     مع بادئة وقت ISO يأتي الأقدم أولاً — لذا يجب جلب كل الكائنات ثم الفرز،
     وإلا استعادة الإقلاع تختار أقدم حفظة وتمسح بيانات أحدث.
     """
+    result = list_s3_backups_detailed(limit=limit)
+    return result.get("items") or []
+
+
+def list_s3_backups_detailed(limit: int = 40) -> dict:
+    """مثل list_s3_backups مع رسالة خطأ واضحة عند الفشل."""
     if not s3_configured():
-        return []
+        return {"items": [], "ok": False, "error": "S3 غير مضبوط"}
     cfg = s3_settings()
     try:
+        try:
+            import boto3  # noqa: F401
+        except ImportError:
+            return {"items": [], "ok": False, "error": "حزمة boto3 غير مثبتة على السيرفر"}
         client = _s3_client()
         prefix = f"{cfg['prefix']}/"
         items = []
@@ -618,9 +777,140 @@ def list_s3_backups(limit: int = 40) -> list[dict]:
             if not token:
                 break
         items.sort(key=lambda x: x.get("last_modified") or "", reverse=True)
-        return items[: max(1, min(int(limit or 40), 500))]
+        trimmed = items[: max(1, min(int(limit or 40), 500))]
+        return {"items": trimmed, "ok": True, "total": len(items)}
+    except Exception as exc:
+        _record_backup_error(f"تعذر قراءة أرشيف S3: {exc}")
+        return {"items": [], "ok": False, "error": str(exc)}
+
+
+def _backup_log_path() -> Path:
+    return backups_root() / ".auto_backup.log"
+
+
+def append_backup_log(message: str, *, level: str = "INFO") -> None:
+    """سجل تشغيلي صامت تحت مجلد الحفظات (بدون واجهة)."""
+    line = f"{datetime.now().isoformat(timespec='seconds')} [{level}] {message}"
+    try:
+        with _backup_log_path().open("a", encoding="utf-8") as f:
+            f.write(line + "\n")
     except Exception:
-        return []
+        pass
+    if level == "ERROR":
+        log.error(message)
+    elif level == "WARNING":
+        log.warning(message)
+    else:
+        log.info(message)
+
+
+def _record_backup_error(message: str) -> None:
+    try:
+        state = load_auto_state()
+        state["last_error"] = str(message)[:500]
+        state["last_error_at"] = datetime.now().isoformat(timespec="seconds")
+        save_auto_state(state)
+    except Exception:
+        pass
+    append_backup_log(str(message), level="ERROR")
+
+
+def prune_local_backups(keep: int | None = None) -> dict:
+    """الإبقاء على أحدث N حفظات محلية وحذف الأقدم بأمان."""
+    keep = int(keep if keep is not None else local_keep_count())
+    keep = max(5, keep)
+    items = list_backups(limit=5000)
+    if len(items) <= keep:
+        return {"ok": True, "kept": len(items), "deleted": 0}
+    to_delete = items[keep:]
+    deleted = 0
+    errors = []
+    root = backups_root().resolve()
+    for meta in to_delete:
+        try:
+            folder = Path(meta.get("_dir") or "")
+            if not folder.exists():
+                continue
+            folder = folder.resolve()
+            if not str(folder).startswith(str(root) + os.sep):
+                continue
+            # لا تحذف مجلدات النظام
+            if folder.name.startswith("_") or folder.name.startswith("."):
+                continue
+            shutil.rmtree(folder, ignore_errors=False)
+            deleted += 1
+        except Exception as exc:
+            errors.append(str(exc))
+    # نظّف المجلدات اليومية الفارغة بلطف
+    try:
+        for year_dir in sorted(root.glob("20*")):
+            if not year_dir.is_dir():
+                continue
+            for month_dir in year_dir.iterdir():
+                if not month_dir.is_dir():
+                    continue
+                for day_dir in month_dir.iterdir():
+                    if day_dir.is_dir() and not any(day_dir.iterdir()):
+                        day_dir.rmdir()
+                if month_dir.is_dir() and not any(month_dir.iterdir()):
+                    month_dir.rmdir()
+            if year_dir.is_dir() and not any(year_dir.iterdir()):
+                year_dir.rmdir()
+    except Exception:
+        pass
+    return {"ok": not errors, "kept": keep, "deleted": deleted, "errors": errors[:5]}
+
+
+def prune_s3_backups(keep: int | None = None) -> dict:
+    """حذف أقدم حفظات S3 مع الإبقاء على أحدث N."""
+    if not s3_configured():
+        return {"ok": True, "skipped": True, "reason": "S3 غير مضبوط"}
+    keep = int(keep if keep is not None else s3_keep_count())
+    keep = max(5, keep)
+    detailed = list_s3_backups_detailed(limit=500)
+    items = detailed.get("items") or []
+    if not detailed.get("ok"):
+        return {"ok": False, "error": detailed.get("error"), "deleted": 0}
+    if len(items) <= keep:
+        return {"ok": True, "kept": len(items), "deleted": 0}
+    to_delete = items[keep:]
+    deleted = 0
+    errors = []
+    cfg = s3_settings()
+    try:
+        client = _s3_client()
+        # احذف على دفعات صغيرة
+        batch: list[dict] = []
+        for obj in to_delete:
+            batch.append({"Key": obj["key"]})
+            if len(batch) >= 50:
+                resp = client.delete_objects(Bucket=cfg["bucket"], Delete={"Objects": batch, "Quiet": True})
+                deleted += len(batch) - len(resp.get("Errors") or [])
+                for err in resp.get("Errors") or []:
+                    errors.append(str(err))
+                batch = []
+        if batch:
+            resp = client.delete_objects(Bucket=cfg["bucket"], Delete={"Objects": batch, "Quiet": True})
+            deleted += len(batch) - len(resp.get("Errors") or [])
+            for err in resp.get("Errors") or []:
+                errors.append(str(err))
+    except Exception as exc:
+        return {"ok": False, "error": str(exc), "deleted": deleted}
+    return {"ok": not errors, "kept": keep, "deleted": deleted, "errors": errors[:5]}
+
+
+def apply_retention() -> dict:
+    """تطبيق سياسة الاحتفاظ محلياً وعلى S3."""
+    local = prune_local_backups()
+    remote = prune_s3_backups()
+    state = load_auto_state()
+    state["last_prune"] = {
+        "at": datetime.now().isoformat(timespec="seconds"),
+        "local": local,
+        "s3": remote,
+    }
+    save_auto_state(state)
+    return {"local": local, "s3": remote}
 
 
 def download_s3_backup(key: str) -> Path:
@@ -835,7 +1125,7 @@ def deliver_backup(meta: dict, *, download_url: str = "") -> dict:
 
 def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلقائي") -> dict:
     """
-    إنشاء حفظة تلقائية إن حان موعدها، ثم تجهيزها للسحب إلى الجهاز الرئيسي.
+    إنشاء حفظة تلقائية إن حان موعدها، رفعها إلى S3 عند التوفر، ثم تقليم الأرشيف.
     """
     with _auto_lock:
         state = load_auto_state()
@@ -860,17 +1150,28 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
                 pass
 
         if not db.DB_PATH.exists():
+            append_backup_log("تعذر الحفظ: قاعدة البيانات غير موجودة", level="ERROR")
             return {"created": False, "error": "قاعدة البيانات غير موجودة"}
 
         purpose = "auto"
-        meta = create_backup(
-            label="حفظ تلقائي إلى Amazon S3",
-            note=f"حفظ تلقائي كل {interval} دقيقة — يُرفع إلى سيرفر AWS S3 للاستعادة لاحقاً",
-            purpose=purpose,
-            user_name=user_name,
-        )
+        try:
+            meta = create_backup(
+                label="حفظ تلقائي",
+                note=f"حفظ تلقائي كل {interval} دقيقة — محلي + S3 عند التوفر",
+                purpose=purpose,
+                user_name=user_name,
+            )
+        except Exception as exc:
+            append_backup_log(f"فشل إنشاء الحفظة: {exc}", level="ERROR")
+            raise
         meta["_rel"] = backup_rel_from_meta(meta)
         delivery = deliver_backup(meta)
+        prune = {}
+        try:
+            prune = apply_retention()
+        except Exception as exc:
+            append_backup_log(f"فشل تقليم الأرشيف: {exc}", level="WARNING")
+            prune = {"error": str(exc)}
         # أعد التحميل بعد الرفع حتى لا نمسح last_s3_upload الذي كتبه upload_backup_to_s3
         state = load_auto_state()
         state.update(
@@ -880,6 +1181,7 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
                 "last_backup_rel": meta.get("_rel"),
                 "last_delivery": delivery,
                 "interval_minutes": interval,
+                "last_prune": prune,
             }
         )
         s3_info = (delivery or {}).get("s3") or {}
@@ -890,16 +1192,32 @@ def create_auto_backup(*, force: bool = False, user_name: str = "نظام تلق
                 "uri": s3_info.get("uri"),
                 "size": s3_info.get("size") or 0,
             }
+            append_backup_log(
+                f"حفظة {meta.get('id')} — محلي + S3={s3_info.get('key')} "
+                f"| prune local={(prune.get('local') or {}).get('deleted', 0)} "
+                f"s3={(prune.get('s3') or {}).get('deleted', 0)}"
+            )
+        else:
+            reason = s3_info.get("error") or s3_info.get("reason") or "بدون S3"
+            append_backup_log(
+                f"حفظة {meta.get('id')} — محلي فقط ({reason}) "
+                f"| prune local={(prune.get('local') or {}).get('deleted', 0)}",
+                level="WARNING" if s3_configured() else "INFO",
+            )
+            if s3_configured() and not s3_info.get("ok"):
+                state["last_error"] = f"S3: {reason}"
+                state["last_error_at"] = now.isoformat(timespec="seconds")
         save_auto_state(state)
         return {
             "created": True,
             "backup": meta,
             "delivery": delivery,
+            "prune": prune,
             "interval_minutes": interval,
         }
 
 
-def auto_status() -> dict:
+def auto_status(*, include_s3_list: bool = False) -> dict:
     state = load_auto_state()
     latest = latest_backup(purpose="auto") or latest_backup()
     interval = auto_interval_minutes()
@@ -913,7 +1231,7 @@ def auto_status() -> dict:
         except Exception:
             next_due = None
     aws = probe_aws_link()
-    s3_items = list_s3_backups(limit=15) if s3_configured() else []
+    s3_items = list_s3_backups(limit=15) if include_s3_list and s3_configured() else []
     return {
         "enabled": auto_backup_enabled(),
         "interval_minutes": interval,
@@ -927,6 +1245,9 @@ def auto_status() -> dict:
         "s3_backups": s3_items,
         "last_s3_upload": state.get("last_s3_upload"),
         "last_s3_restore": state.get("last_s3_restore"),
+        "last_prune": state.get("last_prune"),
+        "last_error": state.get("last_error"),
+        "last_error_at": state.get("last_error_at"),
         "webhook_configured": bool(os.environ.get("BACKUP_WEBHOOK_URL", "").strip()),
         "sync_token_ready": bool(get_sync_token()),
         "latest": {
@@ -953,6 +1274,7 @@ def start_auto_backup_scheduler(app=None) -> None:
         # أول تشغيل بعد دقيقة من الإقلاع
         import time
 
+        append_backup_log("بدأ مجدول الحفظ التلقائي")
         time.sleep(60)
         while True:
             try:
@@ -970,6 +1292,7 @@ def start_auto_backup_scheduler(app=None) -> None:
                     save_auto_state(state)
                 except Exception:
                     pass
+                append_backup_log(f"خطأ في دورة الحفظ التلقائي: {exc}", level="ERROR")
             # افحص كل 5 دقائق
             time.sleep(300)
 
