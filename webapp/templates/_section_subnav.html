@@ -5,7 +5,7 @@
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1">
     {% if section_meta %}
-    <a class="btn ghost{% if on_hub %} primary{% endif %}" href="{{ url_for(section_meta.home) }}">{{ section_meta.title }}</a>
+    <a class="btn ghost{% if on_hub %} primary{% endif %}" href="{{ url_for(section_meta.home) }}">{{ tr('nav_' ~ section) if section else section_meta.title }}</a>
     {% endif %}
     {% for key, mod in section_modules %}
     <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>

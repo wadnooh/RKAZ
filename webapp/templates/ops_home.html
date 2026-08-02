@@ -12,7 +12,7 @@
     <div class="actions">
       {% if can('tickets.write') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">+ عطل جديد</a>{% endif %}
       {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('tickets_list') }}">سجل الأعطال</a>{% endif %}
-      <button type="button" class="btn ghost" data-open-jump>قفز سريع</button>
+      <button type="button" class="btn ghost" data-open-jump>{{ tr('quick_jump') }}</button>
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
     </div>
   </div>

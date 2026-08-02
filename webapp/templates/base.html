@@ -33,7 +33,7 @@
         <span>|</span>
         <a href="{{ url_for('global_search') }}">{{ tr('search') }}</a>
         <span>|</span>
-        <a href="#" data-open-jump>قفز سريع</a>
+        <a href="#" data-open-jump>{{ tr('quick_jump') }}</a>
         {% endif %}
       </div>
       {% if session.get('user_id') and not is_login_page %}
@@ -50,58 +50,58 @@
   {# تبويبات النظام الرئيسية #}
   <nav class="tabs">
     {% if can('section.constructions') %}
-    <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">الإنشاءات - التنفيذ</a>
+    <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">{{ tr('nav_constructions') }}</a>
     {% endif %}
     {% if can('section.projects') %}
-    <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">المشاريع</a>
+    <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>
     {% endif %}
     {% if can('section.ops') %}
-    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') %} active{% endif %}" href="{{ url_for('ops_home') }}">العمليات والصيانة</a>
+    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') %} active{% endif %}" href="{{ url_for('ops_home') }}">{{ tr('nav_ops') }}</a>
     {% endif %}
     {% if can('section.contractors') %}
-    <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">المقاولين</a>
+    <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>
     {% endif %}
     {% if can('section.quality') %}
-    <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') %} active{% endif %}" href="{{ url_for('quality_home') }}">التنسيقات والجودة</a>
+    <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') %} active{% endif %}" href="{{ url_for('quality_home') }}">{{ tr('nav_quality') }}</a>
     {% endif %}
     {% if can('section.safety') %}
-    <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">السلامة</a>
+    <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">{{ tr('nav_safety') }}</a>
     {% endif %}
     {% if can('section.warehouses') %}
-    <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouses_home') }}">المستودعات</a>
+    <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouses_home') }}">{{ tr('nav_warehouses') }}</a>
     {% endif %}
     {% if can('section.external') %}
-    <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">المشتريات الخارجية والعهد</a>
+    <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">{{ tr('nav_external') }}</a>
     {% endif %}
     {% if can('section.financial') %}
-    <a class="tab{% if p.startswith('/financial') or p.startswith('/module/invoices') %} active{% endif %}" href="{{ url_for('financial_home') }}">المتابعات المالية</a>
+    <a class="tab{% if p.startswith('/financial') or p.startswith('/module/invoices') %} active{% endif %}" href="{{ url_for('financial_home') }}">{{ tr('nav_financial') }}</a>
     {% endif %}
     {% if can('section.maintenance') %}
-    <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">الورشة (سيارات - معدات)</a>
+    <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">{{ tr('nav_maintenance') }}</a>
     {% endif %}
     {% if can('section.hr') %}
-    <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') %} active{% endif %}" href="{{ url_for('hr_home') }}">الموارد البشرية</a>
+    <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') %} active{% endif %}" href="{{ url_for('hr_home') }}">{{ tr('nav_hr') }}</a>
     {% endif %}
     {% if can('section.contracts') %}
-    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">إدارة العقود</a>
+    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">{{ tr('nav_contracts') }}</a>
     {% endif %}
     {% if can('users.manage') %}
-    <a class="tab{% if p.startswith('/users') %} active{% endif %}" href="{{ url_for('users_home') }}">المستخدمون</a>
+    <a class="tab{% if p.startswith('/users') %} active{% endif %}" href="{{ url_for('users_home') }}">{{ tr('nav_users') }}</a>
     {% endif %}
     {% if can('audit.read') %}
-    <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">سجل النشاط</a>
+    <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">{{ tr('nav_audit') }}</a>
     {% endif %}
   </nav>
 
-  <button type="button" class="jump-fab" data-open-jump title="قفز سريع Ctrl+K">⌘</button>
+  <button type="button" class="jump-fab" data-open-jump title="{{ tr('quick_jump_title') }}">⌘</button>
 
   <div class="jump-backdrop" id="jumpBackdrop" hidden>
-    <div class="jump-modal" role="dialog" aria-modal="true" aria-label="قفز سريع">
+    <div class="jump-modal" role="dialog" aria-modal="true" aria-label="{{ tr('quick_jump') }}">
       <div class="jump-head">
-        <strong>نافذة القفز السريع</strong>
-        <span class="meta">Ctrl + K للفتح — Esc للإغلاق</span>
+        <strong>{{ tr('quick_jump_modal') }}</strong>
+        <span class="meta">{{ tr('quick_jump_hint') }}</span>
       </div>
-      <input type="search" id="jumpInput" class="jump-input" placeholder="ابحث عن صفحة أو قسم..." autocomplete="off">
+      <input type="search" id="jumpInput" class="jump-input" placeholder="{{ tr('quick_jump_placeholder') }}" autocomplete="off">
       <div class="jump-list" id="jumpList"></div>
     </div>
   </div>
@@ -158,7 +158,7 @@
         return !q || hay.indexOf(q) !== -1;
       });
       if (!filtered.length) {
-        list.innerHTML = '<div class="jump-empty">لا توجد نتائج</div>';
+        list.innerHTML = '<div class="jump-empty">{{ tr("quick_jump_empty") }}</div>';
         return;
       }
       if (active >= filtered.length) active = 0;

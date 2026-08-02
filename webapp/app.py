@@ -289,8 +289,13 @@ def dashboard_stats():
 def set_lang(lang):
     if lang not in ("ar", "en"):
         lang = "ar"
+    session.permanent = True
     session["lang"] = lang
-    return redirect(request.referrer or url_for("login"))
+    ref = request.referrer or ""
+    # أعد لنفس الموقع فقط — تجنّب إعادة توجيه خارجية عبر Referer
+    if ref.startswith(request.host_url) or ref.startswith("/"):
+        return redirect(ref)
+    return redirect(url_for("login"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -312,6 +317,8 @@ def login():
         if not user["active"]:
             flash(i18n_tr(session.get("lang") or "ar", "inactive_user"), "danger")
             return render_template("login.html")
+        # احفظ اللغة قبل مسح الجلسة — وإلا تُفقد دائماً ويُعاد فرض العربية
+        saved_lang = session.get("lang") if session.get("lang") in ("ar", "en") else "ar"
         session.clear()
         # جلسة دائمة دائماً (30 يوماً) حتى لا يخرج المستخدم عند إعادة نشر Render
         session.permanent = True
@@ -319,7 +326,7 @@ def login():
         session["username"] = user["username"]
         session["full_name"] = user["full_name"]
         session["role"] = permissions.normalize_role(user["role"])
-        session["lang"] = session.get("lang") or "ar"
+        session["lang"] = saved_lang
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
         nxt = request.args.get("next") or url_for("ops_home")
         if not str(nxt).startswith("/") or nxt in {"/", "/login"}:
