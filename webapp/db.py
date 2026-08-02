@@ -1180,17 +1180,6 @@ def get_lists(conn=None):
     return data
 
 
-def save_lists(data):
-    conn = connect()
-    for k, v in data.items():
-        conn.execute(
-            "INSERT INTO lists(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-            (k, json.dumps(v, ensure_ascii=False)),
-        )
-    conn.commit()
-    conn.close()
-
-
 def rows_to_dicts(rows):
     return [dict(r) for r in rows]
 

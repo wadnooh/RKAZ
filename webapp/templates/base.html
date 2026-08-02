@@ -85,8 +85,11 @@
     {% if can('section.contracts') %}
     <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">إدارة العقود</a>
     {% endif %}
-    {% if can('users.manage') or can('settings.write') or can('lists.write') %}
-    <a class="tab{% if p.startswith('/users') or p.startswith('/settings') or p.startswith('/lists') or p.startswith('/admin/backups') %} active{% endif %}" href="{% if can('users.manage') %}{{ url_for('users_home') }}{% elif can('settings.write') %}{{ url_for('settings_page') }}{% else %}{{ url_for('lists_page') }}{% endif %}">{% if can('users.manage') %}المستخدمون{% elif can('settings.write') %}الإعدادات{% else %}القوائم{% endif %}</a>
+    {% if can('users.manage') %}
+    <a class="tab{% if p.startswith('/users') %} active{% endif %}" href="{{ url_for('users_home') }}">المستخدمون</a>
+    {% endif %}
+    {% if can('backup.manage') %}
+    <a class="tab{% if p.startswith('/admin/backups') %} active{% endif %}" href="{{ url_for('backups_home') }}">المزامنة</a>
     {% endif %}
     {% if can('audit.read') %}
     <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">سجل النشاط</a>

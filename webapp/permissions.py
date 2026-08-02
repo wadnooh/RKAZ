@@ -32,8 +32,6 @@ PERM_LABELS = {
     "cashflow.read": "عرض التدفق النقدي",
     "cashflow.write": "تعديل التدفق النقدي",
     "teams.write": "إدارة فرق المهام",
-    "lists.write": "إدارة القوائم",
-    "settings.write": "إعدادات المكتب",
     "users.manage": "إدارة المستخدمين",
     "backup.manage": "المزامنة التلقائية",
     "audit.read": "سجل النشاط",
@@ -79,8 +77,6 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "cashflow.read",
             "cashflow.write",
             "teams.write",
-            "lists.write",
-            "settings.write",
             "audit.read",
             "backup.manage",
             "export",
@@ -332,16 +328,8 @@ def required_perm_for_request() -> str | None:
             return None if has_perm("teams.write") else "teams.write"
         return None if has_perm("section.ops") else "section.ops"
 
-    if ep == "lists_page":
-        if method == "POST":
-            return None if has_perm("lists.write") else "lists.write"
-        return None if has_perm("lists.write") or has_perm("section.ops") else "section.ops"
-
     if ep == "sop_page":
         return None if has_perm("sop.read") else "sop.read"
-
-    if ep == "settings_page":
-        return None if has_perm("settings.write") else "settings.write"
 
     if ep in {
         "warehouse_items_template",
@@ -413,8 +401,6 @@ def filter_jump_items(items: list[dict]) -> list[dict]:
             # عطل جديد يحتاج كتابة
             if path.rstrip("/").endswith("/tickets/new") and not has_perm("tickets.write"):
                 continue
-            if path.rstrip("/").endswith("/lists") and not (has_perm("lists.write") or has_perm("section.ops")):
-                continue
             out.append(item)
     return out
 
@@ -428,7 +414,6 @@ def _perm_for_path(path: str) -> str | None:
         return SECTION_PERMS.get(section or "", "modules.read")
     rules = (
         ("/users", "users.manage"),
-        ("/settings", "settings.write"),
         ("/admin/backups", "backup.manage"),
         ("/admin/audit", "audit.read"),
         ("/constructions", "section.constructions"),
@@ -445,7 +430,6 @@ def _perm_for_path(path: str) -> str | None:
         ("/tickets", "tickets.read"),
         ("/cashflow", "section.financial"),
         ("/teams", "section.ops"),
-        ("/lists", "section.ops"),
         ("/sop", "sop.read"),
         ("/export", "export"),
         ("/ops", "section.ops"),

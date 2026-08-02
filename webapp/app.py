@@ -1676,46 +1676,6 @@ def teams_page():
     return render_template("teams.html", rows=rows)
 
 
-@app.route("/lists", methods=["GET", "POST"])
-@login_required
-def lists_page():
-    if request.method == "POST":
-        data = {}
-        for key in db.DEFAULT_LISTS:
-            text = request.form.get(key) or ""
-            data[key] = [x.strip() for x in text.splitlines() if x.strip()]
-        db.save_lists(data)
-        g.lists = db.get_lists()
-        flash("تم حفظ القوائم", "ok")
-        _after_data_change()
-    return render_template("lists.html", lists_data=db.get_lists())
-
-
-@app.route("/settings", methods=["GET", "POST"])
-@login_required
-def settings_page():
-    if request.method == "POST":
-        data = {
-            "office_name": request.form.get("office_name") or "",
-            "company_name": request.form.get("company_name") or "",
-            "teams_count": int(request.form.get("teams_count") or 0),
-            "daily_tickets": int(request.form.get("daily_tickets") or 0),
-            "work_days": int(request.form.get("work_days") or 0),
-            "monthly_expenses": float(request.form.get("monthly_expenses") or 0),
-            "cash_delay_months": int(request.form.get("cash_delay_months") or 0),
-            "emergency_ratio": float(request.form.get("emergency_ratio") or 0),
-            "target_avg": float(request.form.get("target_avg") or 0),
-            "reject_limit": float(request.form.get("reject_limit") or 0),
-            "response_target": float(request.form.get("response_target") or 0),
-            "invoice_days": int(request.form.get("invoice_days") or 0),
-        }
-        db.save_settings(data)
-        g.settings = db.get_settings()
-        flash("تم حفظ الإعدادات", "ok")
-        _after_data_change()
-    return render_template("settings.html", s=db.get_settings())
-
-
 @app.route("/admin/backups")
 @login_required
 def backups_home():
