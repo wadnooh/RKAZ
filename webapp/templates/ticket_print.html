@@ -2,7 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="utf-8">
-  <title>تقرير عطل {{ ticket.ticket_no }}</title>
+  <title>{{ _('تقرير عطل') }} {{ ticket.ticket_no }}</title>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -66,15 +66,15 @@
 <body>
   <div class="wrap">
     <div class="printbar">
-      <button class="btn primary" onclick="window.print()">طباعة / PDF</button>
-      <a class="btn" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">رجوع</a>
+      <button class="btn primary" onclick="window.print()">{{ _('طباعة / PDF') }}</button>
+      <a class="btn" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">{{ _('رجوع') }}</a>
     </div>
 
     <div class="sheet">
       <div class="hero">
-        <img class="left" src="{{ logo_rekaz }}" alt="شركة ركاز الإنجاز للمقاولات">
+        <img class="left" src="{{ logo_rekaz }}" alt="{{ _('شركة ركاز الإنجاز للمقاولات') }}">
         <div>
-          <h1>عرض العطل</h1>
+          <h1>{{ _('عرض العطل') }}</h1>
           <div class="company">{{ settings.company_name or 'شركة ركاز الإنجاز للمقاولات' }}</div>
           <div class="subtitle">{{ settings.office_name }} | تقرير تشغيلي</div>
         </div>
@@ -82,33 +82,33 @@
       </div>
 
       <div class="section">
-        <h2>بيانات العطل</h2>
+        <h2>{{ _('بيانات العطل') }}</h2>
         <div class="meta-grid">
-          <div class="meta-item"><div class="k">رقم العطل</div><div class="v">{{ ticket.ticket_no }}</div></div>
-          <div class="meta-item"><div class="k">تاريخ الاستلام</div><div class="v">{{ ticket.receive_date or '—' }}</div></div>
-          <div class="meta-item"><div class="k">وقت الاستلام</div><div class="v">{{ ticket.receive_time or '—' }}</div></div>
-          <div class="meta-item"><div class="k">الحي</div><div class="v">{{ ticket.district or '—' }}</div></div>
-          <div class="meta-item"><div class="k">رقم المحطة</div><div class="v">{{ ticket.station_no or '—' }}</div></div>
-          <div class="meta-item"><div class="k">رقم الفيدر</div><div class="v">{{ ticket.feeder_no or '—' }}</div></div>
-          <div class="meta-item"><div class="k">المندوب</div><div class="v">{{ ticket.agent or '—' }}</div></div>
-          <div class="meta-item"><div class="k">الفرقة</div><div class="v">{{ ticket.team or '—' }}</div></div>
-          <div class="meta-item"><div class="k">حالة التنفيذ</div><div class="v">{{ ticket.status or '—' }}</div></div>
-          <div class="meta-item"><div class="k">نوع العطل</div><div class="v">{{ ticket.fault_type or '—' }}</div></div>
-          <div class="meta-item"><div class="k">التصنيف</div><div class="v">{{ ticket.classification or '—' }}</div></div>
-          <div class="meta-item"><div class="k">زمن الاستجابة</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
-          <div class="meta-item"><div class="k">وقت التوجيه</div><div class="v">{{ ticket.dispatch_time or '—' }}</div></div>
-          <div class="meta-item"><div class="k">وقت الوصول</div><div class="v">{{ ticket.arrival_time or '—' }}</div></div>
-          <div class="meta-item"><div class="k">القيمة النهائية</div><div class="v">{% if ticket.final_value is not none %}{{ '%.2f'|format(ticket.final_value) }} ر.س{% else %}—{% endif %}</div></div>
-          <div class="meta-item" style="grid-column:1/-1"><div class="k">الموقع</div><div class="v">{{ ticket.location or '—' }}</div></div>
-          <div class="meta-item" style="grid-column:1/-1"><div class="k">ملاحظات</div><div class="v">{{ ticket.notes or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ ticket.ticket_no }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('تاريخ الاستلام') }}</div><div class="v">{{ ticket.receive_date or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('وقت الاستلام') }}</div><div class="v">{{ ticket.receive_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('الحي') }}</div><div class="v">{{ ticket.district or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('رقم المحطة') }}</div><div class="v">{{ ticket.station_no or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('رقم الفيدر') }}</div><div class="v">{{ ticket.feeder_no or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('المندوب') }}</div><div class="v">{{ ticket.agent or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('الفرقة') }}</div><div class="v">{{ ticket.team or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('حالة التنفيذ') }}</div><div class="v">{{ ticket.status or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('نوع العطل') }}</div><div class="v">{{ ticket.fault_type or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('التصنيف') }}</div><div class="v">{{ ticket.classification or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('زمن الاستجابة') }}</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
+          <div class="meta-item"><div class="k">{{ _('وقت التوجيه') }}</div><div class="v">{{ ticket.dispatch_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('وقت الوصول') }}</div><div class="v">{{ ticket.arrival_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('القيمة النهائية') }}</div><div class="v">{% if ticket.final_value is not none %}{{ '%.2f'|format(ticket.final_value) }} ر.س{% else %}—{% endif %}</div></div>
+          <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{{ ticket.location or '—' }}</div></div>
+          <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ ticket.notes or '—' }}</div></div>
         </div>
       </div>
 
       <div class="section">
-        <h2>بنود العقد / الكميات</h2>
+        <h2>{{ _('بنود العقد / الكميات') }}</h2>
         <table>
           <thead>
-            <tr><th>#</th><th>رقم البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th><th>الإجمالي</th></tr>
+            <tr><th>#</th><th>{{ _('رقم البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الوحدة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('سعر الوحدة') }}</th><th>{{ _('الإجمالي') }}</th></tr>
           </thead>
           <tbody>
             {% for q in quantities %}
@@ -122,18 +122,18 @@
               <td>{{ '%.2f'|format(q.total or 0) }}</td>
             </tr>
             {% else %}
-            <tr><td colspan="7">لا توجد بنود</td></tr>
+            <tr><td colspan="7">{{ _('لا توجد بنود') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
 
       <div class="section">
-        <h2>قائمة الصور / التنسيقات / التمتير</h2>
+        <h2>{{ _('قائمة الصور / التنسيقات / التمتير') }}</h2>
         <div class="meta-grid">
-          <div class="meta-item"><div class="k">سجلات الصور</div><div class="v">{{ photos|length }}</div></div>
-          <div class="meta-item"><div class="k">سجلات التنسيق</div><div class="v">{{ coordination|length }}</div></div>
-          <div class="meta-item"><div class="k">سجلات التمتير</div><div class="v">{{ metering|length }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('سجلات الصور') }}</div><div class="v">{{ photos|length }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('سجلات التنسيق') }}</div><div class="v">{{ coordination|length }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('سجلات التمتير') }}</div><div class="v">{{ metering|length }}</div></div>
         </div>
       </div>
 

@@ -5,14 +5,14 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">أرصدة المواد</h2>
-      <div class="meta">متابعة الوارد والمنصرف والرصيد الحالي — الأصناف تُدار من «أصناف المستودع»</div>
+      <h2 class="section-title">{{ _('أرصدة المواد') }}</h2>
+      <div class="meta">{{ _('متابعة الوارد والمنصرف والرصيد الحالي — الأصناف تُدار من «أصناف المستودع»') }}</div>
     </div>
     <div class="actions">
-      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_items') }}">أصناف المستودع</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_items') }}">{{ _('أصناف المستودع') }}</a>
       {% if can('modules.write') %}
-      <a class="btn ghost" href="{{ url_for('warehouse_tx_template') }}">قالب الحركات Excel</a>
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx') }}">+ حركة مستودع</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_tx_template') }}">{{ _('قالب الحركات Excel') }}</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx') }}">{{ _('+ حركة مستودع') }}</a>
       {% endif %}
     </div>
   </div>
@@ -21,44 +21,44 @@
   <div class="form-grid" style="margin-bottom:14px;">
     <form method="post" action="{{ url_for('warehouse_tx_import') }}" enctype="multipart/form-data" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
       <div style="flex:1;min-width:220px;">
-        <label>استيراد الوارد / المنصرف وربطه بالمعاملات</label>
+        <label>{{ _('استيراد الوارد / المنصرف وربطه بالمعاملات') }}</label>
         <input type="file" name="file" accept=".xlsx,.xlsm" required>
       </div>
-      <button class="btn primary" type="submit">رفع الحركات</button>
+      <button class="btn primary" type="submit">{{ _('رفع الحركات') }}</button>
     </form>
-    <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;" onsubmit="return confirm('سيتم حذف كل حركات المستودع وتصفير الأرصدة. الأصناف لن تُحذف. هل تريد المتابعة؟');">
+    <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;" onsubmit="return confirm({{ _('سيتم حذف كل حركات المستودع وتصفير الأرصدة. الأصناف لن تُحذف. هل تريد المتابعة؟')|tojson }});">
       <div style="flex:1;min-width:220px;">
-        <label>مسح الأرصدة الحالية (حذف الحركات)</label>
-        <input type="text" name="confirm" placeholder="اكتب: مسح" required autocomplete="off">
+        <label>{{ _('مسح الأرصدة الحالية (حذف الحركات)') }}</label>
+        <input type="text" name="confirm" placeholder="{{ _('اكتب: مسح') }}" required autocomplete="off">
       </div>
-      <button class="btn ghost" type="submit" style="border-color:#c45c5c;color:#a33;">مسح الأرصدة</button>
+      <button class="btn ghost" type="submit" style="border-color:#c45c5c;color:#a33;">{{ _('مسح الأرصدة') }}</button>
     </form>
   </div>
   <p class="meta" style="margin-top:-6px;margin-bottom:12px;">
-    في قالب الحركات ضع <strong>رقم المادة</strong> و<strong>رقم البلاغ</strong> لربط المنصرف/الوارد بالمعاملة.
-    إدارة قائمة المواد من شاشة <a href="{{ url_for('module_list', name='warehouse_items') }}">أصناف المستودع</a>.
+    {{ _('في قالب الحركات ضع') }} <strong>{{ _('رقم المادة') }}</strong> {{ _('و') }} <strong>{{ _('رقم البلاغ') }}</strong> {{ _('لربط المنصرف/الوارد بالمعاملة.') }}
+    {{ _('إدارة قائمة المواد من شاشة') }} <a href="{{ url_for('module_list', name='warehouse_items') }}">{{ _('أصناف المستودع') }}</a>.
   </p>
   {% endif %}
 
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="بحث برقم/اسم المادة أو التصنيف..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
-    <button class="btn ghost" type="submit">بحث</button>
-    <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">مسح</a>
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم/اسم المادة أو التصنيف...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('مسح') }}</a>
   </form>
 
   <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
-          <th>رقم المادة</th>
-          <th>اسم المادة</th>
-          <th>الوحدة</th>
-          <th>التصنيف</th>
-          <th>وارد</th>
-          <th>منصرف</th>
-          <th>الرصيد</th>
-          <th>حد أدنى</th>
-          <th>بلاغات مربوطة</th>
+          <th>{{ _('رقم المادة') }}</th>
+          <th>{{ _('اسم المادة') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th>{{ _('التصنيف') }}</th>
+          <th>{{ _('وارد') }}</th>
+          <th>{{ _('منصرف') }}</th>
+          <th>{{ _('الرصيد') }}</th>
+          <th>{{ _('حد أدنى') }}</th>
+          <th>{{ _('بلاغات مربوطة') }}</th>
           <th></th>
         </tr>
       </thead>
@@ -87,14 +87,14 @@
             {% else %}—{% endif %}
           </td>
           <td class="actions">
-            <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', item_no=r.item_no) }}">الحركات</a>
+            <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', item_no=r.item_no) }}">{{ _('الحركات') }}</a>
             {% if can('modules.write') %}
-            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', item_no=r.item_no) }}">+ حركة</a>
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', item_no=r.item_no) }}">{{ _('+ حركة') }}</a>
             {% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="10">لا توجد أصناف — أضف المواد من <a href="{{ url_for('module_list', name='warehouse_items') }}">أصناف المستودع</a></td></tr>
+        <tr><td colspan="10">{{ _('لا توجد أصناف — أضف المواد من') }} <a href="{{ url_for('module_list', name='warehouse_items') }}">{{ _('أصناف المستودع') }}</a></td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -13,11 +13,11 @@
       <h2 class="section-title">{{ module.title }}</h2>
       <div class="meta">
         {% if name == 'warehouse_items' %}
-        سجل المواد المستخدمة في المعاملات — الاستيراد والإضافة من هنا
+        {{ _('سجل المواد المستخدمة في المعاملات — الاستيراد والإضافة من هنا') }}
         {% elif ticket_filter %}
-        سجلات مرتبطة برقم العطل <strong>{{ ticket_filter }}</strong>
+        {{ _('سجلات مرتبطة برقم العطل') }} <strong>{{ ticket_filter }}</strong>
         {% else %}
-        مرتبط بتبويب {{ section_meta.title if section_meta else 'النظام' }} — إضافة / تعديل / ربط بالأعطال
+        {{ _('مرتبط بتبويب') }} {{ section_meta.title if section_meta else _('النظام') }} — {{ _('إضافة / تعديل / ربط بالأعطال') }}
         {% endif %}
       </div>
     </div>
@@ -26,13 +26,13 @@
       {% set can_mod_delete = can('modules.delete') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
       {% if can_mod_write %}
         {% if name == 'warehouse_items' %}
-        <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">قالب المواد Excel</a>
-        <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">عرض الأرصدة</a>
+        <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب المواد Excel') }}</a>
+        <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('عرض الأرصدة') }}</a>
         {% endif %}
         {% if ticket_filter %}
-        <a class="btn primary" href="{{ url_for('module_new', name=name, ticket_no=ticket_filter) }}">+ إضافة</a>
+        <a class="btn primary" href="{{ url_for('module_new', name=name, ticket_no=ticket_filter) }}">{{ _('+ إضافة') }}</a>
         {% else %}
-        <a class="btn primary" href="{{ url_for('module_new', name=name) }}">+ إضافة</a>
+        <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
         {% endif %}
       {% endif %}
     </div>
@@ -41,23 +41,23 @@
   {% if name == 'warehouse_items' and can('modules.write') %}
   <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
     <div style="flex:1;min-width:220px;">
-      <label style="display:block;margin-bottom:6px;font-weight:700;">استيراد المواد (أصناف المستودع) من Excel</label>
+      <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('استيراد المواد (أصناف المستودع) من Excel') }}</label>
       <input type="file" name="file" accept=".xlsx,.xlsm" required>
     </div>
-    <button class="btn primary" type="submit">رفع المواد</button>
+    <button class="btn primary" type="submit">{{ _('رفع المواد') }}</button>
   </form>
   <p class="meta" style="margin-top:-4px;margin-bottom:12px;">
-    الأصناف هنا هي المواد المستخدمة في المعاملات. لمتابعة الوارد والمنصرف والرصيد افتح
-    <a href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>.
+    {{ _('الأصناف هنا هي المواد المستخدمة في المعاملات. لمتابعة الوارد والمنصرف والرصيد افتح') }}
+    <a href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>.
   </p>
   {% endif %}
 
   {% if ticket_filter or (name == 'warehouse_tx' and item_filter) %}
   <p class="meta" style="margin-bottom:10px;">
-    تصفية:
-    {% if item_filter %}المادة <strong>{{ item_filter }}</strong>{% endif %}
-    {% if ticket_filter %}{% if item_filter %} | {% endif %}رقم العطل <strong>{{ ticket_filter }}</strong>{% endif %}
-    — <a href="{{ url_for('module_list', name=name) }}">إظهار الكل</a>
+    {{ _('تصفية:') }}
+    {% if item_filter %}{{ _('المادة') }} <strong>{{ item_filter }}</strong>{% endif %}
+    {% if ticket_filter %}{% if item_filter %} | {% endif %}{{ _('رقم العطل') }} <strong>{{ ticket_filter }}</strong>{% endif %}
+    — <a href="{{ url_for('module_list', name=name) }}">{{ _('إظهار الكل') }}</a>
   </p>
   {% endif %}
 
@@ -68,11 +68,11 @@
           {% for key, label, _t in module.fields if key in module.list_cols %}
           <th>{{ label }}</th>
           {% endfor %}
-          {% if name == 'quantities' or name == 'external_purchases' %}<th>الإجمالي</th>{% endif %}
-          {% if name == 'photos' %}<th>مكتمل؟</th>{% endif %}
-          {% if name == 'invoices' %}<th>المتبقي</th>{% endif %}
-          {% if name == 'warehouse_items' %}<th>الرصيد</th>{% endif %}
-          <th>إجراءات</th>
+          {% if name == 'quantities' or name == 'external_purchases' %}<th>{{ _('الإجمالي') }}</th>{% endif %}
+          {% if name == 'photos' %}<th>{{ _('مكتمل؟') }}</th>{% endif %}
+          {% if name == 'invoices' %}<th>{{ _('المتبقي') }}</th>{% endif %}
+          {% if name == 'warehouse_items' %}<th>{{ _('الرصيد') }}</th>{% endif %}
+          <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -86,7 +86,7 @@
               {% if r[key] and r[key].startswith('/media/') %}
                 <a href="{{ r[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ r[key] }}" alt="{{ label }}"></a>
               {% elif r[key] == 'نعم' %}
-                <span class="badge ok">نعم</span>
+                <span class="badge ok">{{ _('نعم') }}</span>
               {% else %}
                 —
               {% endif %}
@@ -106,16 +106,16 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
-            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">تعديل</a>{% endif %}
+            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">{{ _('تعديل') }}</a>{% endif %}
             {% if can_mod_delete %}
-            <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" onsubmit="return confirm('حذف؟');" style="display:inline">
-              <button class="btn danger" type="submit">حذف</button>
+            <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" onsubmit="return confirm({{ _('حذف؟')|tojson }});" style="display:inline">
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
             {% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="20" class="meta">لا توجد سجلات.</td></tr>
+        <tr><td colspan="20" class="meta">{{ _('لا توجد سجلات.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

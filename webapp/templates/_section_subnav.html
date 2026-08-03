@@ -11,7 +11,7 @@
     <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>
     {% endfor %}
     {% if section == 'warehouses' %}
-    <a class="btn ghost{% if p.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">أرصدة المواد</a>
+    <a class="btn ghost{% if p.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>
     {% endif %}
   </div>
 </div>

@@ -3,19 +3,19 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">البحث العام</h2>
-      <div class="meta">البحث عبر الأعطال وجميع أقسام النظام</div>
+      <h2 class="section-title">{{ _('البحث العام') }}</h2>
+      <div class="meta">{{ _('البحث عبر الأعطال وجميع أقسام النظام') }}</div>
     </div>
     <form method="get" class="actions">
-      <input type="search" name="q" value="{{ q }}" placeholder="رقم عطل / مادة / عقد..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
-      <button class="btn primary" type="submit">بحث</button>
+      <input type="search" name="q" value="{{ q }}" placeholder="{{ _('رقم عطل / مادة / عقد...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+      <button class="btn primary" type="submit">{{ _('بحث') }}</button>
     </form>
   </div>
 
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>الصفحة</th><th>القسم</th><th>المطابقة</th><th>التفاصيل</th><th></th></tr>
+        <tr><th>{{ _('الصفحة') }}</th><th>{{ _('القسم') }}</th><th>{{ _('المطابقة') }}</th><th>{{ _('التفاصيل') }}</th><th></th></tr>
       </thead>
       <tbody>
         {% for r in results %}
@@ -24,10 +24,10 @@
           <td>{{ r.tab }}</td>
           <td>{{ r.label }}</td>
           <td style="white-space:normal;max-width:280px">{{ r.detail }}</td>
-          <td><a class="btn ghost" href="{{ r.url }}">فتح</a></td>
+          <td><a class="btn ghost" href="{{ r.url }}">{{ _('فتح') }}</a></td>
         </tr>
         {% else %}
-        <tr><td colspan="5">{% if q %}لا توجد نتائج{% else %}أدخل كلمة للبحث{% endif %}</td></tr>
+        <tr><td colspan="5">{% if q %}{{ _('لا توجد نتائج') }}{% else %}{{ _('أدخل كلمة للبحث') }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

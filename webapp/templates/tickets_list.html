@@ -5,15 +5,15 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">الأعطال</h2>
-      <div class="meta">متابعة أعطال الطوارئ — عرض / تعديل / طباعة تقرير العطل</div>
+      <h2 class="section-title">{{ _('الأعطال') }}</h2>
+      <div class="meta">{{ _('متابعة أعطال الطوارئ — عرض / تعديل / طباعة تقرير العطل') }}</div>
     </div>
     <div class="actions">
       {% if can('tickets.write') %}
-      <a class="btn ghost" href="{{ url_for('tickets_template') }}">قالب Excel</a>
-      <a class="btn primary" href="{{ url_for('ticket_new') }}">+ عطل جديد</a>
+      <a class="btn ghost" href="{{ url_for('tickets_template') }}">{{ _('قالب Excel') }}</a>
+      <a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>
       {% endif %}
-      {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>{% endif %}
+      {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>{% endif %}
     </div>
   </div>
 
@@ -21,45 +21,45 @@
   <div class="form-grid" style="margin-bottom:14px;">
     <form method="post" action="{{ url_for('tickets_import') }}" enctype="multipart/form-data" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;">
       <div style="flex:1;min-width:220px;">
-        <label>استيراد الأعطال من Excel</label>
+        <label>{{ _('استيراد الأعطال من Excel') }}</label>
         <input type="file" name="file" accept=".xlsx,.xlsm" required>
       </div>
-      <button class="btn primary" type="submit">استيراد</button>
+      <button class="btn primary" type="submit">{{ _('استيراد') }}</button>
     </form>
   </div>
   <p class="meta" style="margin-top:-6px;margin-bottom:12px;">
-    نزّل <strong>قالب Excel</strong> ثم املأ الصفوف وارفع الملف. عند تكرار <strong>رقم العطل</strong> يتم تحديث السجل تلقائياً.
+    نزّل <strong>{{ _('قالب Excel') }}</strong> {{ _('ثم املأ الصفوف وارفع الملف. عند تكرار') }} <strong>{{ _('رقم العطل') }}</strong> يتم تحديث السجل تلقائياً.
   </p>
   {% endif %}
 
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q }}" placeholder="بحث برقم العطل / كود ER / الحي..." style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
-      <option value="">كل الحالات</option>
+      <option value="">{{ _('كل الحالات') }}</option>
       {% for s in lists.execution_status %}
-      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ tv(s) }}</option>
       {% endfor %}
     </select>
-    <button class="btn ghost" type="submit">بحث</button>
-    <a class="btn ghost" href="{{ url_for('tickets_list') }}">مسح</a>
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ url_for('tickets_list') }}">{{ _('مسح') }}</a>
   </form>
 
   <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
-          <th>رقم العطل</th>
-          <th>كود ER</th>
-          <th>التاريخ</th>
-          <th>الحي</th>
-          <th>المحطة</th>
-          <th>العطل</th>
-          <th>التصنيف</th>
-          <th>الفرقة</th>
-          <th>الحالة</th>
-          <th>الاستجابة (د)</th>
-          <th>القيمة النهائية</th>
-          <th>إجراءات</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('كود ER') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('الحي') }}</th>
+          <th>{{ _('المحطة') }}</th>
+          <th>{{ _('العطل') }}</th>
+          <th>{{ _('التصنيف') }}</th>
+          <th>{{ _('الفرقة') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('الاستجابة (د)') }}</th>
+          <th>{{ _('القيمة النهائية') }}</th>
+          <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -75,11 +75,11 @@
           <td>{{ t.team or '—' }}</td>
           <td>
             {% if t.status in ['منفذ','مغلق'] %}
-            <span class="badge ok">{{ t.status }}</span>
+            <span class="badge ok">{{ tv(t.status) }}</span>
             {% elif t.status in ['مرفوض/إعادة عمل'] %}
-            <span class="badge danger">{{ t.status }}</span>
+            <span class="badge danger">{{ tv(t.status) }}</span>
             {% elif t.status in ['قيد التنفيذ','تم التوجيه'] %}
-            <span class="badge warn">{{ t.status }}</span>
+            <span class="badge warn">{{ tv(t.status) }}</span>
             {% else %}
             <span class="badge info">{{ t.status or '—' }}</span>
             {% endif %}
@@ -87,13 +87,13 @@
           <td>{{ t.response_min if t.response_min is not none else '—' }}</td>
           <td>{{ t.final_value|money if t.final_value is not none else '—' }}</td>
           <td class="actions">
-            {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">عرض</a>{% endif %}
-            {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=t.id) }}">تعديل</a>{% endif %}
-            {% if can('tickets.read') %}<a class="btn primary" href="{{ url_for('ticket_print', ticket_id=t.id) }}" target="_blank">طباعة</a>{% endif %}
+            {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">{{ _('عرض') }}</a>{% endif %}
+            {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=t.id) }}">{{ _('تعديل') }}</a>{% endif %}
+            {% if can('tickets.read') %}<a class="btn primary" href="{{ url_for('ticket_print', ticket_id=t.id) }}" target="_blank">{{ _('طباعة') }}</a>{% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11">لا توجد أعطال</td></tr>
+        <tr><td colspan="11">{{ _('لا توجد أعطال') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

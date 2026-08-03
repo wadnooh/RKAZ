@@ -17,10 +17,10 @@
 
   <header class="topbar">
     <div class="topbar-main">
-      <img src="{{ logo_rekaz }}" alt="شركة ركاز الإنجاز للمقاولات" class="brand-logo edge-logo edge-left brand-logo-rekaz">
+      <img src="{{ logo_rekaz }}" alt="{{ _('شركة ركاز الإنجاز للمقاولات') }}" class="brand-logo edge-logo edge-left brand-logo-rekaz">
       <div class="brand">
         {{ app_title }}
-        <small>{{ settings.company_name or 'شركة ركاز الإنجاز للمقاولات' }} — {{ settings.office_name or 'مكتب خدمات خريص' }}</small>
+        <small>{{ settings.company_name or _('شركة ركاز الإنجاز للمقاولات') }} — {{ settings.office_name or _('مكتب خدمات خريص') }}</small>
       </div>
       <img src="{{ logo_sec }}" alt="SEC" class="brand-logo edge-logo edge-right">
     </div>

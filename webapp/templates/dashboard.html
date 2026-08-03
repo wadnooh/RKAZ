@@ -4,52 +4,52 @@
   <div class="card">
     <div class="toolbar">
       <div>
-        <h2 class="section-title">لوحة تحكم إدارة مكتب الجنوب للطوارئ</h2>
-        <div class="meta">مؤشرات تشغيلية ومالية مستمدة من ملف متابعة أعمال طوارئ خريص</div>
+        <h2 class="section-title">{{ _('لوحة تحكم إدارة مكتب الجنوب للطوارئ') }}</h2>
+        <div class="meta">{{ _('مؤشرات تشغيلية ومالية مستمدة من ملف متابعة أعمال طوارئ خريص') }}</div>
       </div>
       <div class="actions">
-        <a class="btn primary" href="{{ url_for('ticket_new') }}">+ عطل جديد</a>
-        <a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">تصدير Excel</a>
+        <a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>
+        <a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>
       </div>
     </div>
 
     <div class="stats-grid">
-      <div class="stat-card"><div>إجمالي الأعطال</div><strong>{{ stats.total }}</strong></div>
-      <div class="stat-card"><div>أعطال منفذة</div><strong>{{ stats.done }}</strong></div>
-      <div class="stat-card"><div>أعطال مغلقة</div><strong>{{ stats.closed }}</strong></div>
-      <div class="stat-card"><div>متأخرة استجابة</div><strong>{{ stats.delayed }}</strong></div>
-      <div class="stat-card"><div>صور ناقصة</div><strong>{{ stats.photos_incomplete }}</strong></div>
-      <div class="stat-card"><div>تمتير معتمد</div><strong>{{ stats.metering_approved }}</strong></div>
-      <div class="stat-card"><div>فواتير مرفوعة SAP</div><strong>{{ stats.sap_raised }}</strong></div>
-      <div class="stat-card"><div>قيمة الأعطال</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>
-      <div class="stat-card"><div>إجمالي المستخلصات</div><strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong></div>
-      <div class="stat-card"><div>المبالغ المحصلة</div><strong style="font-size:1.05rem">{{ stats.collected|money }}</strong></div>
-      <div class="stat-card"><div>المتبقي غير محصل</div><strong style="font-size:1.05rem">{{ stats.remaining|money }}</strong></div>
-      <div class="stat-card"><div>السيولة المطلوبة</div><strong style="font-size:1.05rem">{{ stats.liquidity|money }}</strong></div>
+      <div class="stat-card"><div>{{ _('إجمالي الأعطال') }}</div><strong>{{ stats.total }}</strong></div>
+      <div class="stat-card"><div>{{ _('أعطال منفذة') }}</div><strong>{{ stats.done }}</strong></div>
+      <div class="stat-card"><div>{{ _('أعطال مغلقة') }}</div><strong>{{ stats.closed }}</strong></div>
+      <div class="stat-card"><div>{{ _('متأخرة استجابة') }}</div><strong>{{ stats.delayed }}</strong></div>
+      <div class="stat-card"><div>{{ _('صور ناقصة') }}</div><strong>{{ stats.photos_incomplete }}</strong></div>
+      <div class="stat-card"><div>{{ _('تمتير معتمد') }}</div><strong>{{ stats.metering_approved }}</strong></div>
+      <div class="stat-card"><div>{{ _('فواتير مرفوعة SAP') }}</div><strong>{{ stats.sap_raised }}</strong></div>
+      <div class="stat-card"><div>{{ _('قيمة الأعطال') }}</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>
+      <div class="stat-card"><div>{{ _('إجمالي المستخلصات') }}</div><strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong></div>
+      <div class="stat-card"><div>{{ _('المبالغ المحصلة') }}</div><strong style="font-size:1.05rem">{{ stats.collected|money }}</strong></div>
+      <div class="stat-card"><div>{{ _('المتبقي غير محصل') }}</div><strong style="font-size:1.05rem">{{ stats.remaining|money }}</strong></div>
+      <div class="stat-card"><div>{{ _('السيولة المطلوبة') }}</div><strong style="font-size:1.05rem">{{ stats.liquidity|money }}</strong></div>
     </div>
   </div>
 
   <div class="stats-grid" style="margin-top:14px; grid-template-columns:1.1fr 1fr;">
     <div class="card">
-      <h3 class="section-title" style="font-size:1.05rem;margin-bottom:12px;">توزيع حالات التنفيذ</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin-bottom:12px;">{{ _('توزيع حالات التنفيذ') }}</h3>
       <div class="table-wrap">
         <table class="table" style="min-width:0">
-          <thead><tr><th>الحالة</th><th>العدد</th></tr></thead>
+          <thead><tr><th>{{ _('الحالة') }}</th><th>{{ _('العدد') }}</th></tr></thead>
           <tbody>
             {% for name, count in stats.by_status.items() %}
-            <tr><td>{{ name }}</td><td>{{ count }}</td></tr>
+            <tr><td>{{ tv(name) }}</td><td>{{ count }}</td></tr>
             {% else %}
-            <tr><td colspan="2">لا توجد بيانات</td></tr>
+            <tr><td colspan="2">{{ _('لا توجد بيانات') }}</td></tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
     <div class="card">
-      <h3 class="section-title" style="font-size:1.05rem;margin-bottom:12px;">ملخص السيولة (12 شهر)</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin-bottom:12px;">{{ _('ملخص السيولة (12 شهر)') }}</h3>
       <div class="table-wrap" style="max-height:360px">
         <table class="table">
-          <thead><tr><th>الشهر</th><th>تحصيل</th><th>تراكمي</th><th>الحالة</th></tr></thead>
+          <thead><tr><th>{{ _('الشهر') }}</th><th>{{ _('تحصيل') }}</th><th>{{ _('تراكمي') }}</th><th>{{ _('الحالة') }}</th></tr></thead>
           <tbody>
             {% for r in stats.cash %}
             <tr>
@@ -58,9 +58,9 @@
               <td>{{ r.cumulative|money }}</td>
               <td>
                 {% if r.status == 'آمن' %}
-                <span class="badge ok">{{ r.status }}</span>
+                <span class="badge ok">{{ tv(r.status) }}</span>
                 {% else %}
-                <span class="badge danger">{{ r.status }}</span>
+                <span class="badge danger">{{ tv(r.status) }}</span>
                 {% endif %}
               </td>
             </tr>

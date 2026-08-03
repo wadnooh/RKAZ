@@ -2,36 +2,36 @@
 {% block content %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions">
-    <a class="btn primary" href="{{ url_for('users_list') }}">المستخدمون والصلاحيات</a>
+    <a class="btn primary" href="{{ url_for('users_list') }}">{{ _('المستخدمون والصلاحيات') }}</a>
   </div>
 </div>
 
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">المستخدمون</h2>
-      <div class="meta">إدارة حسابات الدخول والأدوار — الصلاحيات تُطبَّق على كامل التطبيق</div>
+      <h2 class="section-title">{{ _('المستخدمون') }}</h2>
+      <div class="meta">{{ _('إدارة حسابات الدخول والأدوار — الصلاحيات تُطبَّق على كامل التطبيق') }}</div>
     </div>
   </div>
 
   <form method="post" class="form-grid">
     <input type="hidden" name="action" value="add">
-    <div class="field"><label>اسم المستخدم</label><input name="username" required></div>
-    <div class="field"><label>الاسم الكامل</label><input name="full_name" required></div>
+    <div class="field"><label>{{ _('اسم المستخدم') }}</label><input name="username" required></div>
+    <div class="field"><label>{{ _('الاسم الكامل') }}</label><input name="full_name" required></div>
     <div class="field">
-      <label>الدور</label>
+      <label>{{ _('الدور') }}</label>
       <select name="role">
-        {% for x in lists.user_roles %}<option value="{{ x }}">{{ x }}</option>{% endfor %}
+        {% for x in lists.user_roles %}<option value="{{ x }}">{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
-    <div class="field"><label>كلمة المرور</label><input name="password" value="1234"></div>
+    <div class="field"><label>{{ _('كلمة المرور') }}</label><input name="password" value="1234"></div>
     <div class="field">
-      <label>نشط؟</label>
-      <select name="active"><option value="1">نعم</option><option value="0">لا</option></select>
+      <label>{{ _('نشط؟') }}</label>
+      <select name="active"><option value="1">{{ _('نعم') }}</option><option value="0">{{ _('لا') }}</option></select>
     </div>
-    <div class="field"><label>ملاحظات</label><input name="notes"></div>
+    <div class="field"><label>{{ _('ملاحظات') }}</label><input name="notes"></div>
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">إضافة مستخدم</button>
+      <button class="btn primary" type="submit">{{ _('إضافة مستخدم') }}</button>
     </div>
   </form>
 </div>
@@ -40,60 +40,60 @@
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>المستخدم</th><th>الاسم</th><th>الدور</th><th>الصلاحيات</th><th>الحالة</th><th>ملاحظات</th><th></th></tr>
+        <tr><th>{{ _('المستخدم') }}</th><th>{{ _('الاسم') }}</th><th>{{ _('الدور') }}</th><th>{{ _('الصلاحيات') }}</th><th>{{ _('الحالة') }}</th><th>{{ _('ملاحظات') }}</th><th></th></tr>
       </thead>
       <tbody>
         {% for u in rows %}
         <tr>
           <td>{{ u.username }}</td>
           <td>{{ u.full_name }}</td>
-          <td><span class="badge info">{{ u.role }}</span></td>
-          <td>{{ u.perm_count }} صلاحية</td>
-          <td>{% if u.active %}<span class="badge ok">نشط</span>{% else %}<span class="badge danger">موقوف</span>{% endif %}</td>
+          <td><span class="badge info">{{ tv(u.role) }}</span></td>
+          <td>{{ u.perm_count }} {{ _('صلاحية') }}</td>
+          <td>{% if u.active %}<span class="badge ok">{{ _('نشط') }}</span>{% else %}<span class="badge danger">{{ _('موقوف') }}</span>{% endif %}</td>
           <td>{{ u.notes or '—' }}</td>
           <td class="actions" style="flex-wrap:wrap;">
             <details>
-              <summary class="btn ghost" style="cursor:pointer;list-style:none;">تعديل</summary>
+              <summary class="btn ghost" style="cursor:pointer;list-style:none;">{{ _('تعديل') }}</summary>
               <form method="post" class="form-grid" style="margin-top:8px;min-width:280px;">
                 <input type="hidden" name="action" value="update">
                 <input type="hidden" name="id" value="{{ u.id }}">
-                <div class="field"><label>الاسم</label><input name="full_name" value="{{ u.full_name }}" required></div>
+                <div class="field"><label>{{ _('الاسم') }}</label><input name="full_name" value="{{ u.full_name }}" required></div>
                 <div class="field">
-                  <label>الدور</label>
+                  <label>{{ _('الدور') }}</label>
                   <select name="role">
                     {% for x in lists.user_roles %}
-                    <option value="{{ x }}" {% if u.role==x %}selected{% endif %}>{{ x }}</option>
+                    <option value="{{ x }}" {% if u.role==x %}selected{% endif %}>{{ tv(x) }}</option>
                     {% endfor %}
                   </select>
                 </div>
-                <div class="field"><label>كلمة مرور جديدة</label><input name="password" placeholder="اتركه فارغاً للإبقاء"></div>
+                <div class="field"><label>{{ _('كلمة مرور جديدة') }}</label><input name="password" placeholder="{{ _('اتركه فارغاً للإبقاء') }}"></div>
                 <div class="field">
-                  <label>نشط؟</label>
+                  <label>{{ _('نشط؟') }}</label>
                   <select name="active">
-                    <option value="1" {% if u.active %}selected{% endif %}>نعم</option>
-                    <option value="0" {% if not u.active %}selected{% endif %}>لا</option>
+                    <option value="1" {% if u.active %}selected{% endif %}>{{ _('نعم') }}</option>
+                    <option value="0" {% if not u.active %}selected{% endif %}>{{ _('لا') }}</option>
                   </select>
                 </div>
-                <div class="field"><label>ملاحظات</label><input name="notes" value="{{ u.notes or '' }}"></div>
+                <div class="field"><label>{{ _('ملاحظات') }}</label><input name="notes" value="{{ u.notes or '' }}"></div>
                 <div class="actions" style="grid-column:1/-1">
-                  <button class="btn primary" type="submit">حفظ</button>
+                  <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
                 </div>
               </form>
             </details>
             <form method="post">
               <input type="hidden" name="action" value="toggle">
               <input type="hidden" name="id" value="{{ u.id }}">
-              <button class="btn ghost" type="submit">تفعيل/إيقاف</button>
+              <button class="btn ghost" type="submit">{{ _('تفعيل/إيقاف') }}</button>
             </form>
-            <form method="post" onsubmit="return confirm('حذف المستخدم؟');">
+            <form method="post" onsubmit="return confirm({{ _('حذف المستخدم؟')|tojson }});">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="{{ u.id }}">
-              <button class="btn danger" type="submit">حذف</button>
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7">لا يوجد مستخدمون</td></tr>
+        <tr><td colspan="7">{{ _('لا يوجد مستخدمون') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
@@ -103,19 +103,19 @@
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">مصفوفة الصلاحيات حسب الدور</h2>
-      <div class="meta">admin يملك كل الصلاحيات — المشرف تقريباً الكل عدا إدارة المستخدمين — مدخل بيانات إضافة/تعديل — مراقب عرض فقط. صلاحية «إضافة/تعديل الأعطال والبنود» (`tickets.write`) مطلوبة لأي تعديل على بيانات العطل أو بنود العقد/الكميات أو الصور والتمتير المرتبطة بالعطل.</div>
+      <h2 class="section-title">{{ _('مصفوفة الصلاحيات حسب الدور') }}</h2>
+      <div class="meta">{{ _('admin يملك كل الصلاحيات — المشرف تقريباً الكل عدا إدارة المستخدمين — مدخل بيانات إضافة/تعديل — مراقب عرض فقط. صلاحية «إضافة/تعديل الأعطال والبنود» (`tickets.write`) مطلوبة لأي تعديل على بيانات العطل أو بنود العقد/الكميات أو الصور والتمتير المرتبطة بالعطل.') }}</div>
     </div>
   </div>
   <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
-          <th>الصلاحية</th>
+          <th>{{ _('الصلاحية') }}</th>
           <th>admin</th>
-          <th>مشرف</th>
-          <th>مدخل بيانات</th>
-          <th>مراقب</th>
+          <th>{{ _('مشرف') }}</th>
+          <th>{{ _('مدخل بيانات') }}</th>
+          <th>{{ _('مراقب') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -123,7 +123,7 @@
         <tr>
           <td style="white-space:normal;">{{ row.label }}</td>
           {% for r in ['admin','مشرف','مدخل بيانات','مراقب'] %}
-          <td>{% if row.roles[r] %}<span class="badge ok">نعم</span>{% else %}<span class="badge danger">لا</span>{% endif %}</td>
+          <td>{% if row.roles[r] %}<span class="badge ok">{{ tv("نعم") }}</span>{% else %}<span class="badge danger">{{ _('لا') }}</span>{% endif %}</td>
           {% endfor %}
         </tr>
         {% endfor %}

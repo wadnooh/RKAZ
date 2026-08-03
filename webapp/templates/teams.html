@@ -5,33 +5,35 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">الفرق الميدانية</h2>
-      <div class="meta">إدارة فرق الطوارئ بمكتب خريص</div>
+      <h2 class="section-title">{{ _('الفرق الميدانية') }}</h2>
+      <div class="meta">{{ _('إدارة فرق الطوارئ بمكتب خريص') }}</div>
     </div>
   </div>
 
   {% if can('teams.write') %}
   <form method="post" class="form-grid">
     <input type="hidden" name="action" value="add">
-    <div class="field"><label>الفرقة</label><input name="name" required></div>
-    <div class="field"><label>قائد الفرقة</label><input name="leader"></div>
-    <div class="field"><label>عدد الفنيين</label><input type="number" name="technicians" value="4"></div>
-    <div class="field"><label>السائق</label><input name="driver"></div>
-    <div class="field"><label>السيارة</label><input name="vehicle"></div>
-    <div class="field"><label>المنطقة</label><input name="area" value="خريص"></div>
+    <div class="field"><label>{{ _('الفرقة') }}</label><input name="name" required></div>
+    <div class="field"><label>{{ _('قائد الفرقة') }}</label><input name="leader"></div>
+    <div class="field"><label>{{ _('عدد الفنيين') }}</label><input type="number" name="technicians" value="4"></div>
+    <div class="field"><label>{{ _('السائق') }}</label><input name="driver"></div>
+    <div class="field"><label>{{ _('السيارة') }}</label><input name="vehicle"></div>
+    <div class="field"><label>{{ _('المنطقة') }}</label><input name="area" value="خريص"></div>
     <div class="field">
-      <label>الحالة</label>
+      <label>{{ _('الحالة') }}</label>
       <select name="status">
-        <option>نشطة</option><option>متوقفة</option><option>صيانة</option>
+        <option value="نشطة">{{ tv('نشطة') }}</option>
+        <option value="متوقفة">{{ tv('متوقفة') }}</option>
+        <option value="صيانة">{{ tv('صيانة') }}</option>
       </select>
     </div>
-    <div class="field"><label>ملاحظات</label><input name="notes"></div>
+    <div class="field"><label>{{ _('ملاحظات') }}</label><input name="notes"></div>
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">إضافة فرقة</button>
+      <button class="btn primary" type="submit">{{ _('إضافة فرقة') }}</button>
     </div>
   </form>
   {% else %}
-  <p class="meta">عرض فقط — لا تملك صلاحية إدارة الفرق.</p>
+  <p class="meta">{{ _('عرض فقط — لا تملك صلاحية إدارة الفرق.') }}</p>
   {% endif %}
 </div>
 
@@ -39,7 +41,7 @@
   <div class="table-wrap">
     <table class="table">
       <thead>
-        <tr><th>الفرقة</th><th>القائد</th><th>الفنيين</th><th>السائق</th><th>السيارة</th><th>المنطقة</th><th>الحالة</th><th></th></tr>
+        <tr><th>{{ _('الفرقة') }}</th><th>{{ _('القائد') }}</th><th>{{ _('الفنيين') }}</th><th>{{ _('السائق') }}</th><th>{{ _('السيارة') }}</th><th>{{ _('المنطقة') }}</th><th>{{ _('الحالة') }}</th><th></th></tr>
       </thead>
       <tbody>
         {% for t in rows %}
@@ -49,16 +51,16 @@
           <td><span class="badge ok">{{ t.status or '—' }}</span></td>
           <td>
             {% if can('teams.write') %}
-            <form method="post" onsubmit="return confirm('حذف الفرقة؟');">
+            <form method="post" onsubmit="return confirm({{ _('حذف الفرقة؟')|tojson }});">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="{{ t.id }}">
-              <button class="btn danger" type="submit">حذف</button>
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
             {% else %}—{% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8">لا توجد فرق</td></tr>
+        <tr><td colspan="8">{{ _('لا توجد فرق') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

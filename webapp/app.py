@@ -21,7 +21,7 @@ from flask import (
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from webapp import db
-from webapp.i18n import tr as i18n_tr
+from webapp.i18n import tr as i18n_tr, _ as i18n_phrase, tv as i18n_tv, localize_module, localize_section_meta, localize_jump
 from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import review_engine
 from webapp import permissions
@@ -113,11 +113,32 @@ def _load_context():
         missing = permissions.required_perm_for_request()
         if missing:
             label = permissions.PERM_LABELS.get(missing, missing)
-            return permissions.deny_redirect(f"ليس لديك صلاحية: {label}")
+            return permissions.deny_redirect(_t("ليس لديك صلاحية: {label}", label=_t(label)))
 
 
 def current_user_name():
-    return session.get("full_name") or session.get("username") or "مستخدم"
+    return session.get("full_name") or session.get("username") or _t("مستخدم")
+
+
+
+def _lang():
+    return session.get("lang") or "ar"
+
+
+def _t(text, **kwargs):
+    return i18n_phrase(_lang(), text, **kwargs)
+
+
+def _tv(value):
+    return i18n_tv(_lang(), value)
+
+
+def _mod(module):
+    return localize_module(module, _lang())
+
+
+def _smeta(meta):
+    return localize_section_meta(meta, _lang())
 
 
 def _after_data_change():
@@ -145,6 +166,12 @@ def inject_globals():
     def tr(key, **kwargs):
         return i18n_tr(lang, key, **kwargs)
 
+    def _(text, **kwargs):
+        return i18n_phrase(lang, text, **kwargs)
+
+    def tv(value):
+        return i18n_tv(lang, value)
+
     def can(*perms):
         return permissions.can(*perms)
 
@@ -157,6 +184,8 @@ def inject_globals():
         "app_title": tr("app_title"),
         "lang": lang,
         "tr": tr,
+        "_": _,
+        "tv": tv,
         "can": can,
         "has_perm": permissions.has_perm,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
@@ -167,9 +196,9 @@ def inject_globals():
 
 def money(n):
     try:
-        return f"{float(n or 0):,.2f} ر.س"
+        return f"{float(n or 0):,.2f} {_t('ر.س')}"
     except Exception:
-        return "0.00 ر.س"
+        return f"0.00 {_t('ر.س')}"
 
 
 def response_minutes(dispatch, arrival):
@@ -225,14 +254,14 @@ def calc_cashflow(settings=None, cash_actual=None):
         cumulative += net
         rows.append(
             {
-                "month": f"شهر {i + 1}",
+                "month": f"{_t('شهر')} {i + 1}",
                 "index": i,
                 "approved": monthly,
                 "collection": collection,
                 "expenses": expenses,
                 "net": net,
                 "cumulative": cumulative,
-                "status": "يحتاج تمويل" if cumulative < 0 else "آمن",
+                "status": _t("يحتاج تمويل") if cumulative < 0 else _t("آمن"),
                 "raw": raw,
             }
         )
@@ -454,7 +483,7 @@ def dashboard():
 @login_required
 def ops_home():
     tools = [
-        {"label": "فرق المهام العاجلة", "href": url_for("teams_page")},
+        {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
     ]
 
     conn = db.connect()
@@ -481,12 +510,12 @@ def constructions_home():
     links = section_links("constructions")
     return render_template(
         "section_hub.html",
-        title="الإنشاءات - التنفيذ",
-        subtitle="متابعة معاملات الإنشاءات والتنفيذ وربطها بأعطال المكتب.",
+        title=_t("الإنشاءات - التنفيذ"),
+        subtitle=_t("متابعة معاملات الإنشاءات والتنفيذ وربطها بأعطال المكتب."),
         links=links,
         section="constructions",
         section_modules=modules_for_section("constructions"),
-        section_meta=SECTION_META["constructions"],
+        section_meta=_smeta(SECTION_META["constructions"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -497,12 +526,12 @@ def projects_home():
     links = section_links("projects")
     return render_template(
         "section_hub.html",
-        title="المشاريع",
-        subtitle="مشاريع خاصة ومشاريع الكهرباء — أكواد PR وترقيم مستقل عن أعطال الطوارئ.",
+        title=_t("المشاريع"),
+        subtitle=_t("مشاريع خاصة ومشاريع الكهرباء — أكواد PR وترقيم مستقل عن أعطال الطوارئ."),
         links=links,
         section="projects",
         section_modules=modules_for_section("projects"),
-        section_meta=SECTION_META["projects"],
+        section_meta=_smeta(SECTION_META["projects"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -513,12 +542,12 @@ def contractors_home():
     links = section_links("contractors")
     return render_template(
         "section_hub.html",
-        title="المقاولين",
-        subtitle="متابعة أعمال المقاولين وربطها بأعطال المكتب.",
+        title=_t("المقاولين"),
+        subtitle=_t("متابعة أعمال المقاولين وربطها بأعطال المكتب."),
         links=links,
         section="contractors",
         section_modules=modules_for_section("contractors"),
-        section_meta=SECTION_META["contractors"],
+        section_meta=_smeta(SECTION_META["contractors"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -529,12 +558,12 @@ def quality_home():
     links = section_links("quality")
     return render_template(
         "section_hub.html",
-        title="التنسيقات والجودة",
-        subtitle="التنسيقات الفنية وإخلاءات الأسفلت وفحوصات الجودة.",
+        title=_t("التنسيقات والجودة"),
+        subtitle=_t("التنسيقات الفنية وإخلاءات الأسفلت وفحوصات الجودة."),
         links=links,
         section="quality",
         section_modules=modules_for_section("quality"),
-        section_meta=SECTION_META["quality"],
+        section_meta=_smeta(SECTION_META["quality"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -545,12 +574,12 @@ def safety_home():
     links = section_links("safety")
     return render_template(
         "section_hub.html",
-        title="السلامة",
-        subtitle="تصاريح العمل وبلاغات السلامة المرتبطة بالمواقع.",
+        title=_t("السلامة"),
+        subtitle=_t("تصاريح العمل وبلاغات السلامة المرتبطة بالمواقع."),
         links=links,
         section="safety",
         section_modules=modules_for_section("safety"),
-        section_meta=SECTION_META["safety"],
+        section_meta=_smeta(SECTION_META["safety"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -559,15 +588,15 @@ def safety_home():
 @login_required
 def warehouses_home():
     links = section_links("warehouses")
-    links.append({"label": "أرصدة المواد", "href": url_for("warehouse_balances"), "count": _count("warehouse_items")})
+    links.append({"label": _t("أرصدة المواد"), "href": url_for("warehouse_balances"), "count": _count("warehouse_items")})
     return render_template(
         "section_hub.html",
-        title="المستودعات",
-        subtitle="الأصناف للمعاملات، والحركات والأرصدة لمتابعة الوارد والمنصرف.",
+        title=_t("المستودعات"),
+        subtitle=_t("الأصناف للمعاملات، والحركات والأرصدة لمتابعة الوارد والمنصرف."),
         links=links,
         section="warehouses",
         section_modules=modules_for_section("warehouses"),
-        section_meta=SECTION_META["warehouses"],
+        section_meta=_smeta(SECTION_META["warehouses"]),
         total_count=_count("warehouse_tx"),
     )
 
@@ -578,12 +607,12 @@ def external_purchases_home():
     links = section_links("external")
     return render_template(
         "section_hub.html",
-        title="المشتريات الخارجية والعهد",
-        subtitle="طلبات الشراء الخارجي ومتابعة العهد المسلمة للموظفين.",
+        title=_t("المشتريات الخارجية والعهد"),
+        subtitle=_t("طلبات الشراء الخارجي ومتابعة العهد المسلمة للموظفين."),
         links=links,
         section="external",
         section_modules=modules_for_section("external"),
-        section_meta=SECTION_META["external"],
+        section_meta=_smeta(SECTION_META["external"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -602,12 +631,12 @@ def financial_home():
     }
     return render_template(
         "section_hub.html",
-        title="المتابعات المالية",
-        subtitle="المستخلصات و SAP ودليل البنود للتمتير.",
+        title=_t("المتابعات المالية"),
+        subtitle=_t("المستخلصات و SAP ودليل البنود للتمتير."),
         links=links,
         section="financial",
         section_modules=modules_for_section("financial"),
-        section_meta=SECTION_META["financial"],
+        section_meta=_smeta(SECTION_META["financial"]),
         total_count=_count("invoices"),
         finance_stats=finance_stats,
     )
@@ -619,12 +648,12 @@ def maintenance_home():
     links = section_links("maintenance")
     return render_template(
         "section_hub.html",
-        title="الورشة (سيارات - معدات)",
-        subtitle="متابعة سيارات ومعدات الورش وربطها بالفرق الميدانية.",
+        title=_t("الورشة (سيارات - معدات)"),
+        subtitle=_t("متابعة سيارات ومعدات الورش وربطها بالفرق الميدانية."),
         links=links,
         section="maintenance",
         section_modules=modules_for_section("maintenance"),
-        section_meta=SECTION_META["maintenance"],
+        section_meta=_smeta(SECTION_META["maintenance"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -635,12 +664,12 @@ def hr_home():
     links = section_links("hr")
     return render_template(
         "section_hub.html",
-        title="الموارد البشرية",
-        subtitle="سجل الموظفين والأقسام وحالات الالتحاق.",
+        title=_t("الموارد البشرية"),
+        subtitle=_t("سجل الموظفين والأقسام وحالات الالتحاق."),
         links=links,
         section="hr",
         section_modules=modules_for_section("hr"),
-        section_meta=SECTION_META["hr"],
+        section_meta=_smeta(SECTION_META["hr"]),
         total_count=sum(i.get("count") or 0 for i in links),
     )
 
@@ -654,12 +683,12 @@ def contracts_admin_home():
     boq_count = int((boq_file or {}).get("item_count") or 0)
     return render_template(
         "contracts_hub.html",
-        title="إدارة العقود",
-        subtitle="عقود المكتب وبنود العقد الموحد — ارفع ملف Excel ليصبح الدليل النشط للمعاملات.",
+        title=_t("إدارة العقود"),
+        subtitle=_t("عقود المكتب وبنود العقد الموحد — ارفع ملف Excel ليصبح الدليل النشط للمعاملات."),
         links=links,
         section="contracts",
         section_modules=modules_for_section("contracts"),
-        section_meta=SECTION_META["contracts"],
+        section_meta=_smeta(SECTION_META["contracts"]),
         total_count=sum(i.get("count") or 0 for i in links),
         boq_file=boq_file,
         boq_files=boq_files,
@@ -689,13 +718,13 @@ def contract_boq_import():
         return permissions.deny_redirect()
     f = request.files.get("file")
     if not f or not f.filename:
-        flash("اختر ملف Excel لبنود العقد", "danger")
+        flash(_t("اختر ملف Excel لبنود العقد"), "danger")
         return redirect(url_for("contracts_admin_home"))
     try:
         from webapp import contract_boq_excel
 
         result = contract_boq_excel.import_boq_from_excel(f, uploaded_by=current_user_name())
-        flash(f"تم رفع بنود العقد: {result['ok']} بند — الملف النشط: {result['filename']}", "ok")
+        flash(_t("تم رفع بنود العقد: {ok} بند — الملف النشط: {filename}", ok=result["ok"], filename=result["filename"]), "ok")
         db.log_audit(
             current_user_name(),
             "رفع بنود عقد",
@@ -705,7 +734,7 @@ def contract_boq_import():
         )
         _after_data_change()
     except Exception as exc:
-        flash(f"تعذر استيراد بنود العقد: {exc}", "danger")
+        flash(_t("تعذر استيراد بنود العقد: {exc}", exc=exc), "danger")
     return redirect(url_for("contracts_admin_home"))
 
 
@@ -718,7 +747,7 @@ def contract_boq_activate(file_id):
     row = conn.execute("SELECT * FROM contract_boq_files WHERE id=?", (file_id,)).fetchone()
     if not row:
         conn.close()
-        flash("الملف غير موجود", "danger")
+        flash(_t("الملف غير موجود"), "danger")
         return redirect(url_for("contracts_admin_home"))
     conn.execute("UPDATE contract_boq_files SET is_active=0")
     conn.execute("UPDATE contract_boq_files SET is_active=1 WHERE id=?", (file_id,))
@@ -750,7 +779,7 @@ def contract_boq_activate(file_id):
         )
     conn.commit()
     conn.close()
-    flash("تم تفعيل دليل بنود العقد", "ok")
+    flash(_t("تم تفعيل دليل بنود العقد"), "ok")
     _after_data_change()
     return redirect(url_for("contracts_admin_home"))
 
@@ -849,21 +878,18 @@ def tickets_import():
         return permissions.deny_ticket_mutate()
     f = request.files.get("file")
     if not f or not f.filename:
-        flash("اختر ملف Excel للأعطال", "danger")
+        flash(_t("اختر ملف Excel للأعطال"), "danger")
         return redirect(url_for("tickets_list"))
     try:
         result = tickets_excel.import_tickets_from_excel(f)
-        flash(
-            f"استيراد الأعطال: جديد {result['ok']} | محدّث {result['updated']}",
-            "ok",
-        )
+        flash(_t("استيراد الأعطال: جديد {ok} | محدّث {updated}", ok=result["ok"], updated=result["updated"]), "ok")
         if result.get("errors"):
             flash(" / ".join(result["errors"][:5]), "danger")
         db.log_audit(current_user_name(), "استيراد Excel", "أعطال", details=str(result)[:240])
         if result["ok"] or result["updated"]:
             _after_data_change()
     except Exception as exc:
-        flash(f"تعذر الاستيراد: {exc}", "danger")
+        flash(_t("تعذر الاستيراد: {exc}", exc=exc), "danger")
     return redirect(url_for("tickets_list"))
 
 
@@ -875,7 +901,7 @@ def ticket_new():
     if request.method == "POST":
         data = ticket_from_form()
         if not data["ticket_no"]:
-            flash("رقم العطل مطلوب", "danger")
+            flash(_t("رقم العطل مطلوب"), "danger")
             return render_template("ticket_form.html", row=data, mode="new")
         conn = db.connect()
         try:
@@ -896,11 +922,11 @@ def ticket_new():
                 f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
             )
             new_id = cur.lastrowid
-            flash(f"تم إنشاء العطل بنجاح — كود ركاز {data.get('rekaz_code')} — الخطوة التالية: إضافة الكمية", "ok")
+            flash(_t("تم إنشاء العطل بنجاح — كود ركاز {code} — الخطوة التالية: إضافة الكمية", code=data.get("rekaz_code")), "ok")
             _after_data_change()
             return _ticket_edit_redirect(new_id, "boq")
         except Exception as exc:
-            flash(f"تعذر الحفظ: {exc}", "danger")
+            flash(_t("تعذر الحفظ: {exc}", exc=exc), "danger")
         finally:
             conn.close()
     blank = {f: "" for f in TICKET_FIELDS}
@@ -913,14 +939,14 @@ def ticket_new():
 def _ticket_wizard_steps():
     """خطوات تعديل العطل بالترتيب (عربي)."""
     steps = [
-        ("data", "بيانات المعاملة"),
-        ("boq", "إضافة الكمية"),
-        ("photos", "الصور"),
-        ("metering", "التمتير"),
+        ("data", _t("بيانات المعاملة")),
+        ("boq", _t("إضافة الكمية")),
+        ("photos", _t("الصور")),
+        ("metering", _t("التمتير")),
     ]
     if permissions.can("section.warehouses"):
-        steps.append(("warehouse", "المستودع"))
-    steps.append(("done", "الاكتمال"))
+        steps.append(("warehouse", _t("المستودع")))
+    steps.append(("done", _t("الاكتمال")))
     return steps
 
 
@@ -947,7 +973,7 @@ def ticket_view(ticket_id):
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
-        flash("العطل غير موجود", "danger")
+        flash(_t("العطل غير موجود"), "danger")
         return redirect(url_for("tickets_list"))
     ticket = dict(row)
     tno = ticket["ticket_no"]
@@ -970,7 +996,7 @@ def ticket_view(ticket_id):
     for q in related["quantities"]:
         q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
     for p in related["photos"]:
-        p["complete"] = "مكتمل" if media_svc.photos_complete(p) else "ناقص"
+        p["complete"] = _t("مكتمل") if media_svc.photos_complete(p) else _t("ناقص")
     boq_base = sum(float(x.get("line_total") or 0) for x in related["boq_lines"])
     boq_final = sum(float(x.get("final_total") or 0) for x in related["boq_lines"])
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
@@ -981,7 +1007,7 @@ def ticket_view(ticket_id):
     can_mutate = permissions.can("tickets.write")
     wants_edit = request.args.get("edit") == "1"
     if wants_edit and not can_mutate:
-        flash("ليس لديك صلاحية لتعديل العطل أو بنوده. العرض متاح للقراءة فقط.", "danger")
+        flash(_t("ليس لديك صلاحية لتعديل العطل أو بنوده. العرض متاح للقراءة فقط."), "danger")
         return redirect(url_for("ticket_view", ticket_id=ticket_id))
     edit_mode = wants_edit and can_mutate
     wizard_steps = _ticket_wizard_steps() if edit_mode else []
@@ -1014,7 +1040,7 @@ def ticket_edit(ticket_id):
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
-        flash("العطل غير موجود", "danger")
+        flash(_t("العطل غير موجود"), "danger")
         return redirect(url_for("tickets_list"))
     if request.method == "POST":
         data = ticket_from_form()
@@ -1029,7 +1055,7 @@ def ticket_edit(ticket_id):
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
-        flash("تم حفظ المعاملة — انتقل لإضافة الكمية", "ok")
+        flash(_t("تم حفظ المعاملة — انتقل لإضافة الكمية"), "ok")
         _after_data_change()
         return _ticket_edit_redirect(ticket_id, "boq")
     conn.close()
@@ -1041,14 +1067,14 @@ def ticket_edit(ticket_id):
 @login_required
 def ticket_delete(ticket_id):
     if not permissions.can("tickets.delete"):
-        return permissions.deny_redirect("ليس لديك صلاحية لحذف الأعطال.")
+        return permissions.deny_redirect(_t("ليس لديك صلاحية لحذف الأعطال."))
     conn = db.connect()
     row = conn.execute("SELECT ticket_no FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
     conn.commit()
     conn.close()
     db.log_audit(current_user_name(), "حذف", "عطل", ticket_id, row["ticket_no"] if row else "")
-    flash("تم حذف العطل", "ok")
+    flash(_t("تم حذف العطل"), "ok")
     _after_data_change()
     return redirect(url_for("tickets_list"))
 
@@ -1057,12 +1083,12 @@ def ticket_delete(ticket_id):
 @login_required
 def ticket_boq_add(ticket_id):
     if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate("ليس لديك صلاحية لإضافة بنود العقد على العطل.")
+        return permissions.deny_ticket_mutate(_t("ليس لديك صلاحية لإضافة بنود العقد على العطل."))
     conn = db.connect()
     ticket = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not ticket:
         conn.close()
-        flash("العطل غير موجود", "danger")
+        flash(_t("العطل غير موجود"), "danger")
         return redirect(url_for("tickets_list"))
     item_no = (request.form.get("item_no") or "").strip()
     qty_raw = (request.form.get("qty") or "").strip()
@@ -1071,13 +1097,13 @@ def ticket_boq_add(ticket_id):
     notes = (request.form.get("notes") or "").strip()
     if not item_no:
         conn.close()
-        flash("أدخل رقم البند من دليل العقد", "danger")
+        flash(_t("أدخل رقم البند من دليل العقد"), "danger")
         return _ticket_edit_redirect(ticket_id, "boq")
     try:
         qty = float(qty_raw) if qty_raw != "" else 0.0
     except ValueError:
         conn.close()
-        flash("الكمية غير صالحة", "danger")
+        flash(_t("الكمية غير صالحة"), "danger")
         return _ticket_edit_redirect(ticket_id, "boq")
     try:
         ratio = float(ratio_raw) if ratio_raw != "" else None
@@ -1086,7 +1112,7 @@ def ticket_boq_add(ticket_id):
     catalog = db.get_contract_boq_item(item_no, conn)
     if not catalog:
         conn.close()
-        flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط — تحقق من الرقم أو ارفع الدليل من إدارة العقود", "danger")
+        flash(_t("رقم البند «{item_no}» غير موجود في دليل العقد النشط — تحقق من الرقم أو ارفع الدليل من إدارة العقود", item_no=item_no), "danger")
         return _ticket_edit_redirect(ticket_id, "boq")
     active = db.active_contract_boq_file(conn)
     unit_price = catalog.get("unit_price")
@@ -1138,7 +1164,7 @@ def ticket_boq_add(ticket_id):
     conn.commit()
     conn.close()
     db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
-    flash("تمت إضافة البند وحساب التكلفة — أضف بنداً آخر أو انتقل للخطوة التالية", "ok")
+    flash(_t("تمت إضافة البند وحساب التكلفة — أضف بنداً آخر أو انتقل للخطوة التالية"), "ok")
     _after_data_change()
     return _ticket_edit_redirect(ticket_id, "boq")
 
@@ -1147,7 +1173,7 @@ def ticket_boq_add(ticket_id):
 @login_required
 def ticket_boq_delete(ticket_id, line_id):
     if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate("ليس لديك صلاحية لحذف بنود العقد من العطل.")
+        return permissions.deny_ticket_mutate(_t("ليس لديك صلاحية لحذف بنود العقد من العطل."))
     conn = db.connect()
     line = conn.execute(
         "SELECT * FROM ticket_boq_lines WHERE id=? AND ticket_id=?",
@@ -1170,7 +1196,7 @@ def ticket_boq_delete(ticket_id, line_id):
     db.sync_ticket_items_value(ticket_id, conn)
     conn.commit()
     conn.close()
-    flash("تم حذف البند", "ok")
+    flash(_t("تم حذف البند"), "ok")
     _after_data_change()
     return _ticket_edit_redirect(ticket_id, "boq")
 
@@ -1181,10 +1207,10 @@ def api_boq_item():
     """بحث سريع عن بند في دليل العقد برقم البند (لإدخال نصي)."""
     item_no = (request.args.get("item_no") or "").strip()
     if not item_no:
-        return jsonify({"ok": False, "error": "أدخل رقم البند"})
+        return jsonify({"ok": False, "error": _t("أدخل رقم البند")})
     item = db.get_contract_boq_item(item_no)
     if not item:
-        return jsonify({"ok": False, "error": f"رقم البند «{item_no}» غير موجود في دليل العقد النشط"})
+        return jsonify({"ok": False, "error": _t("رقم البند «{item_no}» غير موجود في دليل العقد النشط", item_no=item_no)})
     desc = (item.get("short_desc") or item.get("description") or "").strip()
     return jsonify(
         {
@@ -1204,7 +1230,7 @@ def ticket_print(ticket_id):
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
-        flash("العطل غير موجود", "danger")
+        flash(_t("العطل غير موجود"), "danger")
         return redirect(url_for("tickets_list"))
     ticket = dict(row)
     tno = ticket["ticket_no"]
@@ -1311,7 +1337,7 @@ def _redirect_after_module(name, data):
             if nxt not in allowed:
                 nxt = "done"
             label = dict(_ticket_wizard_steps()).get(nxt, nxt)
-            flash(f"تم الحفظ — الخطوة التالية: {label}", "ok")
+            flash(_t("تم الحفظ — الخطوة التالية: {label}", label=label), "ok")
             return _ticket_edit_redirect(row["id"], nxt)
     if tno:
         return redirect(url_for("module_list", name=name, ticket_no=tno))
@@ -1337,7 +1363,7 @@ def media_serve(storage, key):
 def module_list(name):
     module = MODULES.get(name)
     if not module:
-        flash("القسم غير موجود", "danger")
+        flash(_t("القسم غير موجود"), "danger")
         return redirect(url_for("ops_home"))
     conn = db.connect()
     rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {module['table']} ORDER BY id DESC").fetchall())
@@ -1348,7 +1374,7 @@ def module_list(name):
             r["total"] = (float(r.get("qty") or 0) * float(r.get("unit_price") or 0))
     if name == "photos":
         for r in rows:
-            r["complete"] = "مكتمل" if media_svc.photos_complete(r) else "ناقص"
+            r["complete"] = _t("مكتمل") if media_svc.photos_complete(r) else _t("ناقص")
     if name == "invoices":
         for r in rows:
             r["remaining"] = float(r.get("value") or 0) - float(r.get("collected") or 0)
@@ -1368,13 +1394,13 @@ def module_list(name):
     return render_template(
         "module_list.html",
         name=name,
-        module=module,
+        module=_mod(module),
         rows=rows,
         tickets=tickets,
         item_filter=item_filter,
         ticket_filter=ticket_filter,
         section=section,
-        section_meta=SECTION_META.get(section),
+        section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
     )
 
@@ -1414,7 +1440,7 @@ def module_new(name):
                 return render_template(
                     "module_form.html",
                     name=name,
-                    module=module,
+                    module=_mod(module),
                     row=data,
                     tickets=tickets,
                     ticket_options=ticket_options,
@@ -1422,7 +1448,7 @@ def module_new(name):
                     boq_items=[],
                     mode="new",
                     section=section,
-                    section_meta=SECTION_META.get(section),
+                    section_meta=_smeta(SECTION_META.get(section)),
                     section_modules=modules_for_section(section) if section else [],
                     photo_storage=media_svc.storage_backend(),
                     photo_ephemeral=backup_svc.is_trial_free(),
@@ -1433,12 +1459,12 @@ def module_new(name):
             if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (
                 (data.get("ticket_no") or "").strip() or (data.get("rekaz_code") or "").strip()
             ):
-                flash("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER", "danger")
+                flash(_t("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER"), "danger")
                 section = module.get("section")
                 return render_template(
                     "module_form.html",
                     name=name,
-                    module=module,
+                    module=_mod(module),
                     row=data,
                     tickets=tickets,
                     ticket_options=ticket_options,
@@ -1446,18 +1472,18 @@ def module_new(name):
                     boq_items=[],
                     mode="new",
                     section=section,
-                    section_meta=SECTION_META.get(section),
+                    section_meta=_smeta(SECTION_META.get(section)),
                     section_modules=modules_for_section(section) if section else [],
                 )
         if name == "quantities":
             item_no = (data.get("item_no") or "").strip()
             if item_no and not db.get_contract_boq_item(item_no, conn):
-                flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط", "danger")
+                flash(_t("رقم البند «{item_no}» غير موجود في دليل العقد النشط", item_no=item_no), "danger")
                 section = module.get("section")
                 return render_template(
                     "module_form.html",
                     name=name,
-                    module=module,
+                    module=_mod(module),
                     row=data,
                     tickets=tickets,
                     ticket_options=ticket_options,
@@ -1465,7 +1491,7 @@ def module_new(name):
                     boq_items=[],
                     mode="new",
                     section=section,
-                    section_meta=SECTION_META.get(section),
+                    section_meta=_smeta(SECTION_META.get(section)),
                     section_modules=modules_for_section(section) if section else [],
                 )
             data = db.enrich_quantity_from_boq(data, conn)
@@ -1486,7 +1512,7 @@ def module_new(name):
         new_id = cur.lastrowid
         conn.close()
         db.log_audit(current_user_name(), "إضافة", module["title"], new_id, str(data)[:240])
-        flash("تمت الإضافة", "ok")
+        flash(_t("تمت الإضافة"), "ok")
         _after_data_change()
         return _redirect_after_module(name, data)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
@@ -1502,7 +1528,7 @@ def module_new(name):
     return render_template(
         "module_form.html",
         name=name,
-        module=module,
+        module=_mod(module),
         row=prefill,
         tickets=tickets,
         ticket_options=ticket_options,
@@ -1510,7 +1536,7 @@ def module_new(name):
         boq_items=boq_items,
         mode="new",
         section=section,
-        section_meta=SECTION_META.get(section),
+        section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
@@ -1530,7 +1556,7 @@ def module_edit(name, row_id):
     tickets = [t["value"] for t in ticket_options]
     if not row:
         conn.close()
-        flash("السجل غير موجود", "danger")
+        flash(_t("السجل غير موجود"), "danger")
         return redirect(url_for("module_list", name=name))
     if request.method == "POST":
         data = _module_form_data(module)
@@ -1544,7 +1570,7 @@ def module_edit(name, row_id):
                 return render_template(
                     "module_form.html",
                     name=name,
-                    module=module,
+                    module=_mod(module),
                     row={**dict(row), **data},
                     tickets=tickets,
                     ticket_options=ticket_options,
@@ -1552,7 +1578,7 @@ def module_edit(name, row_id):
                     boq_items=[],
                     mode="edit",
                     section=section,
-                    section_meta=SECTION_META.get(section),
+                    section_meta=_smeta(SECTION_META.get(section)),
                     section_modules=modules_for_section(section) if section else [],
                     photo_storage=media_svc.storage_backend(),
                     photo_ephemeral=backup_svc.is_trial_free(),
@@ -1563,12 +1589,12 @@ def module_edit(name, row_id):
             if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (
                 (data.get("ticket_no") or "").strip() or (data.get("rekaz_code") or "").strip()
             ):
-                flash("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER", "danger")
+                flash(_t("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER"), "danger")
                 section = module.get("section")
                 return render_template(
                     "module_form.html",
                     name=name,
-                    module=module,
+                    module=_mod(module),
                     row=data,
                     tickets=tickets,
                     ticket_options=ticket_options,
@@ -1576,18 +1602,18 @@ def module_edit(name, row_id):
                     boq_items=[],
                     mode="edit",
                     section=section,
-                    section_meta=SECTION_META.get(section),
+                    section_meta=_smeta(SECTION_META.get(section)),
                     section_modules=modules_for_section(section) if section else [],
                 )
         if name == "quantities":
             item_no = (data.get("item_no") or "").strip()
             if item_no and not db.get_contract_boq_item(item_no, conn):
-                flash(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط", "danger")
+                flash(_t("رقم البند «{item_no}» غير موجود في دليل العقد النشط", item_no=item_no), "danger")
                 section = module.get("section")
                 return render_template(
                     "module_form.html",
                     name=name,
-                    module=module,
+                    module=_mod(module),
                     row=data,
                     tickets=tickets,
                     ticket_options=ticket_options,
@@ -1595,7 +1621,7 @@ def module_edit(name, row_id):
                     boq_items=[],
                     mode="edit",
                     section=section,
-                    section_meta=SECTION_META.get(section),
+                    section_meta=_smeta(SECTION_META.get(section)),
                     section_modules=modules_for_section(section) if section else [],
                 )
             data = db.enrich_quantity_from_boq(data, conn)
@@ -1614,7 +1640,7 @@ def module_edit(name, row_id):
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
-        flash("تم الحفظ", "ok")
+        flash(_t("تم الحفظ"), "ok")
         _after_data_change()
         return _redirect_after_module(name, data)
     data = dict(row)
@@ -1630,7 +1656,7 @@ def module_edit(name, row_id):
     return render_template(
         "module_form.html",
         name=name,
-        module=module,
+        module=_mod(module),
         row=data,
         tickets=tickets,
         ticket_options=ticket_options,
@@ -1638,7 +1664,7 @@ def module_edit(name, row_id):
         boq_items=boq_items,
         mode="edit",
         section=section,
-        section_meta=SECTION_META.get(section),
+        section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
@@ -1657,7 +1683,7 @@ def module_delete(name, row_id):
     conn.commit()
     conn.close()
     db.log_audit(current_user_name(), "حذف", module["title"], row_id)
-    flash("تم الحذف", "ok")
+    flash(_t("تم الحذف"), "ok")
     _after_data_change()
     return redirect(url_for("module_list", name=name))
 
@@ -1666,7 +1692,7 @@ def module_delete(name, row_id):
 @app.route("/cashflow", methods=["GET", "POST"])
 @login_required
 def cashflow():
-    flash("صفحة التدفق النقدي غير مفعّلة في الواجهة. راجع المستخلصات من المتابعات المالية.", "ok")
+    flash(_t("صفحة التدفق النقدي غير مفعّلة في الواجهة. راجع المستخلصات من المتابعات المالية."), "ok")
     return redirect(url_for("financial_home"))
 
 
@@ -1691,11 +1717,11 @@ def teams_page():
                 ),
             )
             conn.commit()
-            flash("تمت إضافة الفرقة", "ok")
+            flash(_t("تمت إضافة الفرقة"), "ok")
         elif action == "delete":
             conn.execute("DELETE FROM teams WHERE id=?", (request.form.get("id"),))
             conn.commit()
-            flash("تم الحذف", "ok")
+            flash(_t("تم الحذف"), "ok")
     rows = db.rows_to_dicts(conn.execute("SELECT * FROM teams ORDER BY id").fetchall())
     conn.close()
     return render_template("teams.html", rows=rows)
@@ -1777,7 +1803,7 @@ def warehouse_balances():
         rows=items,
         q=q,
         section="warehouses",
-        section_meta=SECTION_META["warehouses"],
+        section_meta=_smeta(SECTION_META["warehouses"]),
         section_modules=modules_for_section("warehouses"),
     )
 
@@ -1820,7 +1846,7 @@ def warehouse_items_import():
         return permissions.deny_redirect()
     f = request.files.get("file")
     if not f or not f.filename:
-        flash("اختر ملف Excel للمواد", "danger")
+        flash(_t("اختر ملف Excel للمواد"), "danger")
         return redirect(url_for("module_list", name="warehouse_items"))
     try:
         result = warehouse_excel.import_items_from_excel(f)
@@ -1832,7 +1858,7 @@ def warehouse_items_import():
             flash(" / ".join(result["errors"][:5]), "danger")
         db.log_audit(current_user_name(), "استيراد Excel", "أصناف المستودع", details=str(result)[:240])
     except Exception as exc:
-        flash(f"تعذر الاستيراد: {exc}", "danger")
+        flash(_t("تعذر الاستيراد: {exc}", exc=exc), "danger")
     return redirect(url_for("module_list", name="warehouse_items"))
 
 
@@ -1851,14 +1877,14 @@ def warehouse_balances_clear():
         return permissions.deny_redirect()
     confirm = (request.form.get("confirm") or "").strip()
     if confirm != "مسح":
-        flash('للتأكيد اكتب كلمة «مسح» في خانة التأكيد ثم أعد المحاولة.', "danger")
+        flash(_t('للتأكيد اكتب كلمة «مسح» في خانة التأكيد ثم أعد المحاولة.'), "danger")
         return redirect(url_for("warehouse_balances"))
     try:
         deleted = db.clear_warehouse_balances()
-        flash(f"تم مسح الأرصدة: حُذفت {deleted} حركة مستودع. الأصناف بقيت كما هي.", "ok")
+        flash(_t("تم مسح الأرصدة: حُذفت {deleted} حركة مستودع. الأصناف بقيت كما هي.", deleted=deleted), "ok")
         db.log_audit(current_user_name(), "مسح أرصدة", "معاملات المستودع", details=f"deleted={deleted}")
     except Exception as exc:
-        flash(f"تعذر مسح الأرصدة: {exc}", "danger")
+        flash(_t("تعذر مسح الأرصدة: {exc}", exc=exc), "danger")
     return redirect(url_for("warehouse_balances"))
 
 
@@ -1869,7 +1895,7 @@ def warehouse_tx_import():
         return permissions.deny_redirect()
     f = request.files.get("file")
     if not f or not f.filename:
-        flash("اختر ملف Excel للحركات", "danger")
+        flash(_t("اختر ملف Excel للحركات"), "danger")
         return redirect(url_for("warehouse_balances"))
     try:
         result = warehouse_excel.import_tx_from_excel(f)
@@ -1881,7 +1907,7 @@ def warehouse_tx_import():
             flash(" / ".join(result["errors"][:5]), "danger")
         db.log_audit(current_user_name(), "استيراد Excel", "معاملات المستودع", details=str(result)[:240])
     except Exception as exc:
-        flash(f"تعذر الاستيراد: {exc}", "danger")
+        flash(_t("تعذر الاستيراد: {exc}", exc=exc), "danger")
     return redirect(url_for("warehouse_balances"))
 
 
@@ -1907,9 +1933,9 @@ def users_list():
                 )
                 conn.commit()
                 db.log_audit(current_user_name(), "إضافة", "مستخدم", details=request.form.get("username"))
-                flash("تم إضافة المستخدم", "ok")
+                flash(_t("تم إضافة المستخدم"), "ok")
             except Exception as exc:
-                flash(f"تعذر الإضافة: {exc}", "danger")
+                flash(_t("تعذر الإضافة: {exc}", exc=exc), "danger")
         elif action == "update":
             uid = request.form.get("id")
             role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
@@ -1942,35 +1968,35 @@ def users_list():
                 session["full_name"] = request.form.get("full_name")
                 session["role"] = role
             db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
-            flash("تم تحديث المستخدم", "ok")
+            flash(_t("تم تحديث المستخدم"), "ok")
         elif action == "delete":
             uid = request.form.get("id")
             target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
             if target and str(session.get("user_id")) == str(uid):
-                flash("لا يمكن حذف حسابك الحالي", "danger")
+                flash(_t("لا يمكن حذف حسابك الحالي"), "danger")
             else:
                 admins = conn.execute(
                     "SELECT COUNT(*) FROM users WHERE lower(role)='admin' AND active=1"
                 ).fetchone()[0]
                 if target and permissions.normalize_role(target["role"]) == "admin" and admins <= 1:
-                    flash("لا يمكن حذف آخر مدير نظام نشط", "danger")
+                    flash(_t("لا يمكن حذف آخر مدير نظام نشط"), "danger")
                 else:
                     conn.execute("DELETE FROM users WHERE id=?", (uid,))
                     conn.commit()
                     db.log_audit(current_user_name(), "حذف", "مستخدم", uid)
-                    flash("تم الحذف", "ok")
+                    flash(_t("تم الحذف"), "ok")
         elif action == "toggle":
             uid = request.form.get("id")
             target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
             if target and str(session.get("user_id")) == str(uid):
-                flash("لا يمكن إيقاف حسابك الحالي", "danger")
+                flash(_t("لا يمكن إيقاف حسابك الحالي"), "danger")
             else:
                 conn.execute(
                     "UPDATE users SET active = CASE WHEN active=1 THEN 0 ELSE 1 END WHERE id=?",
                     (uid,),
                 )
                 conn.commit()
-                flash("تم تحديث الحالة", "ok")
+                flash(_t("تم تحديث الحالة"), "ok")
     rows = db.rows_to_dicts(conn.execute("SELECT * FROM users ORDER BY id").fetchall())
     conn.close()
     for row in rows:
@@ -2065,7 +2091,8 @@ def global_search():
 def api_jump_destinations():
     from flask import jsonify
 
-    return jsonify(permissions.filter_jump_items(review_engine.jump_destinations()))
+    items = permissions.filter_jump_items(review_engine.jump_destinations())
+    return jsonify(localize_jump(items, _lang()))
 
 
 @app.route("/export/tickets.xlsx")

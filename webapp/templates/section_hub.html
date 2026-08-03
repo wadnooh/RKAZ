@@ -25,19 +25,19 @@
 
   <div class="stats-grid" style="margin-top:4px;">
     <div class="stat-card">
-      <div>الأقسام الفرعية</div>
+      <div>{{ _('الأقسام الفرعية') }}</div>
       <strong>{{ links|length }}</strong>
     </div>
     <div class="stat-card">
-      <div>المعاملات / السجلات</div>
+      <div>{{ _('المعاملات / السجلات') }}</div>
       <strong>{{ total_count or 0 }}</strong>
     </div>
     {% if finance_stats %}
-    <div class="stat-card"><div>فواتير مرفوعة SAP</div><strong>{{ finance_stats.sap_raised }}</strong></div>
-    <div class="stat-card"><div>إجمالي المستخلصات</div><strong style="font-size:1.05rem">{{ finance_stats.invoices_total|money }}</strong></div>
-    <div class="stat-card"><div>المبالغ المحصلة</div><strong style="font-size:1.05rem">{{ finance_stats.collected|money }}</strong></div>
-    <div class="stat-card"><div>المتبقي غير محصل</div><strong style="font-size:1.05rem">{{ finance_stats.remaining|money }}</strong></div>
-    <div class="stat-card"><div>السيولة المطلوبة</div><strong style="font-size:1.05rem">{{ finance_stats.liquidity|money }}</strong></div>
+    <div class="stat-card"><div>{{ _('فواتير مرفوعة SAP') }}</div><strong>{{ finance_stats.sap_raised }}</strong></div>
+    <div class="stat-card"><div>{{ _('إجمالي المستخلصات') }}</div><strong style="font-size:1.05rem">{{ finance_stats.invoices_total|money }}</strong></div>
+    <div class="stat-card"><div>{{ _('المبالغ المحصلة') }}</div><strong style="font-size:1.05rem">{{ finance_stats.collected|money }}</strong></div>
+    <div class="stat-card"><div>{{ _('المتبقي غير محصل') }}</div><strong style="font-size:1.05rem">{{ finance_stats.remaining|money }}</strong></div>
+    <div class="stat-card"><div>{{ _('السيولة المطلوبة') }}</div><strong style="font-size:1.05rem">{{ finance_stats.liquidity|money }}</strong></div>
     {% endif %}
   </div>
 
@@ -45,9 +45,9 @@
     <table class="table" style="min-width:0">
       <thead>
         <tr>
-          <th>القسم</th>
-          <th>العدد</th>
-          <th>إجراءات</th>
+          <th>{{ _('القسم') }}</th>
+          <th>{{ _('العدد') }}</th>
+          <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -55,14 +55,14 @@
         <tr>
           <td>{{ item.label }}</td>
           <td>{{ item.count if item.count is defined else '—' }}</td>
-          <td class="actions"><a class="btn ghost" href="{{ item.href }}">فتح</a></td>
+          <td class="actions"><a class="btn ghost" href="{{ item.href }}">{{ _('فتح') }}</a></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% else %}
-  <div class="meta" style="padding:18px 0;">لا توجد أقسام فرعية حالياً.</div>
+  <div class="meta" style="padding:18px 0;">{{ _('لا توجد أقسام فرعية حالياً.') }}</div>
   {% endif %}
 </div>
 {% endblock %}

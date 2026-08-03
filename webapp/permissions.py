@@ -7,6 +7,7 @@ from functools import wraps
 from flask import flash, redirect, request, session, url_for
 
 from webapp.modules_config import MODULES
+from webapp.i18n import _ as i18n_phrase
 
 # ---- أكواد الصلاحيات ----
 PERM_LABELS = {
@@ -165,7 +166,7 @@ def role_matrix() -> list[dict]:
         rows.append(
             {
                 "perm": perm,
-                "label": label,
+                "label": i18n_phrase(session.get("lang") or "ar", label),
                 "roles": {r: has_perm(perm, r) for r in roles},
             }
         )
@@ -176,12 +177,12 @@ def deny_ticket_mutate(message: str | None = None):
     """رفض تعديل عطل/بند بدون صلاحية tickets.write."""
     return deny_redirect(
         message
-        or "ليس لديك صلاحية لتعديل العطل أو بنوده. يلزم: إضافة/تعديل الأعطال والبنود."
+        or i18n_phrase(session.get("lang") or "ar", "ليس لديك صلاحية لتعديل العطل أو بنوده. يلزم: إضافة/تعديل الأعطال والبنود.")
     )
 
 
 def deny_redirect(message: str | None = None):
-    flash(message or "ليس لديك صلاحية للوصول إلى هذه الصفحة.", "danger")
+    flash(message or i18n_phrase(session.get("lang") or "ar", "ليس لديك صلاحية للوصول إلى هذه الصفحة."), "danger")
     # وجّه لأول قسم مسموح
     for section, perm in (
         ("ops", "section.ops"),

@@ -9,11 +9,11 @@
 <div class="card ticket-wizard">
   <div class="toolbar" style="margin-bottom:8px;">
     <div>
-      <h2 class="section-title" style="font-size:1.05rem;margin:0;">خطوات المعاملة</h2>
-      <div class="meta">احفظ كل مرحلة للانتقال تلقائياً للخطوة التالية</div>
+      <h2 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('خطوات المعاملة') }}</h2>
+      <div class="meta">{{ _('احفظ كل مرحلة للانتقال تلقائياً للخطوة التالية') }}</div>
     </div>
   </div>
-  <nav class="ticket-steps" aria-label="خطوات تعديل العطل">
+  <nav class="ticket-steps" aria-label="{{ _('خطوات تعديل العطل') }}">
     {% for key, label in wizard_steps %}
     <a class="ticket-step{% if step==key %} is-active{% endif %}"
        href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=key) }}#step-{{ key }}">
@@ -28,27 +28,27 @@
 <div class="card{% if editing and step=='data' %} ticket-step-panel is-active{% endif %}" id="step-data" style="margin-top:{% if editing %}14px{% else %}0{% endif %};">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">{% if editing %}تعديل العطل{% else %}عرض العطل{% endif %} — {{ ticket.ticket_no }}</h2>
+      <h2 class="section-title">{% if editing %}{{ _('تعديل العطل') }}{% else %}{{ _('عرض العطل') }}{% endif %} — {{ ticket.ticket_no }}</h2>
       <div class="meta">
         {% if editing %}
-        {% if step=='data' %}الخطوة 1: بيانات المعاملة — احفظ للانتقال لإضافة الكمية{% else %}وضع التعديل — يمكن التنقل بين الخطوات أعلاه{% endif %}
+        {% if step=='data' %}{{ _('الخطوة 1: بيانات المعاملة — احفظ للانتقال لإضافة الكمية') }}{% else %}{{ _('وضع التعديل — يمكن التنقل بين الخطوات أعلاه') }}{% endif %}
         {% else %}
-        تفاصيل العطل والسجلات المرتبطة به (بنود/كميات، صور، تمتير) — للعرض فقط حتى طلب التعديل
-        {% if not can_mutate %}<br>لا تملك صلاحية التعديل (يلزم: إضافة/تعديل الأعطال والبنود).{% endif %}
+        {{ _('تفاصيل العطل والسجلات المرتبطة به (بنود/كميات، صور، تمتير) — للعرض فقط حتى طلب التعديل') }}
+        {% if not can_mutate %}<br>{{ _('لا تملك صلاحية التعديل (يلزم: إضافة/تعديل الأعطال والبنود).') }}{% endif %}
         {% endif %}
       </div>
     </div>
     <div class="actions">
-      <a class="btn ghost" href="{{ url_for('tickets_list') }}">رجوع</a>
+      <a class="btn ghost" href="{{ url_for('tickets_list') }}">{{ _('رجوع') }}</a>
       {% if editing %}
-      <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">إنهاء التعديل</a>
+      <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">{{ _('إنهاء التعديل') }}</a>
       {% elif can_mutate %}
-      <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step='data') }}#step-data">طلب التعديل</a>
+      <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step='data') }}#step-data">{{ _('طلب التعديل') }}</a>
       {% endif %}
-      <a class="btn {% if editing %}ghost{% else %}primary{% endif %}" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
+      <a class="btn {% if editing %}ghost{% else %}primary{% endif %}" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">{{ _('طباعة التقرير') }}</a>
       {% if editing and can('tickets.delete') %}
-      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return confirm('حذف العطل؟');">
-        <button class="btn danger" type="submit">حذف</button>
+      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return confirm({{ _('حذف العطل؟')|tojson }});">
+        <button class="btn danger" type="submit">{{ _('حذف') }}</button>
       </form>
       {% endif %}
     </div>
@@ -56,109 +56,109 @@
 
   {% if editing and can('tickets.write') %}
   <form method="post" action="{{ url_for('ticket_edit', ticket_id=ticket.id) }}" class="form-grid">
-    <div class="field"><label>رقم العطل (SEC)</label><input name="ticket_no" value="{{ ticket.ticket_no or '' }}" required></div>
+    <div class="field"><label>{{ _('رقم العطل (SEC)') }}</label><input name="ticket_no" value="{{ ticket.ticket_no or '' }}" required></div>
     <div class="field">
-      <label>كود ركاز (ER)</label>
+      <label>{{ _('كود ركاز (ER)') }}</label>
       <input name="rekaz_code" value="{{ ticket.rekaz_code or '' }}" placeholder="ER-…">
-      <div class="meta">يمكن تعديله يدوياً</div>
+      <div class="meta">{{ _('يمكن تعديله يدوياً') }}</div>
     </div>
-    <div class="field"><label>تاريخ الاستلام</label><input type="date" name="receive_date" value="{{ ticket.receive_date or '' }}"></div>
-    <div class="field"><label>وقت الاستلام</label><input type="time" name="receive_time" value="{{ ticket.receive_time or '' }}"></div>
-    <div class="field"><label>الحي</label><input name="district" value="{{ ticket.district or '' }}"></div>
+    <div class="field"><label>{{ _('تاريخ الاستلام') }}</label><input type="date" name="receive_date" value="{{ ticket.receive_date or '' }}"></div>
+    <div class="field"><label>{{ _('وقت الاستلام') }}</label><input type="time" name="receive_time" value="{{ ticket.receive_time or '' }}"></div>
+    <div class="field"><label>{{ _('الحي') }}</label><input name="district" value="{{ ticket.district or '' }}"></div>
     <div class="field">
-      <label>المندوب</label>
+      <label>{{ _('المندوب') }}</label>
       <select name="agent">
         <option value="">—</option>
-        {% for x in lists.agents %}<option value="{{ x }}" {% if ticket.agent==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        {% for x in lists.agents %}<option value="{{ x }}" {% if ticket.agent==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
-    <div class="field"><label>رقم المحطة</label><input name="station_no" value="{{ ticket.station_no or '' }}"></div>
-    <div class="field"><label>رقم الفيدر</label><input name="feeder_no" value="{{ ticket.feeder_no or '' }}"></div>
-    <div class="field full"><label>الموقع (رابط خرائط)</label><input name="location" value="{{ ticket.location or '' }}"></div>
-    <div class="field"><label>نوع العطل</label><input name="fault_type" value="{{ ticket.fault_type or '' }}"></div>
+    <div class="field"><label>{{ _('رقم المحطة') }}</label><input name="station_no" value="{{ ticket.station_no or '' }}"></div>
+    <div class="field"><label>{{ _('رقم الفيدر') }}</label><input name="feeder_no" value="{{ ticket.feeder_no or '' }}"></div>
+    <div class="field full"><label>{{ _('الموقع (رابط خرائط)') }}</label><input name="location" value="{{ ticket.location or '' }}"></div>
+    <div class="field"><label>{{ _('نوع العطل') }}</label><input name="fault_type" value="{{ ticket.fault_type or '' }}"></div>
     <div class="field">
-      <label>تصنيف العطل</label>
+      <label>{{ _('تصنيف العطل') }}</label>
       <select name="classification">
         <option value="">—</option>
-        {% for x in lists.ticket_class %}<option value="{{ x }}" {% if ticket.classification==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        {% for x in lists.ticket_class %}<option value="{{ x }}" {% if ticket.classification==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
     <div class="field">
-      <label>الفرقة</label>
+      <label>{{ _('الفرقة') }}</label>
       <select name="team">
         <option value="">—</option>
-        {% for x in lists.teams %}<option value="{{ x }}" {% if ticket.team==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        {% for x in lists.teams %}<option value="{{ x }}" {% if ticket.team==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
-    <div class="field"><label>وقت التوجيه</label><input type="time" name="dispatch_time" value="{{ ticket.dispatch_time or '' }}"></div>
-    <div class="field"><label>وقت الوصول</label><input type="time" name="arrival_time" value="{{ ticket.arrival_time or '' }}"></div>
+    <div class="field"><label>{{ _('وقت التوجيه') }}</label><input type="time" name="dispatch_time" value="{{ ticket.dispatch_time or '' }}"></div>
+    <div class="field"><label>{{ _('وقت الوصول') }}</label><input type="time" name="arrival_time" value="{{ ticket.arrival_time or '' }}"></div>
     <div class="field">
-      <label>حالة التنفيذ</label>
+      <label>{{ _('حالة التنفيذ') }}</label>
       <select name="status">
-        {% for x in lists.execution_status %}<option value="{{ x }}" {% if ticket.status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        {% for x in lists.execution_status %}<option value="{{ x }}" {% if ticket.status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
-    <div class="field"><label>تاريخ التنفيذ</label><input type="date" name="execution_date" value="{{ ticket.execution_date or '' }}"></div>
+    <div class="field"><label>{{ _('تاريخ التنفيذ') }}</label><input type="date" name="execution_date" value="{{ ticket.execution_date or '' }}"></div>
     <div class="field">
-      <label>تم التصوير</label>
-      <select name="photographed"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.photographed==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <label>{{ _('تم التصوير') }}</label>
+      <select name="photographed"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.photographed==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
     <div class="field">
-      <label>الكميات مكتملة</label>
-      <select name="quantities_done"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.quantities_done==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <label>{{ _('الكميات مكتملة') }}</label>
+      <select name="quantities_done"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.quantities_done==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
     <div class="field">
-      <label>إخلاء الأسفلت</label>
-      <select name="asphalt_clearance"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.asphalt_clearance==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <label>{{ _('إخلاء الأسفلت') }}</label>
+      <select name="asphalt_clearance"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.asphalt_clearance==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
     <div class="field">
-      <label>حالة التمتير</label>
-      <select name="metering_status"><option value="">—</option>{% for x in lists.metering_status %}<option value="{{ x }}" {% if ticket.metering_status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <label>{{ _('حالة التمتير') }}</label>
+      <select name="metering_status"><option value="">—</option>{% for x in lists.metering_status %}<option value="{{ x }}" {% if ticket.metering_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
     <div class="field">
-      <label>اعتماد الاستشاري</label>
+      <label>{{ _('اعتماد الاستشاري') }}</label>
       <select name="consultant_approval">
         <option value="">—</option>
-        {% for x in ['معتمد','مرفوض','بانتظار'] %}<option value="{{ x }}" {% if ticket.consultant_approval==x %}selected{% endif %}>{{ x }}</option>{% endfor %}
+        {% for x in ['معتمد','مرفوض','بانتظار'] %}<option value="{{ x }}" {% if ticket.consultant_approval==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
     <div class="field">
-      <label>حالة المستخلص</label>
-      <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if ticket.invoice_status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <label>{{ _('حالة المستخلص') }}</label>
+      <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if ticket.invoice_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
-    <div class="field"><label>أمر العمل</label><input name="work_order" value="{{ ticket.work_order or '' }}"></div>
-    <div class="field"><label>رقم الفاتورة</label><input name="invoice_no" value="{{ ticket.invoice_no or '' }}"></div>
+    <div class="field"><label>{{ _('أمر العمل') }}</label><input name="work_order" value="{{ ticket.work_order or '' }}"></div>
+    <div class="field"><label>{{ _('رقم الفاتورة') }}</label><input name="invoice_no" value="{{ ticket.invoice_no or '' }}"></div>
     <div class="field">
-      <label>حالة SAP</label>
-      <select name="sap_status"><option value="">—</option>{% for x in lists.sap_status %}<option value="{{ x }}" {% if ticket.sap_status==x %}selected{% endif %}>{{ x }}</option>{% endfor %}</select>
+      <label>{{ _('حالة SAP') }}</label>
+      <select name="sap_status"><option value="">—</option>{% for x in lists.sap_status %}<option value="{{ x }}" {% if ticket.sap_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
-    <div class="field"><label>قيمة البنود</label><input type="number" step="0.01" name="items_value" value="{{ ticket.items_value if ticket.items_value is not none else '' }}"></div>
-    <div class="field full"><label>ملاحظات</label><textarea name="notes">{{ ticket.notes or '' }}</textarea></div>
+    <div class="field"><label>{{ _('قيمة البنود') }}</label><input type="number" step="0.01" name="items_value" value="{{ ticket.items_value if ticket.items_value is not none else '' }}"></div>
+    <div class="field full"><label>{{ _('ملاحظات') }}</label><textarea name="notes">{{ ticket.notes or '' }}</textarea></div>
     <div class="actions full" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">حفظ المعاملة</button>
-      <span class="meta">بعد الحفظ → إضافة الكمية</span>
+      <button class="btn primary" type="submit">{{ _('حفظ المعاملة') }}</button>
+      <span class="meta">{{ _('بعد الحفظ → إضافة الكمية') }}</span>
     </div>
   </form>
   {% else %}
   <div class="meta-grid">
-    <div class="meta-item"><div class="k">رقم العطل</div><div class="v">{{ ticket.ticket_no }}</div></div>
-    <div class="meta-item"><div class="k">كود ركاز (ER)</div><div class="v"><strong>{{ ticket.rekaz_code or '—' }}</strong></div></div>
-    <div class="meta-item"><div class="k">التاريخ / الوقت</div><div class="v">{{ ticket.receive_date or '—' }} — {{ ticket.receive_time or '—' }}</div></div>
-    <div class="meta-item"><div class="k">الحالة</div><div class="v">{{ ticket.status or '—' }}</div></div>
-    <div class="meta-item"><div class="k">الحي</div><div class="v">{{ ticket.district or '—' }}</div></div>
-    <div class="meta-item"><div class="k">المحطة / الفيدر</div><div class="v">{{ ticket.station_no or '—' }} / {{ ticket.feeder_no or '—' }}</div></div>
-    <div class="meta-item"><div class="k">المندوب</div><div class="v">{{ ticket.agent or '—' }}</div></div>
-    <div class="meta-item"><div class="k">نوع العطل</div><div class="v">{{ ticket.fault_type or '—' }}</div></div>
-    <div class="meta-item"><div class="k">التصنيف</div><div class="v">{{ ticket.classification or '—' }}</div></div>
-    <div class="meta-item"><div class="k">الفرقة</div><div class="v">{{ ticket.team or '—' }}</div></div>
-    <div class="meta-item"><div class="k">التوجيه / الوصول</div><div class="v">{{ ticket.dispatch_time or '—' }} / {{ ticket.arrival_time or '—' }}</div></div>
-    <div class="meta-item"><div class="k">زمن الاستجابة</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
-    <div class="meta-item"><div class="k">تكلفة المعاملة (بنود العقد)</div><div class="v">{% if ticket.boq_final_total %}{{ ticket.boq_final_total|money }}{% elif ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
-    <div class="meta-item"><div class="k">تم التصوير</div><div class="v">{{ ticket.photographed or '—' }}</div></div>
-    <div class="meta-item"><div class="k">الكميات مكتملة</div><div class="v">{{ ticket.quantities_done or '—' }}</div></div>
-    <div class="meta-item"><div class="k">حالة التمتير</div><div class="v">{{ ticket.metering_status or '—' }}</div></div>
-    <div class="meta-item" style="grid-column:1/-1"><div class="k">الموقع</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
-    <div class="meta-item" style="grid-column:1/-1"><div class="k">ملاحظات</div><div class="v">{{ ticket.notes or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ ticket.ticket_no }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('كود ركاز (ER)') }}</div><div class="v"><strong>{{ ticket.rekaz_code or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('التاريخ / الوقت') }}</div><div class="v">{{ ticket.receive_date or '—' }} — {{ ticket.receive_time or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(ticket.status) or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('الحي') }}</div><div class="v">{{ ticket.district or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('المحطة / الفيدر') }}</div><div class="v">{{ ticket.station_no or '—' }} / {{ ticket.feeder_no or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('المندوب') }}</div><div class="v">{{ ticket.agent or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('نوع العطل') }}</div><div class="v">{{ ticket.fault_type or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('التصنيف') }}</div><div class="v">{{ tv(ticket.classification) or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('الفرقة') }}</div><div class="v">{{ ticket.team or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('التوجيه / الوصول') }}</div><div class="v">{{ ticket.dispatch_time or '—' }} / {{ ticket.arrival_time or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('زمن الاستجابة') }}</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} {{ _('دقيقة') }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('تكلفة المعاملة (بنود العقد)') }}</div><div class="v">{% if ticket.boq_final_total %}{{ ticket.boq_final_total|money }}{% elif ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('تم التصوير') }}</div><div class="v">{{ tv(ticket.photographed) or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('الكميات مكتملة') }}</div><div class="v">{{ tv(ticket.quantities_done) or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('حالة التمتير') }}</div><div class="v">{{ tv(ticket.metering_status) or '—' }}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ ticket.notes or '—' }}</div></div>
   </div>
   {% endif %}
 </div>
@@ -167,13 +167,13 @@
 <div class="card{% if editing and step=='boq' %} ticket-step-panel is-active{% endif %}" id="step-boq" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">بنود العقد والكميات</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('بنود العقد والكميات') }}</h3>
       <div class="meta">
-        {% if editing and step=='boq' %}<strong>الخطوة الحالية: إضافة الكمية</strong> — {% endif %}
-        {% if boq_file %}مرتبط بالدليل: {{ boq_file.filename }} — {% endif %}
-        {{ related.boq_lines|length }} بند |
-        أساس {{ (ticket.boq_base_total or 0)|money }} |
-        نهائي {{ (ticket.boq_final_total or 0)|money }}
+        {% if editing and step=='boq' %}<strong>{{ _('الخطوة الحالية: إضافة الكمية') }}</strong> — {% endif %}
+        {% if boq_file %}{{ _('مرتبط بالدليل:') }} {{ boq_file.filename }} — {% endif %}
+        {{ related.boq_lines|length }} {{ _('بند') }} |
+        {{ _('أساس') }} {{ (ticket.boq_base_total or 0)|money }} |
+        {{ _('نهائي') }} {{ (ticket.boq_final_total or 0)|money }}
       </div>
     </div>
   </div>
@@ -182,30 +182,34 @@
   {% if has_boq_catalog %}
   <form method="post" action="{{ url_for('ticket_boq_add', ticket_id=ticket.id) }}" class="form-grid" style="margin-bottom:14px;" id="ticketBoqForm">
     <div class="field">
-      <label>رقم البند</label>
-      <input type="text" name="item_no" id="ticketBoqItemNo" required autocomplete="off" placeholder="اكتب رقم البند من الدليل" dir="ltr" style="text-align:left">
+      <label>{{ _('رقم البند') }}</label>
+      <input type="text" name="item_no" id="ticketBoqItemNo" required autocomplete="off" placeholder="{{ _('اكتب رقم البند من الدليل') }}" dir="ltr" style="text-align:left">
       <div class="meta" id="ticketBoqPreview" style="margin-top:4px;"></div>
     </div>
-    <div class="field"><label>الكمية</label><input type="number" step="0.01" name="qty" value="1" required></div>
+    <div class="field"><label>{{ _('الكمية') }}</label><input type="number" step="0.01" name="qty" value="1" required></div>
     <div class="field">
-      <label>تصنيف العمل</label>
+      <label>{{ _('تصنيف العمل') }}</label>
       <select name="work_class" id="ticketBoqClass">
-        <option value="اعتيادي">اعتيادي (بدون زيادة)</option>
-        <option value="طوارئ">طوارئ (نسبة زيادة)</option>
+        <option value="اعتيادي">{{ _('اعتيادي (بدون زيادة)') }}</option>
+        <option value="طوارئ">{{ _('طوارئ (نسبة زيادة)') }}</option>
       </select>
     </div>
     <div class="field">
-      <label>نسبة الزيادة (طوارئ)</label>
+      <label>{{ _('نسبة الزيادة (طوارئ)') }}</label>
       <input type="number" step="0.01" min="0" name="increase_ratio" id="ticketBoqRatio" value="{{ emergency_ratio }}" placeholder="{{ emergency_ratio }}">
-      <div class="meta">اعتيادي = 0٪ — طوارئ = من الإعدادات أو عدّل يدوياً (مثال 0.45 = 45٪)</div>
+      <div class="meta">{{ _('اعتيادي = 0٪ — طوارئ = من الإعدادات أو عدّل يدوياً (مثال 0.45 = 45٪)') }}</div>
     </div>
-    <div class="field full"><label>ملاحظات البند</label><input name="notes" value=""></div>
+    <div class="field full"><label>{{ _('ملاحظات البند') }}</label><input name="notes" value=""></div>
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">+ إضافة بند وحساب التكلفة</button>
+      <button class="btn primary" type="submit">{{ _('+ إضافة بند وحساب التكلفة') }}</button>
     </div>
   </form>
   <script>
   (function () {
+    var I18N_UNIT = {{ _('الوحدة:')|tojson }};
+    var I18N_PRICE = {{ _('السعر:')|tojson }};
+    var I18N_OK = {{ _('بند موجود في الدليل')|tojson }};
+    var I18N_MISS = {{ _('البند غير موجود في الدليل')|tojson }};
     var input = document.getElementById("ticketBoqItemNo");
     var preview = document.getElementById("ticketBoqPreview");
     if (!input || !preview) return;
@@ -224,12 +228,12 @@
           if (data.ok) {
             var parts = [];
             if (data.description) parts.push(data.description);
-            if (data.unit) parts.push("الوحدة: " + data.unit);
-            if (data.unit_price != null && data.unit_price !== "") parts.push("السعر: " + data.unit_price);
-            preview.textContent = parts.join(" — ") || "بند موجود في الدليل";
+            if (data.unit) parts.push(I18N_UNIT + " " + data.unit);
+            if (data.unit_price != null && data.unit_price !== "") parts.push(I18N_PRICE + " " + data.unit_price);
+            preview.textContent = parts.join(" — ") || I18N_OK;
             preview.style.color = "";
           } else {
-            preview.textContent = data.error || "البند غير موجود في الدليل";
+            preview.textContent = data.error || I18N_MISS;
             preview.style.color = "var(--danger, #b42318)";
           }
         })
@@ -248,7 +252,7 @@
   <p class="meta" style="margin-bottom:12px;">
     لا يوجد دليل بنود عقد نشط.
     {% if can('section.contracts') %}
-    <a href="{{ url_for('contracts_admin_home') }}">ارفع ملف Excel من إدارة العقود</a>.
+    <a href="{{ url_for('contracts_admin_home') }}">{{ _('ارفع ملف Excel من إدارة العقود') }}</a>.
     {% endif %}
   </p>
   {% endif %}
@@ -258,8 +262,8 @@
     <table class="table" style="min-width:0">
       <thead>
         <tr>
-          <th>رقم البند</th><th>الوصف</th><th>الوحدة</th><th>الكمية</th><th>سعر الوحدة</th>
-          <th>الإجمالي</th><th>التصنيف</th><th>نسبة الزيادة</th><th>النهائي</th>
+          <th>{{ _('رقم البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الوحدة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('سعر الوحدة') }}</th>
+          <th>{{ _('الإجمالي') }}</th><th>{{ _('التصنيف') }}</th><th>{{ _('نسبة الزيادة') }}</th><th>{{ _('النهائي') }}</th>
           {% if editing and can('tickets.write') %}<th></th>{% endif %}
         </tr>
       </thead>
@@ -272,26 +276,26 @@
           <td>{{ line.qty if line.qty is not none else '—' }}</td>
           <td>{% if line.unit_price is not none %}{{ line.unit_price|money }}{% else %}—{% endif %}</td>
           <td>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</td>
-          <td>{{ line.work_class or '—' }}</td>
+          <td>{{ tv(line.work_class) or '—' }}</td>
           <td>{% if line.work_class == 'طوارئ' %}{{ ((line.increase_ratio or 0) * 100)|round(1) }}٪{% else %}—{% endif %}</td>
           <td><strong>{% if line.final_total is not none %}{{ line.final_total|money }}{% else %}—{% endif %}</strong></td>
           {% if editing and can('tickets.write') %}
           <td class="actions">
-            <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" onsubmit="return confirm('حذف البند؟');">
-              <button class="btn ghost" type="submit">حذف</button>
+            <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" onsubmit="return confirm({{ _('حذف البند؟')|tojson }});">
+              <button class="btn ghost" type="submit">{{ _('حذف') }}</button>
             </form>
           </td>
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="10" class="meta">{% if editing and can('tickets.write') %}لا توجد بنود لهذا العطل بعد — أدخل رقم البند أعلاه.{% else %}لا توجد بنود لهذا العطل بعد.{% endif %}</td></tr>
+        <tr><td colspan="10" class="meta">{% if editing and can('tickets.write') %}{{ _('لا توجد بنود لهذا العطل بعد — أدخل رقم البند أعلاه.') }}{% else %}{{ _('لا توجد بنود لهذا العطل بعد.') }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% if editing and step=='boq' and next_step %}
   <div class="actions" style="margin-top:12px;">
-    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
   </div>
   {% endif %}
 </div>
@@ -300,57 +304,57 @@
 <div class="card{% if editing and step=='photos' %} ticket-step-panel is-active{% endif %}" id="step-photos" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">قائمة الصور</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('قائمة الصور') }}</h3>
       <div class="meta">
-        {% if editing and step=='photos' %}<strong>الخطوة الحالية: الصور</strong> — {% endif %}
-        {{ related.photos|length }} سجل صور مرتبط بهذا العطل
+        {% if editing and step=='photos' %}<strong>{{ _('الخطوة الحالية: الصور') }}</strong> — {% endif %}
+        {{ related.photos|length }} {{ _('سجل صور مرتبط بهذا العطل') }}
       </div>
     </div>
     <div class="actions">
       {% if editing and can('tickets.write') and can('modules.write') and can('section.ops') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">+ سجل صور</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">{{ _('+ سجل صور') }}</a>
       {% endif %}
       {% if can('modules.read') %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
     </div>
   </div>
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>قبل</th><th>أثناء</th><th>بعد</th><th>كميات</th><th>موقع</th><th>الحالة</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>{{ _('قبل') }}</th><th>{{ _('أثناء') }}</th><th>{{ _('بعد') }}</th><th>{{ _('كميات') }}</th><th>{{ _('موقع') }}</th><th>{{ _('الحالة') }}</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for p in related.photos %}
         <tr>
-          {% for key, label in [('before_shot','قبل'),('during_shot','أثناء'),('after_shot','بعد'),('quantities_shot','كميات'),('location_shot','موقع')] %}
+          {% for key, label in [('before_shot',_('قبل')),('during_shot',_('أثناء')),('after_shot',_('بعد')),('quantities_shot',_('كميات')),('location_shot',_('موقع'))] %}
           <td>
             {% if p[key] and p[key].startswith('/media/') %}
               <a href="{{ p[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ p[key] }}" alt="{{ label }}"></a>
             {% elif p[key] == 'نعم' %}
-              <span class="badge ok">نعم</span>
+              <span class="badge ok">{{ tv("نعم") }}</span>
             {% else %}
               —
             {% endif %}
           </td>
           {% endfor %}
           <td>
-            {% if p.complete == 'مكتمل' %}<span class="badge ok">مكتمل</span>
-            {% else %}<span class="badge danger">ناقص</span>{% endif %}
+            {% if p.complete == 'مكتمل' %}<span class="badge ok">{{ _('مكتمل') }}</span>
+            {% else %}<span class="badge danger">{{ _('ناقص') }}</span>{% endif %}
           </td>
           {% if editing and can('tickets.write') and can('modules.write') %}
-          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">تعديل</a></td>
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">{{ _('تعديل') }}</a></td>
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">لا يوجد سجل صور لهذا العطل بعد.</td></tr>
+        <tr><td colspan="7" class="meta">{{ _('لا يوجد سجل صور لهذا العطل بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% if editing and step=='photos' and next_step %}
   <div class="actions" style="margin-top:12px;">
-    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
   </div>
   {% endif %}
 </div>
@@ -359,28 +363,28 @@
 <div class="card{% if editing and step=='metering' %} ticket-step-panel is-active{% endif %}" id="step-metering" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">التمتير</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير') }}</h3>
       <div class="meta">
-        {% if editing and step=='metering' %}<strong>الخطوة الحالية: التمتير</strong> — {% endif %}
-        {{ related.metering|length }} سجل تمتير مرتبط بهذا العطل
+        {% if editing and step=='metering' %}<strong>{{ _('الخطوة الحالية: التمتير') }}</strong> — {% endif %}
+        {{ related.metering|length }} {{ _('سجل تمتير مرتبط بهذا العطل') }}
         {% if ticket.boq_final_total %}
-        — مبلغ الكميات (القيمة المعتمدة): <strong>{{ ticket.boq_final_total|money }}</strong>
+        — {{ _('مبلغ الكميات (القيمة المعتمدة):') }} <strong>{{ ticket.boq_final_total|money }}</strong>
         {% endif %}
       </div>
     </div>
     <div class="actions">
       {% if editing and can('tickets.write') and can('modules.write') and can('section.ops') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">+ تمتير</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">{{ _('+ تمتير') }}</a>
       {% endif %}
       {% if can('modules.read') %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
     </div>
   </div>
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>المسؤول</th><th>بداية</th><th>الحالة</th><th>قيمة معتمدة (مبلغ الكميات)</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>{{ _('المسؤول') }}</th><th>{{ _('بداية') }}</th><th>{{ _('الحالة') }}</th><th>{{ _('قيمة معتمدة (مبلغ الكميات)') }}</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for m in related.metering %}
@@ -390,18 +394,18 @@
           <td>{{ m.status or '—' }}</td>
           <td>{% if m.approved_value is not none %}{{ m.approved_value|money }}{% else %}—{% endif %}</td>
           {% if editing and can('tickets.write') and can('modules.write') %}
-          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">تعديل</a></td>
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">{{ _('تعديل') }}</a></td>
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="5" class="meta">لا يوجد تمتير لهذا العطل بعد.</td></tr>
+        <tr><td colspan="5" class="meta">{{ _('لا يوجد تمتير لهذا العطل بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% if editing and step=='metering' and next_step %}
   <div class="actions" style="margin-top:12px;">
-    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
   </div>
   {% endif %}
 </div>
@@ -411,25 +415,25 @@
 <div class="card{% if editing and step=='warehouse' %} ticket-step-panel is-active{% endif %}" id="step-warehouse" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">حركات المستودع</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('حركات المستودع') }}</h3>
       <div class="meta">
-        {% if editing and step=='warehouse' %}<strong>الخطوة الحالية: المستودع</strong> — {% endif %}
-        {{ related.warehouse_tx|length }} حركة — الصرف مربوط برقم العطل / كود ER
+        {% if editing and step=='warehouse' %}<strong>{{ _('الخطوة الحالية: المستودع') }}</strong> — {% endif %}
+        {{ related.warehouse_tx|length }} {{ _('حركة — الصرف مربوط برقم العطل / كود ER') }}
       </div>
     </div>
     <div class="actions">
       {% if editing and can('tickets.write') and can('modules.write') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ صرف / حركة</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('+ صرف / حركة') }}</a>
       {% endif %}
       {% if can('modules.read') %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">عرض الكل</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
     </div>
   </div>
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>السند</th><th>التاريخ</th><th>النوع</th><th>المادة</th><th>الكمية</th><th>كود ER</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>{{ _('السند') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('النوع') }}</th><th>{{ _('المادة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('كود ER') }}</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for w in related.warehouse_tx %}
@@ -441,18 +445,18 @@
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
           <td>{{ w.rekaz_code or ticket.rekaz_code or '—' }}</td>
           {% if editing and can('tickets.write') and can('modules.write') %}
-          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}">تعديل</a></td>
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}">{{ _('تعديل') }}</a></td>
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">لا توجد حركات مستودع مرتبطة بهذا العطل.</td></tr>
+        <tr><td colspan="7" class="meta">{{ _('لا توجد حركات مستودع مرتبطة بهذا العطل.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% if editing and step=='warehouse' and next_step %}
   <div class="actions" style="margin-top:12px;">
-    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">التالي: {{ step_labels.get(next_step, next_step) }}</a>
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
   </div>
   {% endif %}
 </div>
@@ -463,35 +467,35 @@
   {% if editing and step=='done' %}
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">اكتمال المعاملة</h3>
-      <div class="meta">تم المرور على خطوات العطل — يمكنك الطباعة أو الربط بأقسام أخرى</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('اكتمال المعاملة') }}</h3>
+      <div class="meta">{{ _('تم المرور على خطوات العطل — يمكنك الطباعة أو الربط بأقسام أخرى') }}</div>
     </div>
     <div class="actions">
-      <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">طباعة التقرير</a>
-      <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">إنهاء التعديل</a>
+      <a class="btn primary" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">{{ _('طباعة التقرير') }}</a>
+      <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id) }}">{{ _('إنهاء التعديل') }}</a>
     </div>
   </div>
   {% endif %}
   {% if editing and can('tickets.write') and can('modules.write') %}
   <div class="toolbar" {% if step!='done' %}style="margin:0"{% endif %}>
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">ربط بأقسام أخرى</h3>
-      <div class="meta">تنسيقات: {{ related.coordination|length }} سجل</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('ربط بأقسام أخرى') }}</h3>
+      <div class="meta">{{ _('تنسيقات:') }} {{ related.coordination|length }} {{ _('سجل') }}</div>
     </div>
   </div>
   <div class="actions">
     {% if can('section.financial') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">+ مستخلص</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">{{ _('+ مستخلص') }}</a>
     {% endif %}
     {% if can('section.quality') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">+ تنسيق</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">+ فسوح / إخلاء أسفلت (RR)</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">{{ _('+ تنسيق') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">{{ _('+ فسوح / إخلاء أسفلت (RR)') }}</a>
     {% endif %}
     {% if can('section.warehouses') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">+ حركة مستودع</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('+ حركة مستودع') }}</a>
     {% endif %}
     {% if can('section.safety') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">+ تصريح سلامة</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">{{ _('+ تصريح سلامة') }}</a>
     {% endif %}
   </div>
   {% elif not editing %}
