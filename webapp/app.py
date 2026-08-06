@@ -671,12 +671,27 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 or ql in (r.get("source_ref") or "").lower()
                 or ql in (r.get("ticket_no") or "").lower()
             ]
-    elif view in ("tickets", "teams"):
-        # الفرق الأولية = نفس فكرة الأعطال (قائمة أعطال) وليست أسماء فرق ولا أمر عمل
+    elif view == "teams":
+        # الفرق الأولية = أوامر عمل الكهرباء (منفصلة تماماً عن الأعطال و tickets.team)
+        rows = db.rows_to_dicts(
+            conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall()
+        )
+        if q:
+            ql = q.lower()
+            rows = [
+                r
+                for r in rows
+                if ql in (r.get("work_order") or "").lower()
+                or ql in (r.get("extract_no") or "").lower()
+                or ql in (str(r.get("amount") or "")).lower()
+                or ql in (r.get("notes") or "").lower()
+            ]
+        cmap = _warehouse_tx_count_map("ops", conn)
+        for r in rows:
+            r["wh_count"] = cmap.get(str(r.get("work_order") or ""), 0)
+    elif view == "tickets":
         sql = "SELECT * FROM tickets WHERE 1=1"
         params = []
-        if view == "teams":
-            sql += " AND trim(coalesce(team,'')) <> ''"
         if q:
             sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ?)"
             like = f"%{q}%"
@@ -761,7 +776,7 @@ def warehouse_ops():
         "ops",
         "ops",
         _t("العمليات والصيانة"),
-        _t("عرض الأعطال والفرق الأولية داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
+        _t("عرض الأعطال والفرق الأولية (أوامر عمل الكهرباء) داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         "warehouse_ops",
     )
 
@@ -782,15 +797,12 @@ def warehouse_projects():
 @login_required
 def warehouse_ticket_detail(ticket_id):
     """تفاصيل عطل للعرض داخل المستودع فقط (لا يفتح تبويب العمليات)."""
-    from_view = (request.args.get("from_view") or "tickets").strip().lower()
-    if from_view not in ("tickets", "teams"):
-        from_view = "tickets"
     conn = db.connect()
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
         flash(_t("العطل غير موجود"), "danger")
-        return redirect(url_for("warehouse_ops", view=from_view))
+        return redirect(url_for("warehouse_ops", view="tickets"))
     ticket = dict(row)
     tno = ticket.get("ticket_no") or ""
     txs = db.rows_to_dicts(
@@ -812,7 +824,7 @@ def warehouse_ticket_detail(ticket_id):
         title=_t("تفاصيل العطل"),
         record=ticket,
         txs=txs,
-        back_url=url_for("warehouse_ops", view=from_view),
+        back_url=url_for("warehouse_ops", view="tickets"),
         issue_url=url_for(
             "module_new",
             name="warehouse_tx",
@@ -820,6 +832,51 @@ def warehouse_ticket_detail(ticket_id):
             **{"from": "wh_ops"},
         )
         if tno
+        else None,
+    )
+
+
+@app.route("/warehouses/ops/primary-team/<int:row_id>")
+@login_required
+def warehouse_primary_team_detail(row_id):
+    """تفاصيل أمر عمل الفرق الأولية (كهرباء) داخل المستودع فقط."""
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM primary_team_orders WHERE id=?", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("أمر العمل غير موجود"), "danger")
+        return redirect(url_for("warehouse_ops", view="teams"))
+    order = dict(row)
+    ref = (order.get("work_order") or "").strip()
+    txs = (
+        db.rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM warehouse_tx
+                WHERE source_ref=? OR (source_section='ops' AND source_ref=?)
+                ORDER BY id DESC
+                """,
+                (ref, ref),
+            ).fetchall()
+        )
+        if ref
+        else []
+    )
+    conn.close()
+    return render_template(
+        "warehouse_record_detail.html",
+        warehouse_active="ops",
+        kind="primary_team",
+        title=_t("تفاصيل الفرق الأولية"),
+        record=order,
+        txs=txs,
+        back_url=url_for("warehouse_ops", view="teams"),
+        issue_url=url_for(
+            "module_new",
+            name="warehouse_tx",
+            **{"from": "wh_ops", "source_ref": ref},
+        )
+        if ref
         else None,
     )
 
@@ -1677,13 +1734,19 @@ def _redirect_after_module(name, data, form_ctx=None):
     """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل والخطوة التالية في المعالج."""
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
+    if name == "primary_team_orders":
+        return redirect(url_for("warehouse_ops", view="teams"))
     tno = str((data or {}).get("ticket_no") or "").strip()
     form_ctx = form_ctx or _warehouse_form_ctx()
 
     if name == "warehouse_tx":
         # من داخل المستودع: ابقَ في المستودع دائماً (بدون تحويل للصفحات الرئيسية)
         if form_ctx == "wh_ops":
-            return redirect(url_for("warehouse_ops"))
+            src_ref = (data.get("source_ref") or "").strip()
+            tno_tx = (data.get("ticket_no") or "").strip()
+            if src_ref and not tno_tx:
+                return redirect(url_for("warehouse_ops", view="teams"))
+            return redirect(url_for("warehouse_ops", view="tickets" if tno_tx else "movements"))
         if form_ctx == "wh_constructions":
             return redirect(url_for("warehouse_constructions"))
         if form_ctx == "wh_projects":
@@ -1820,6 +1883,8 @@ def module_list(name):
         return redirect(url_for("ops_home"))
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
+    if name == "primary_team_orders":
+        return redirect(url_for("warehouse_ops", view="teams"))
     if name == "warehouse_tx":
         source_filter = (request.args.get("source") or "").strip().lower()
         if source_filter == "constructions":
@@ -1994,6 +2059,24 @@ def module_new(name):
                 data["clearance_no"] = data["rekaz_code"]
         if name == "projects" and not (data.get("project_code") or "").strip():
             data["project_code"] = db.next_series_code("pr", conn)
+        if name == "primary_team_orders" and not (data.get("work_order") or "").strip():
+            flash(_t("أمر العمل مطلوب"), "danger")
+            section = module.get("section")
+            return render_template(
+                "module_form.html",
+                name=name,
+                module=_mod(module),
+                row=data,
+                tickets=tickets,
+                ticket_options=ticket_options,
+                warehouse_items=[],
+                boq_items=[],
+                mode="new",
+                section=section,
+                section_meta=_smeta(SECTION_META.get(section)),
+                section_modules=modules_for_section(section) if section else [],
+                form_ctx="wh_ops",
+            )
         keys = [f[0] for f in module["fields"]]
         cur = conn.execute(
             f"INSERT INTO {module['table']}({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
@@ -2014,6 +2097,8 @@ def module_new(name):
             prefill = db.enrich_warehouse_tx_from_item(prefill)
         if name == "quantities":
             prefill = db.enrich_quantity_from_boq(prefill, conn)
+    if name == "primary_team_orders":
+        prefill["order_date"] = prefill.get("order_date") or datetime.now().strftime("%Y-%m-%d")
     conn.close()
     section = module.get("section")
     return render_template(
@@ -2032,7 +2117,7 @@ def module_new(name):
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
-        form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None,
+        form_ctx=_warehouse_form_ctx() if name in ("warehouse_tx", "primary_team_orders") else None,
     )
 
 
@@ -2123,6 +2208,24 @@ def module_edit(name, row_id):
             data["rekaz_code"] = db.next_series_code("rr", conn)
         if name == "projects" and not (data.get("project_code") or "").strip():
             data["project_code"] = db.next_series_code("pr", conn)
+        if name == "primary_team_orders" and not (data.get("work_order") or "").strip():
+            flash(_t("أمر العمل مطلوب"), "danger")
+            section = module.get("section")
+            return render_template(
+                "module_form.html",
+                name=name,
+                module=_mod(module),
+                row={**dict(row), **data},
+                tickets=tickets,
+                ticket_options=ticket_options,
+                warehouse_items=[],
+                boq_items=[],
+                mode="edit",
+                section=section,
+                section_meta=_smeta(SECTION_META.get(section)),
+                section_modules=modules_for_section(section) if section else [],
+                form_ctx="wh_ops",
+            )
         keys = [f[0] for f in module["fields"]]
         sets = ", ".join([f"{k}=?" for k in keys])
         conn.execute(
@@ -2135,7 +2238,7 @@ def module_edit(name, row_id):
         flash(_t("تم الحفظ"), "ok")
         _after_data_change()
         # التعديل من المستودع يُبقي المستخدم داخل المستودع افتراضياً
-        edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None
+        edit_ctx = _warehouse_form_ctx() if name in ("warehouse_tx", "primary_team_orders") else None
         if name == "warehouse_tx" and edit_ctx not in _warehouse_create_contexts():
             edit_ctx = "warehouses"
         return _redirect_after_module(name, data, form_ctx=edit_ctx)
@@ -2165,7 +2268,11 @@ def module_edit(name, row_id):
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
-        form_ctx="warehouses" if name == "warehouse_tx" else None,
+        form_ctx=(
+            _warehouse_form_ctx() or "warehouses"
+            if name == "warehouse_tx"
+            else ("wh_ops" if name == "primary_team_orders" else None)
+        ),
     )
 
 
@@ -2184,6 +2291,8 @@ def module_delete(name, row_id):
     _after_data_change()
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
+    if name == "primary_team_orders":
+        return redirect(url_for("warehouse_ops", view="teams"))
     return redirect(url_for("module_list", name=name))
 
 

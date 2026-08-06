@@ -73,51 +73,46 @@
   {% elif view == 'teams' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="teams">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم العطل / كود ER / الحي / الفرقة...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
-    <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
-      <option value="">{{ _('كل الحالات') }}</option>
-      {% for s in lists.execution_status %}
-      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ tv(s) }}</option>
-      {% endfor %}
-    </select>
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بأمر العمل / رقم المستخلص / المبلغ...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='teams') }}">{{ _('مسح') }}</a>
+    {% if can('modules.write') %}
+    <a class="btn primary" href="{{ url_for('module_new', name='primary_team_orders', **{'from': 'wh_ops'}) }}">{{ _('+ إضافة') }}</a>
+    {% endif %}
   </form>
+  <p class="meta" style="margin-bottom:10px;">{{ _('أوامر عمل الكهرباء — منفصلة عن الأعطال (إدخال الفرقة على العطل لا ينقلها هنا).') }}</p>
   <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
-          <th>{{ _('رقم العطل') }}</th>
-          <th>{{ _('كود ER') }}</th>
+          <th>{{ _('أمر العمل') }}</th>
+          <th>{{ _('رقم المستخلص') }}</th>
+          <th>{{ _('المبلغ') }}</th>
           <th>{{ _('التاريخ') }}</th>
-          <th>{{ _('الحي') }}</th>
-          <th>{{ _('العطل') }}</th>
-          <th>{{ _('الفرقة') }}</th>
-          <th>{{ _('الحالة') }}</th>
           <th>{{ _('حركات المواد') }}</th>
           <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
-        {% for t in rows %}
+        {% for r in rows %}
         <tr>
-          <td><strong>{{ t.ticket_no }}</strong></td>
-          <td>{{ t.rekaz_code or '—' }}</td>
-          <td>{{ t.receive_date or '—' }}</td>
-          <td>{{ t.district or '—' }}</td>
-          <td>{{ t.fault_type or '—' }}</td>
-          <td>{{ t.team or '—' }}</td>
-          <td>{{ tv(t.status) if t.status else '—' }}</td>
-          <td><span class="badge info">{{ t.wh_count or 0 }}</span></td>
+          <td><strong>{{ r.work_order or '—' }}</strong></td>
+          <td>{{ r.extract_no or '—' }}</td>
+          <td>{{ r.amount|money if r.amount is not none else '—' }}</td>
+          <td>{{ r.order_date or '—' }}</td>
+          <td><span class="badge info">{{ r.wh_count or 0 }}</span></td>
           <td class="actions">
-            <a class="btn ghost" href="{{ url_for('warehouse_ticket_detail', ticket_id=t.id, from_view='teams') }}">{{ _('عرض') }}</a>
+            <a class="btn ghost" href="{{ url_for('warehouse_primary_team_detail', row_id=r.id) }}">{{ _('عرض') }}</a>
             {% if can('modules.write') %}
-            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from}) }}">{{ _('+ صرف') }}</a>
+            <a class="btn ghost" href="{{ url_for('module_edit', name='primary_team_orders', row_id=r.id) }}?from=wh_ops">{{ _('تعديل') }}</a>
+            {% if r.work_order %}
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order}) }}">{{ _('+ صرف') }}</a>
+            {% endif %}
             {% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">{{ _('لا توجد أعطال للفرق الأولية') }}</td></tr>
+        <tr><td colspan="6" class="meta">{{ _('لا توجد أوامر عمل للفرق الأولية') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

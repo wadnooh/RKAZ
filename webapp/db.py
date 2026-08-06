@@ -130,6 +130,17 @@ EXTRA_TABLE_DDL = {
             notes TEXT
         )
     """,
+    "primary_team_orders": """
+        CREATE TABLE IF NOT EXISTS primary_team_orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_order TEXT,
+            extract_no TEXT,
+            amount REAL,
+            order_date TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
     "boq_items": """
         CREATE TABLE IF NOT EXISTS boq_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

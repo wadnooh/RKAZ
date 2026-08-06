@@ -19,7 +19,13 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <tbody>
-        {% if kind == 'ticket' %}
+        {% if kind == 'primary_team' %}
+        <tr><th>{{ _('أمر العمل') }}</th><td><strong>{{ record.work_order or '—' }}</strong></td></tr>
+        <tr><th>{{ _('رقم المستخلص') }}</th><td>{{ record.extract_no or '—' }}</td></tr>
+        <tr><th>{{ _('المبلغ') }}</th><td>{{ record.amount|money if record.amount is not none else '—' }}</td></tr>
+        <tr><th>{{ _('التاريخ') }}</th><td>{{ record.order_date or '—' }}</td></tr>
+        <tr><th>{{ _('ملاحظات') }}</th><td>{{ record.notes or '—' }}</td></tr>
+        {% elif kind == 'ticket' %}
         <tr><th>{{ _('رقم العطل') }}</th><td><strong>{{ record.ticket_no }}</strong></td></tr>
         <tr><th>{{ _('كود ER') }}</th><td>{{ record.rekaz_code or '—' }}</td></tr>
         <tr><th>{{ _('التاريخ') }}</th><td>{{ record.receive_date or '—' }}</td></tr>

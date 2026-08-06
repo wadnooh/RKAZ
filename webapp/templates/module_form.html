@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-{% if name == 'warehouse_tx' or name == 'warehouse_items' %}
-  {% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else ('balances' if name == 'warehouse_items' else 'home'))) %}
+{% if name == 'warehouse_tx' or name == 'warehouse_items' or name == 'primary_team_orders' %}
+  {% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops'] or name == 'primary_team_orders' else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else ('balances' if name == 'warehouse_items' else 'home'))) %}
   {% include "_warehouse_subnav.html" %}
 {% elif name in ['quantities','photos','metering'] %}
   {% set active = 'tickets' %}
@@ -34,6 +34,8 @@
     <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('رجوع') }}</a>
     {% elif name == 'warehouse_items' %}
     <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('رجوع') }}</a>
+    {% elif name == 'primary_team_orders' %}
+    <a class="btn ghost" href="{{ url_for('warehouse_ops', view='teams') }}">{{ _('رجوع') }}</a>
     {% elif row.get('ticket_no') and name in ['quantities','photos','metering'] %}
     <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=row.ticket_no) }}">{{ _('رجوع') }}</a>
     {% else %}
@@ -144,6 +146,8 @@
       <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'warehouse_items' %}
       <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'primary_team_orders' %}
+      <a class="btn ghost" href="{{ url_for('warehouse_ops', view='teams') }}">{{ _('إلغاء') }}</a>
       {% else %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('إلغاء') }}</a>
       {% endif %}

@@ -113,6 +113,21 @@ MODULES = {
         ],
         "list_cols": ["work_no", "work_date", "site", "work_type", "status", "value"],
     },
+    # أوامر عمل الكهرباء (الفرق الأولية) — منفصلة عن الأعطال
+    "primary_team_orders": {
+        "title": "الفرق الأولية",
+        "table": "primary_team_orders",
+        "section": "warehouses",
+        "hub_hidden": True,
+        "fields": [
+            ("work_order", "أمر العمل", "text"),
+            ("extract_no", "رقم المستخلص", "text"),
+            ("amount", "المبلغ", "number"),
+            ("order_date", "التاريخ", "date"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["work_order", "extract_no", "amount", "order_date"],
+    },
     # ---- المشاريع ----
     "projects": {
         "title": "المشاريع",
