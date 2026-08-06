@@ -85,9 +85,10 @@
               <input type="hidden" name="id" value="{{ u.id }}">
               <button class="btn ghost" type="submit">{{ _('تفعيل/إيقاف') }}</button>
             </form>
-            <form method="post" onsubmit="return confirm({{ _('حذف المستخدم؟')|tojson }});">
+            <form method="post" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لحذف المستخدم')|tojson }});">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="{{ u.id }}">
+              <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
           </td>

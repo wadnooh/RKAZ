@@ -1407,12 +1407,14 @@ def warehouse_tx_multi():
     )
 
 
-WAREHOUSE_DELETE_PASSWORD = "112233"
+# كلمة سر تأكيد الحذف لكل التطبيق (مستودع / أعطال / وحدات / مستخدمين / فرق…)
+DELETE_PASSWORD = "112233"
+WAREHOUSE_DELETE_PASSWORD = DELETE_PASSWORD  # توافق خلفي
 
 
 def _delete_password_ok() -> bool:
-    """يتحقق من كلمة سر الحذف (112233)."""
-    return (request.form.get("delete_password") or "").strip() == WAREHOUSE_DELETE_PASSWORD
+    """يتحقق من كلمة سر الحذف (112233) لأي عملية حذف في التطبيق."""
+    return (request.form.get("delete_password") or "").strip() == DELETE_PASSWORD
 
 
 def _reject_bad_delete_password(fallback_url: str):
@@ -1943,6 +1945,8 @@ def ticket_edit(ticket_id):
 def ticket_delete(ticket_id):
     if not permissions.can("tickets.delete"):
         return permissions.deny_redirect(_t("ليس لديك صلاحية لحذف الأعطال."))
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("ticket_view", ticket_id=ticket_id, edit=1))
     conn = db.connect()
     row = conn.execute("SELECT ticket_no FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
@@ -2049,6 +2053,8 @@ def ticket_boq_add(ticket_id):
 def ticket_boq_delete(ticket_id, line_id):
     if not permissions.can("tickets.write"):
         return permissions.deny_ticket_mutate(_t("ليس لديك صلاحية لحذف بنود العقد من العطل."))
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("ticket_view", ticket_id=ticket_id, edit=1, step="boq"))
     conn = db.connect()
     line = conn.execute(
         "SELECT * FROM ticket_boq_lines WHERE id=? AND ticket_id=?",
@@ -2892,11 +2898,13 @@ def module_delete(name, row_id):
     module = MODULES.get(name)
     if not module:
         return redirect(url_for("ops_home"))
-    # حذف سجلات المستودع يتطلب كلمة سر
-    if name in ("warehouse_tx", "warehouse_items") and not _delete_password_ok():
+    # كل عمليات الحذف في التطبيق تتطلب كلمة سر التأكيد
+    if not _delete_password_ok():
         fallback = (
             url_for("warehouse_balances", view="items")
             if name == "warehouse_items"
+            else url_for("ops_primary_teams")
+            if name == "primary_team_orders"
             else url_for("module_list", name=name)
         )
         return _reject_bad_delete_password(fallback)
@@ -2972,6 +2980,9 @@ def ops_primary_teams():
                 flash(_t("تمت إضافة أمر العمل"), "ok")
                 _after_data_change()
         elif action == "delete":
+            if not _delete_password_ok():
+                conn.close()
+                return _reject_bad_delete_password(url_for("ops_primary_teams"))
             row_id = request.form.get("id")
             conn.execute("DELETE FROM primary_team_orders WHERE id=?", (row_id,))
             conn.commit()
@@ -3024,6 +3035,9 @@ def teams_page():
             conn.commit()
             flash(_t("تمت إضافة الفرقة"), "ok")
         elif action == "delete":
+            if not _delete_password_ok():
+                conn.close()
+                return _reject_bad_delete_password(url_for("teams_page"))
             conn.execute("DELETE FROM teams WHERE id=?", (request.form.get("id"),))
             conn.commit()
             flash(_t("تم الحذف"), "ok")
@@ -3270,6 +3284,9 @@ def users_list():
             db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
             flash(_t("تم تحديث المستخدم"), "ok")
         elif action == "delete":
+            if not _delete_password_ok():
+                conn.close()
+                return _reject_bad_delete_password(url_for("users_list"))
             uid = request.form.get("id")
             target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
             if target and str(session.get("user_id")) == str(uid):
