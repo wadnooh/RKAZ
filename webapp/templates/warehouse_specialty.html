@@ -12,7 +12,7 @@
     <div class="actions" data-tab-strip="1">
       {% if source == 'ops' %}
       <a class="btn ghost{% if view == 'tickets' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='tickets') }}">{{ _('الأعطال') }}</a>
-      <a class="btn ghost{% if view == 'work_orders' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='work_orders') }}">{{ _('أوامر العمل') }}</a>
+      <a class="btn ghost{% if view == 'teams' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='teams') }}">{{ _('الفرق الأولية') }}</a>
       <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
       {% elif source == 'constructions' %}
       <a class="btn ghost{% if view == 'works' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='works') }}">{{ _('المعاملات') }}</a>
@@ -70,10 +70,10 @@
     </table>
   </div>
 
-  {% elif view == 'work_orders' %}
+  {% elif view == 'teams' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="hidden" name="view" value="work_orders">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أمر العمل / رقم العطل / كود ER...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="hidden" name="view" value="teams">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم العطل / كود ER / الحي / الفرقة...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
       {% for s in lists.execution_status %}
@@ -81,18 +81,18 @@
       {% endfor %}
     </select>
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
-    <a class="btn ghost" href="{{ url_for(list_endpoint, view='work_orders') }}">{{ _('مسح') }}</a>
+    <a class="btn ghost" href="{{ url_for(list_endpoint, view='teams') }}">{{ _('مسح') }}</a>
   </form>
   <div class="table-wrap">
     <table class="table">
       <thead>
         <tr>
-          <th>{{ _('رقم أمر العمل') }}</th>
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('كود ER') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('الحي') }}</th>
           <th>{{ _('العطل') }}</th>
+          <th>{{ _('الفرقة') }}</th>
           <th>{{ _('الحالة') }}</th>
           <th>{{ _('حركات المواد') }}</th>
           <th>{{ _('إجراءات') }}</th>
@@ -101,23 +101,23 @@
       <tbody>
         {% for t in rows %}
         <tr>
-          <td><strong>{{ t.work_order }}</strong></td>
-          <td>{{ t.ticket_no or '—' }}</td>
+          <td><strong>{{ t.ticket_no }}</strong></td>
           <td>{{ t.rekaz_code or '—' }}</td>
           <td>{{ t.receive_date or '—' }}</td>
           <td>{{ t.district or '—' }}</td>
           <td>{{ t.fault_type or '—' }}</td>
+          <td>{{ t.team or '—' }}</td>
           <td>{{ tv(t.status) if t.status else '—' }}</td>
           <td><span class="badge info">{{ t.wh_count or 0 }}</span></td>
           <td class="actions">
-            <a class="btn ghost" href="{{ url_for('warehouse_ticket_detail', ticket_id=t.id, from_view='work_orders') }}">{{ _('عرض') }}</a>
+            <a class="btn ghost" href="{{ url_for('warehouse_ticket_detail', ticket_id=t.id, from_view='teams') }}">{{ _('عرض') }}</a>
             {% if can('modules.write') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from}) }}">{{ _('+ صرف') }}</a>
             {% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">{{ _('لا توجد أوامر عمل') }}</td></tr>
+        <tr><td colspan="9" class="meta">{{ _('لا توجد أعطال للفرق الأولية') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
