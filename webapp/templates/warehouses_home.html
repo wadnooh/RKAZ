@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% block content %}
+{% set warehouse_active = 'home' %}
+{% include "_warehouse_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('المستودعات') }}</h2>
+      <div class="meta">{{ _('نسخ معاملات الصفحات الرئيسية حسب التخصص — الإنشاءات والعمليات والمشاريع') }}</div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <a class="stat-card" href="{{ url_for('warehouse_constructions') }}" style="text-decoration:none;color:inherit;">
+      <div>{{ _('الإنشاءات') }}</div>
+      <strong>{{ counts.constructions_works }}</strong>
+      <div class="meta">{{ _('معاملة') }} — {{ counts.constructions_tx }} {{ _('حركة مواد') }}</div>
+    </a>
+    <a class="stat-card" href="{{ url_for('warehouse_ops') }}" style="text-decoration:none;color:inherit;">
+      <div>{{ _('العمليات والصيانة') }}</div>
+      <strong>{{ counts.ops_tickets }}</strong>
+      <div class="meta">{{ _('عطل') }} — {{ counts.ops_tx }} {{ _('حركة مواد') }}</div>
+    </a>
+    <a class="stat-card" href="{{ url_for('warehouse_projects') }}" style="text-decoration:none;color:inherit;">
+      <div>{{ _('المشاريع') }}</div>
+      <strong>{{ counts.projects }}</strong>
+      <div class="meta">{{ _('مشروع') }} — {{ counts.projects_tx }} {{ _('حركة مواد') }}</div>
+    </a>
+    <a class="stat-card" href="{{ url_for('warehouse_balances') }}" style="text-decoration:none;color:inherit;">
+      <div>{{ _('أرصدة المواد') }}</div>
+      <strong>{{ counts.items }}</strong>
+      <div class="meta">{{ _('صنف') }}</div>
+    </a>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('أحدث حركات المواد') }}</h3>
+      <div class="meta">{{ _('من الإنشاءات والعمليات والمشاريع') }}</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('السند') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('المصدر') }}</th>
+          <th>{{ _('المرجع') }}</th>
+          <th>{{ _('النوع') }}</th>
+          <th>{{ _('المادة') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in recent_tx %}
+        <tr>
+          <td>{{ w.voucher_no or '—' }}</td>
+          <td>{{ w.tx_date or '—' }}</td>
+          <td>
+            {% if w.source_section == 'ops' %}{{ _('العمليات والصيانة') }}
+            {% elif w.source_section == 'constructions' %}{{ _('الإنشاءات') }}
+            {% elif w.source_section == 'projects' %}{{ _('المشاريع') }}
+            {% else %}{{ w.source_section or '—' }}{% endif %}
+          </td>
+          <td>{{ w.source_ref or w.ticket_no or '—' }}</td>
+          <td>{{ w.tx_type or '—' }}</td>
+          <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
+          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td class="actions">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses">{{ _('تعديل') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="meta">{{ _('لا توجد حركات بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

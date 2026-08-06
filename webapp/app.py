@@ -588,39 +588,176 @@ def safety_home():
 @login_required
 def warehouses_home():
     db.backfill_warehouse_tx_sources()
-    links = [
-        {
-            "label": _t("الإنشاءات"),
-            "href": url_for("module_list", name="warehouse_tx", source="constructions"),
-            "count": db.count_warehouse_tx_by_source("constructions"),
-        },
-        {
-            "label": _t("العمليات والصيانة"),
-            "href": url_for("module_list", name="warehouse_tx", source="ops"),
-            "count": db.count_warehouse_tx_by_source("ops"),
-        },
-        {
-            "label": _t("المشاريع"),
-            "href": url_for("module_list", name="warehouse_tx", source="projects"),
-            "count": db.count_warehouse_tx_by_source("projects"),
-        },
-        {
-            "label": _t("أرصدة المواد"),
-            "href": url_for("warehouse_balances"),
-            "count": _count("warehouse_items"),
-        },
-    ]
+    conn = db.connect()
+    recent_tx = db.rows_to_dicts(
+        conn.execute("SELECT * FROM warehouse_tx ORDER BY id DESC LIMIT 12").fetchall()
+    )
+    conn.close()
+    counts = {
+        "constructions_works": _count("construction_works"),
+        "constructions_tx": db.count_warehouse_tx_by_source("constructions"),
+        "ops_tickets": _count("tickets"),
+        "ops_tx": db.count_warehouse_tx_by_source("ops"),
+        "projects": _count("projects"),
+        "projects_tx": db.count_warehouse_tx_by_source("projects"),
+        "items": _count("warehouse_items"),
+    }
     return render_template(
-        "section_hub.html",
-        title=_t("المستودعات"),
-        subtitle=_t("نسخ الحركات من الصفحات الرئيسية حسب التخصص، مع أرصدة المواد."),
-        links=links,
-        section="warehouses",
-        section_modules=modules_for_section("warehouses"),
-        section_meta=_smeta(SECTION_META["warehouses"]),
-        total_count=_count("warehouse_tx"),
-        warehouse_source=None,
-        hide_link_pills=True,
+        "warehouses_home.html",
+        counts=counts,
+        recent_tx=recent_tx,
+    )
+
+
+def _warehouse_tx_count_map(source: str, conn) -> dict:
+    """خريطة مرجع المعاملة → عدد حركات المستودع."""
+    rows = conn.execute(
+        """
+        SELECT coalesce(nullif(trim(source_ref),''), nullif(trim(ticket_no),''), '') AS ref, COUNT(*) AS n
+        FROM warehouse_tx
+        WHERE lower(coalesce(source_section,''))=?
+        GROUP BY 1
+        """,
+        (source,),
+    ).fetchall()
+    out = {}
+    for r in rows:
+        ref = (r["ref"] if hasattr(r, "keys") else r[0]) or ""
+        n = r["n"] if hasattr(r, "keys") else r[1]
+        if ref:
+            out[str(ref)] = int(n or 0)
+    return out
+
+
+def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: str, list_endpoint: str):
+    db.backfill_warehouse_tx_sources()
+    view = (request.args.get("view") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    conn = db.connect()
+    tx_count = db.count_warehouse_tx_by_source(source, conn)
+    tx_rows = []
+    rows = []
+
+    if view == "movements":
+        tx_rows = db.rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM warehouse_tx
+                WHERE lower(coalesce(source_section,''))=?
+                ORDER BY id DESC
+                """,
+                (source,),
+            ).fetchall()
+        )
+        if q:
+            ql = q.lower()
+            tx_rows = [
+                r
+                for r in tx_rows
+                if ql in (r.get("voucher_no") or "").lower()
+                or ql in (r.get("item_no") or "").lower()
+                or ql in (r.get("item_name") or "").lower()
+                or ql in (r.get("source_ref") or "").lower()
+                or ql in (r.get("ticket_no") or "").lower()
+            ]
+    elif source == "ops":
+        sql = "SELECT * FROM tickets WHERE 1=1"
+        params = []
+        if q:
+            sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR district LIKE ? OR fault_type LIKE ?)"
+            like = f"%{q}%"
+            params.extend([like, like, like, like])
+        if status:
+            sql += " AND status=?"
+            params.append(status)
+        sql += " ORDER BY id DESC"
+        rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
+        cmap = _warehouse_tx_count_map("ops", conn)
+        for r in rows:
+            r["wh_count"] = cmap.get(str(r.get("ticket_no") or ""), 0)
+    elif source == "constructions":
+        rows = db.rows_to_dicts(
+            conn.execute("SELECT * FROM construction_works ORDER BY id DESC").fetchall()
+        )
+        if q:
+            ql = q.lower()
+            rows = [
+                r
+                for r in rows
+                if ql in (r.get("work_no") or "").lower()
+                or ql in (r.get("site") or "").lower()
+                or ql in (r.get("work_type") or "").lower()
+            ]
+        cmap = _warehouse_tx_count_map("constructions", conn)
+        for r in rows:
+            r["wh_count"] = cmap.get(str(r.get("work_no") or ""), 0)
+    elif source == "projects":
+        rows = db.rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY id DESC").fetchall())
+        if q:
+            ql = q.lower()
+            rows = [
+                r
+                for r in rows
+                if ql in (r.get("project_code") or "").lower()
+                or ql in (r.get("project_name") or "").lower()
+                or ql in (r.get("ticket_no") or "").lower()
+            ]
+        cmap = _warehouse_tx_count_map("projects", conn)
+        for r in rows:
+            r["wh_count"] = cmap.get(str(r.get("project_code") or ""), 0)
+    conn.close()
+
+    return render_template(
+        "warehouse_specialty.html",
+        active=active,
+        source=source,
+        title=title,
+        subtitle=subtitle,
+        view=view,
+        q=q,
+        status=status,
+        rows=rows,
+        tx_rows=tx_rows,
+        tx_count=tx_count,
+        list_url=url_for(list_endpoint),
+        movements_url=url_for(list_endpoint, view="movements"),
+    )
+
+
+@app.route("/warehouses/constructions")
+@login_required
+def warehouse_constructions():
+    return _warehouse_specialty_page(
+        "constructions",
+        "constructions",
+        _t("الإنشاءات"),
+        _t("نفس معاملات الإنشاءات من الصفحة الرئيسية مع حركات المواد"),
+        "warehouse_constructions",
+    )
+
+
+@app.route("/warehouses/ops")
+@login_required
+def warehouse_ops():
+    return _warehouse_specialty_page(
+        "ops",
+        "ops",
+        _t("العمليات والصيانة"),
+        _t("نفس معاملات الأعطال من الصفحة الرئيسية مع حركات المواد"),
+        "warehouse_ops",
+    )
+
+
+@app.route("/warehouses/projects")
+@login_required
+def warehouse_projects():
+    return _warehouse_specialty_page(
+        "projects",
+        "projects",
+        _t("المشاريع"),
+        _t("نفس معاملات المشاريع من الصفحة الرئيسية مع حركات المواد"),
+        "warehouse_projects",
     )
 
 
@@ -1390,15 +1527,22 @@ def _redirect_after_module(name, data, form_ctx=None):
                 flash(_t("تم الحفظ — الخطوة التالية: {label}", label=label), "ok")
                 return _ticket_edit_redirect(row["id"], nxt)
         if form_ctx == "constructions":
-            return redirect(url_for("module_list", name="construction_works"))
+            return redirect(url_for("warehouse_constructions"))
         if form_ctx == "projects":
-            return redirect(url_for("module_list", name="projects"))
+            return redirect(url_for("warehouse_projects"))
+        if form_ctx == "ops":
+            # إن لم تُرجع للمعالج، اذهب لتبويب العمليات في المستودع
+            return redirect(url_for("warehouse_ops"))
         source = (request.values.get("source") or "").strip().lower()
-        if source in _warehouse_main_sections():
-            return redirect(url_for("module_list", name=name, source=source))
+        if source == "constructions":
+            return redirect(url_for("warehouse_constructions", view="movements"))
+        if source == "ops":
+            return redirect(url_for("warehouse_ops", view="movements"))
+        if source == "projects":
+            return redirect(url_for("warehouse_projects", view="movements"))
         if tno:
             return redirect(url_for("module_list", name=name, ticket_no=tno))
-        return redirect(url_for("module_list", name=name))
+        return redirect(url_for("warehouses_home"))
 
     next_after = {
         "quantities": "photos",
@@ -1499,9 +1643,13 @@ def module_list(name):
         return redirect(url_for("warehouse_balances", view="items"))
     if name == "warehouse_tx":
         source_filter = (request.args.get("source") or "").strip().lower()
-        if source_filter not in ("ops", "constructions", "projects") and not (
-            request.args.get("ticket_no") or request.args.get("item_no")
-        ):
+        if source_filter == "constructions":
+            return redirect(url_for("warehouse_constructions", view="movements"))
+        if source_filter == "ops":
+            return redirect(url_for("warehouse_ops", view="movements"))
+        if source_filter == "projects":
+            return redirect(url_for("warehouse_projects", view="movements"))
+        if not (request.args.get("ticket_no") or request.args.get("item_no")):
             return redirect(url_for("warehouses_home"))
     conn = db.connect()
     rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {module['table']} ORDER BY id DESC").fetchall())
@@ -1977,11 +2125,7 @@ def warehouse_balances():
         rows=items,
         q=q,
         view=view,
-        section="warehouses",
-        section_meta=_smeta(SECTION_META["warehouses"]),
-        section_modules=modules_for_section("warehouses"),
-        warehouse_source=None,
-        name="balances",
+        warehouse_active="balances",
     )
 
 

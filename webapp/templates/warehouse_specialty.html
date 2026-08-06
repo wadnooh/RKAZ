@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+{% block content %}
+{% set warehouse_active = active %}
+{% include "_warehouse_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ title }}</h2>
+      <div class="meta">{{ subtitle }}</div>
+    </div>
+    <div class="actions" data-tab-strip="1">
+      <a class="btn ghost{% if view != 'movements' %} primary{% endif %}" href="{{ list_url }}">{{ _('المعاملات') }}</a>
+      <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ movements_url }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
+    </div>
+  </div>
+
+  {% if view == 'movements' %}
+  <form method="get" class="actions" style="margin-bottom:12px;">
+    <input type="hidden" name="view" value="movements">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بالسند / المادة / المرجع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ movements_url }}">{{ _('مسح') }}</a>
+  </form>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('السند') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('النوع') }}</th>
+          <th>{{ _('المادة') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('المرجع') }}</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('المستلم') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in tx_rows %}
+        <tr>
+          <td>{{ w.voucher_no or '—' }}</td>
+          <td>{{ w.tx_date or '—' }}</td>
+          <td>{{ w.tx_type or '—' }}</td>
+          <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
+          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td>{{ w.source_ref or '—' }}</td>
+          <td>{{ w.ticket_no or '—' }}</td>
+          <td>{{ w.recipient or '—' }}</td>
+          <td class="actions">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses&source={{ source }}">{{ _('تعديل') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="meta">{{ _('لا توجد حركات مواد لهذا التخصص.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif source == 'ops' %}
+  <form method="get" class="actions" style="margin-bottom:12px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم العطل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+      <option value="">{{ _('كل الحالات') }}</option>
+      {% for s in lists.execution_status %}
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ tv(s) }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ list_url }}">{{ _('مسح') }}</a>
+  </form>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('كود ER') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('الحي') }}</th>
+          <th>{{ _('العطل') }}</th>
+          <th>{{ _('الفرقة') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('حركات المواد') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in rows %}
+        <tr>
+          <td><strong>{{ t.ticket_no }}</strong></td>
+          <td>{{ t.rekaz_code or '—' }}</td>
+          <td>{{ t.receive_date or '—' }}</td>
+          <td>{{ t.district or '—' }}</td>
+          <td>{{ t.fault_type or '—' }}</td>
+          <td>{{ t.team or '—' }}</td>
+          <td>{{ tv(t.status) if t.status else '—' }}</td>
+          <td><span class="badge info">{{ t.wh_count or 0 }}</span></td>
+          <td class="actions">
+            {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">{{ _('عرض') }}</a>{% endif %}
+            {% if can('modules.write') and can('section.warehouses') %}
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': 'ops'}) }}">{{ _('+ صرف') }}</a>
+            {% endif %}
+            <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=t.ticket_no) }}">{{ _('الحركات') }}</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="meta">{{ _('لا توجد أعطال') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif source == 'constructions' %}
+  <form method="get" class="actions" style="margin-bottom:12px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم المعاملة / الموقع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ list_url }}">{{ _('مسح') }}</a>
+  </form>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('رقم المعاملة') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('الموقع') }}</th>
+          <th>{{ _('نوع العمل') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('القيمة') }}</th>
+          <th>{{ _('حركات المواد') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.work_no or '—' }}</strong></td>
+          <td>{{ r.work_date or '—' }}</td>
+          <td>{{ r.site or '—' }}</td>
+          <td>{{ r.work_type or '—' }}</td>
+          <td>{{ tv(r.status) if r.status else '—' }}</td>
+          <td>{{ r.value|money if r.value is not none else '—' }}</td>
+          <td><span class="badge info">{{ r.wh_count or 0 }}</span></td>
+          <td class="actions">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='construction_works', row_id=r.id) }}">{{ _('تعديل') }}</a>
+            {% endif %}
+            {% if can('modules.write') and can('section.warehouses') and r.work_no %}
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="meta">{{ _('لا توجد معاملات إنشاءات') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif source == 'projects' %}
+  <form method="get" class="actions" style="margin-bottom:12px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بكود/اسم المشروع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ list_url }}">{{ _('مسح') }}</a>
+  </form>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('كود المشروع') }}</th>
+          <th>{{ _('اسم المشروع') }}</th>
+          <th>{{ _('النوع') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('حركات المواد') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.project_code or '—' }}</strong></td>
+          <td>{{ r.project_name or '—' }}</td>
+          <td>{{ r.project_type or '—' }}</td>
+          <td>{{ tv(r.status) if r.status else '—' }}</td>
+          <td>{{ r.ticket_no or '—' }}</td>
+          <td><span class="badge info">{{ r.wh_count or 0 }}</span></td>
+          <td class="actions">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='projects', row_id=r.id) }}">{{ _('تعديل') }}</a>
+            {% endif %}
+            {% if can('modules.write') and can('section.warehouses') and r.project_code %}
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد مشاريع') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}
