@@ -231,6 +231,18 @@ body {
   border-color: #e2aaa0;
   color: var(--danger);
 }
+.wh-tx-options {
+  appearance: auto;
+  -webkit-appearance: menulist;
+  min-width: 118px;
+  max-width: 168px;
+  padding-inline-end: 10px;
+  cursor: pointer;
+}
+.wh-tx-options:focus {
+  outline: 2px solid rgba(138, 115, 73, 0.35);
+  outline-offset: 1px;
+}
 
 .stats-grid {
   display: grid;

@@ -10,8 +10,9 @@
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ back_url }}">{{ _('رجوع') }}</a>
-      {% if issue_url and can('modules.write') %}
-      <a class="btn primary" href="{{ issue_url }}">{{ _('+ صرف') }}</a>
+      {% if can('modules.write') and (in_url or out_url or return_url or issue_url) %}
+      {% if issue_url and not out_url %}{% set out_url = issue_url %}{% endif %}
+      {% include '_warehouse_tx_options.html' %}
       {% endif %}
     </div>
   </div>

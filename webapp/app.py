@@ -799,6 +799,25 @@ def warehouse_projects():
     )
 
 
+def _warehouse_tx_option_urls(form_from: str, *, ticket_no: str = "", source_ref: str = "", source: str = "ops") -> dict:
+    """روابط خيارات وارد / صرف / إرجاع لسياق المستودع."""
+    base = {"from": form_from}
+    if ticket_no:
+        base["ticket_no"] = ticket_no
+    if source_ref:
+        base["source_ref"] = source_ref
+    src = (source or "ops").strip().lower()
+    if src == "ops":
+        in_type, out_type, ret_type = "وارد من الكهرباء", "منصرف للمقاول", "إرجاع للكهرباء"
+    else:
+        in_type, out_type, ret_type = "وارد من موقع العمل", "منصرف للمقاول", "إرجاع للمجمعة"
+    return {
+        "in_url": url_for("module_new", name="warehouse_tx", tx_type=in_type, **base),
+        "out_url": url_for("module_new", name="warehouse_tx", tx_type=out_type, **base),
+        "return_url": url_for("module_new", name="warehouse_tx", tx_type=ret_type, **base),
+    }
+
+
 @app.route("/warehouses/ops/ticket/<int:ticket_id>")
 @login_required
 def warehouse_ticket_detail(ticket_id):
@@ -823,6 +842,7 @@ def warehouse_ticket_detail(ticket_id):
         ).fetchall()
     )
     conn.close()
+    opts = _warehouse_tx_option_urls("wh_ops", ticket_no=tno, source="ops") if tno else {}
     return render_template(
         "warehouse_record_detail.html",
         warehouse_active="ops",
@@ -832,14 +852,8 @@ def warehouse_ticket_detail(ticket_id):
         txs=txs,
         voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_ops", view="tickets"),
-        issue_url=url_for(
-            "module_new",
-            name="warehouse_tx",
-            ticket_no=tno,
-            **{"from": "wh_ops"},
-        )
-        if tno
-        else None,
+        issue_url=opts.get("out_url"),
+        **opts,
     )
 
 
@@ -870,6 +884,7 @@ def warehouse_primary_team_detail(row_id):
         else []
     )
     conn.close()
+    opts = _warehouse_tx_option_urls("wh_ops", source_ref=ref, source="ops") if ref else {}
     return render_template(
         "warehouse_record_detail.html",
         warehouse_active="ops",
@@ -879,13 +894,8 @@ def warehouse_primary_team_detail(row_id):
         txs=txs,
         voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_ops", view="teams"),
-        issue_url=url_for(
-            "module_new",
-            name="warehouse_tx",
-            **{"from": "wh_ops", "source_ref": ref},
-        )
-        if ref
-        else None,
+        issue_url=opts.get("out_url"),
+        **opts,
     )
 
 
@@ -911,6 +921,7 @@ def warehouse_construction_detail(row_id):
         ).fetchall()
     ) if ref else []
     conn.close()
+    opts = _warehouse_tx_option_urls("wh_constructions", source_ref=ref, source="constructions") if ref else {}
     return render_template(
         "warehouse_record_detail.html",
         warehouse_active="constructions",
@@ -920,13 +931,8 @@ def warehouse_construction_detail(row_id):
         txs=txs,
         voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_constructions", view="works"),
-        issue_url=url_for(
-            "module_new",
-            name="warehouse_tx",
-            **{"from": "wh_constructions", "source_ref": ref},
-        )
-        if ref
-        else None,
+        issue_url=opts.get("out_url"),
+        **opts,
     )
 
 
@@ -952,6 +958,7 @@ def warehouse_project_detail(row_id):
         ).fetchall()
     ) if ref else []
     conn.close()
+    opts = _warehouse_tx_option_urls("wh_projects", source_ref=ref, source="projects") if ref else {}
     return render_template(
         "warehouse_record_detail.html",
         warehouse_active="projects",
@@ -961,13 +968,8 @@ def warehouse_project_detail(row_id):
         txs=txs,
         voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_projects", view="projects"),
-        issue_url=url_for(
-            "module_new",
-            name="warehouse_tx",
-            **{"from": "wh_projects", "source_ref": ref},
-        )
-        if ref
-        else None,
+        issue_url=opts.get("out_url"),
+        **opts,
     )
 
 

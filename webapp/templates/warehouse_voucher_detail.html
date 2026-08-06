@@ -15,9 +15,7 @@
       {% endif %}
       <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
       {% if can('modules.write') %}
-      <a class="btn ghost" href="{{ in_url }}">{{ _('+ وارد') }}</a>
-      <a class="btn primary" href="{{ out_url }}">{{ _('+ صرف') }}</a>
-      <a class="btn ghost" href="{{ return_url }}">{{ _('+ إرجاع') }}</a>
+      {% include '_warehouse_tx_options.html' %}
       {% endif %}
     </div>
   </div>
