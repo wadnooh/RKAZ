@@ -31,7 +31,7 @@
         {% elif name == 'warehouse_tx' and source_filter == 'projects' %}
         {{ _('حركات أُدخلت من صفحة المشاريع وتظهر هنا تلقائياً') }}
         {% elif name == 'warehouse_tx' %}
-        {{ _('نسخ الحركات من الصفحات الرئيسية حسب التخصص — بدون إدخال جديد من هنا') }}
+        {{ _('نسخ من الصفحات الرئيسية حسب التخصص') }}
         {% elif ticket_filter %}
         {{ _('سجلات مرتبطة برقم العطل') }} <strong>{{ ticket_filter }}</strong>
         {% else %}
@@ -91,7 +91,9 @@
       <thead>
         <tr>
           {% for key, label, _t in module.fields if key in module.list_cols %}
+          {% if not (name == 'warehouse_tx' and source_filter and key == 'source_section') %}
           <th>{{ label }}</th>
+          {% endif %}
           {% endfor %}
           {% if name == 'quantities' or name == 'external_purchases' %}<th>{{ _('الإجمالي') }}</th>{% endif %}
           {% if name == 'photos' %}<th>{{ _('مكتمل؟') }}</th>{% endif %}

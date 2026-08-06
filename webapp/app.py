@@ -590,55 +590,37 @@ def warehouses_home():
     db.backfill_warehouse_tx_sources()
     links = [
         {
-            "label": _t("حركات الإنشاءات"),
+            "label": _t("الإنشاءات"),
             "href": url_for("module_list", name="warehouse_tx", source="constructions"),
             "count": db.count_warehouse_tx_by_source("constructions"),
         },
         {
-            "label": _t("حركات العمليات والصيانة"),
+            "label": _t("العمليات والصيانة"),
             "href": url_for("module_list", name="warehouse_tx", source="ops"),
             "count": db.count_warehouse_tx_by_source("ops"),
         },
         {
-            "label": _t("حركات المشاريع"),
+            "label": _t("المشاريع"),
             "href": url_for("module_list", name="warehouse_tx", source="projects"),
             "count": db.count_warehouse_tx_by_source("projects"),
         },
         {
-            "label": _t("كل الحركات"),
-            "href": url_for("module_list", name="warehouse_tx"),
-            "count": db.count_warehouse_tx_by_source(),
-        },
-    ]
-    links.extend(section_links("warehouses"))
-    links.append(
-        {
             "label": _t("أرصدة المواد"),
             "href": url_for("warehouse_balances"),
             "count": _count("warehouse_items"),
-        }
-    )
-    # إزالة تكرار «معاملات المستودع» العام إن وُجد من section_links
-    seen = set()
-    deduped = []
-    for item in links:
-        key = item.get("href")
-        if key in seen:
-            continue
-        seen.add(key)
-        deduped.append(item)
+        },
+    ]
     return render_template(
         "section_hub.html",
         title=_t("المستودعات"),
-        subtitle=_t(
-            "تظهر حركات المواد تلقائياً حسب مصدرها: الإنشاءات، العمليات والصيانة، والمشاريع."
-        ),
-        links=deduped,
+        subtitle=_t("نسخ الحركات من الصفحات الرئيسية حسب التخصص، مع أرصدة المواد."),
+        links=links,
         section="warehouses",
         section_modules=modules_for_section("warehouses"),
         section_meta=_smeta(SECTION_META["warehouses"]),
         total_count=_count("warehouse_tx"),
         warehouse_source=None,
+        hide_link_pills=True,
     )
 
 
@@ -1383,6 +1365,8 @@ def _warehouse_source_label(section: str) -> str:
 
 def _redirect_after_module(name, data, form_ctx=None):
     """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل والخطوة التالية في المعالج."""
+    if name == "warehouse_items":
+        return redirect(url_for("warehouse_balances", view="items"))
     tno = str((data or {}).get("ticket_no") or "").strip()
     form_ctx = form_ctx or _warehouse_form_ctx()
 
@@ -1511,6 +1495,14 @@ def module_list(name):
     if not module:
         flash(_t("القسم غير موجود"), "danger")
         return redirect(url_for("ops_home"))
+    if name == "warehouse_items":
+        return redirect(url_for("warehouse_balances", view="items"))
+    if name == "warehouse_tx":
+        source_filter = (request.args.get("source") or "").strip().lower()
+        if source_filter not in ("ops", "constructions", "projects") and not (
+            request.args.get("ticket_no") or request.args.get("item_no")
+        ):
+            return redirect(url_for("warehouses_home"))
     conn = db.connect()
     rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {module['table']} ORDER BY id DESC").fetchall())
     tickets = [r["ticket_no"] for r in conn.execute("SELECT ticket_no FROM tickets ORDER BY id DESC").fetchall()]
@@ -1862,6 +1854,8 @@ def module_delete(name, row_id):
     db.log_audit(current_user_name(), "حذف", module["title"], row_id)
     flash(_t("تم الحذف"), "ok")
     _after_data_change()
+    if name == "warehouse_items":
+        return redirect(url_for("warehouse_balances", view="items"))
     return redirect(url_for("module_list", name=name))
 
 
@@ -1960,6 +1954,9 @@ def api_backups_sync_status():
 @app.route("/warehouses/balances")
 @login_required
 def warehouse_balances():
+    view = (request.args.get("view") or "balances").strip().lower()
+    if view not in ("balances", "items"):
+        view = "balances"
     q = (request.args.get("q") or "").strip().lower()
     conn = db.connect()
     items = db.rows_to_dicts(conn.execute("SELECT * FROM warehouse_items ORDER BY item_no").fetchall())
@@ -1979,10 +1976,12 @@ def warehouse_balances():
         "warehouse_balances.html",
         rows=items,
         q=q,
+        view=view,
         section="warehouses",
         section_meta=_smeta(SECTION_META["warehouses"]),
         section_modules=modules_for_section("warehouses"),
         warehouse_source=None,
+        name="balances",
     )
 
 
@@ -2025,7 +2024,7 @@ def warehouse_items_import():
     f = request.files.get("file")
     if not f or not f.filename:
         flash(_t("اختر ملف Excel للمواد"), "danger")
-        return redirect(url_for("module_list", name="warehouse_items"))
+        return redirect(url_for("warehouse_balances", view="items"))
     try:
         result = warehouse_excel.import_items_from_excel(f)
         flash(
@@ -2037,7 +2036,7 @@ def warehouse_items_import():
         db.log_audit(current_user_name(), "استيراد Excel", "أصناف المستودع", details=str(result)[:240])
     except Exception as exc:
         flash(_t("تعذر الاستيراد: {exc}", exc=exc), "danger")
-    return redirect(url_for("module_list", name="warehouse_items"))
+    return redirect(url_for("warehouse_balances", view="items"))
 
 
 @app.route("/warehouses/balances/import", methods=["POST"])

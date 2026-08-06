@@ -2,32 +2,102 @@
 {% block content %}
 {% set name = 'balances' %}
 {% include "_section_subnav.html" %}
+{% set view = view or 'balances' %}
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">{{ _('أرصدة المواد') }}</h2>
-      <div class="meta">{{ _('متابعة الوارد والمنصرف والرصيد الحالي — الأصناف تُدار من «أصناف المستودع»') }}</div>
-    </div>
-    <div class="actions">
-      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_items') }}">{{ _('أصناف المستودع') }}</a>
-      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx') }}">{{ _('معاملات المستودع') }}</a>
-    </div>
-  </div>
-
-  <p class="meta" style="margin-bottom:12px;">
-    {{ _('الأرصدة تُحدَّث تلقائياً من حركات الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع. لا يُسمح بإدخال حركة جديدة من المستودع.') }}
-  </p>
-
-  {% if can('modules.write') %}
-  <div class="form-grid" style="margin-bottom:14px;">
-    <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="field full" style="display:flex;gap:8px;align-items:end;flex-wrap:wrap;" onsubmit="return confirm({{ _('سيتم حذف كل حركات المستودع وتصفير الأرصدة. الأصناف لن تُحذف. هل تريد المتابعة؟')|tojson }});">
-      <div style="flex:1;min-width:220px;">
-        <label>{{ _('مسح الأرصدة الحالية (حذف الحركات)') }}</label>
-        <input type="text" name="confirm" placeholder="{{ _('اكتب: مسح') }}" required autocomplete="off">
+      <h2 class="section-title">{% if view == 'items' %}{{ _('أصناف المستودع') }}{% else %}{{ _('أرصدة المواد') }}{% endif %}</h2>
+      <div class="meta">
+        {% if view == 'items' %}
+        {{ _('إدارة قائمة المواد المستخدمة في الحركات والأرصدة') }}
+        {% else %}
+        {{ _('الرصيد يتحدث تلقائياً من حركات الإنشاءات والعمليات والمشاريع') }}
+        {% endif %}
       </div>
-      <button class="btn ghost" type="submit" style="border-color:#c45c5c;color:#a33;">{{ _('مسح الأرصدة') }}</button>
-    </form>
+    </div>
+    <div class="actions" data-tab-strip="1">
+      <a class="btn ghost{% if view != 'items' %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('الأرصدة') }}</a>
+      <a class="btn ghost{% if view == 'items' %} primary{% endif %}" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('الأصناف') }}</a>
+    </div>
   </div>
+
+  {% if view == 'items' %}
+  <div class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
+    {% if can('modules.write') %}
+    <a class="btn primary" href="{{ url_for('module_new', name='warehouse_items') }}">{{ _('+ صنف') }}</a>
+    <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب Excel') }}</a>
+    {% endif %}
+  </div>
+  {% if can('modules.write') %}
+  <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="actions" style="margin-bottom:14px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:220px;">
+      <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('استيراد الأصناف من Excel') }}</label>
+      <input type="file" name="file" accept=".xlsx,.xlsm" required>
+    </div>
+    <button class="btn primary" type="submit">{{ _('رفع') }}</button>
+  </form>
+  {% endif %}
+  <form method="get" class="actions" style="margin-bottom:12px;">
+    <input type="hidden" name="view" value="items">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم/اسم المادة أو التصنيف...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('مسح') }}</a>
+  </form>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('رقم المادة') }}</th>
+          <th>{{ _('اسم المادة') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th>{{ _('التصنيف') }}</th>
+          <th>{{ _('حد أدنى') }}</th>
+          <th>{{ _('الرصيد') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td>{{ r.item_no }}</td>
+          <td>{{ r.item_name }}</td>
+          <td>{{ r.unit or '—' }}</td>
+          <td>{{ r.category or '—' }}</td>
+          <td>{{ r.min_qty or 0 }}</td>
+          <td>
+            {% if (r.balance or 0) <= (r.min_qty or 0) %}
+            <span class="badge danger">{{ r.balance }}</span>
+            {% else %}
+            <span class="badge ok">{{ r.balance }}</span>
+            {% endif %}
+          </td>
+          <td class="actions">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_items', row_id=r.id) }}">{{ _('تعديل') }}</a>
+            {% endif %}
+            {% if can('modules.delete') %}
+            <form method="post" action="{{ url_for('module_delete', name='warehouse_items', row_id=r.id) }}" onsubmit="return confirm({{ _('حذف؟')|tojson }});" style="display:inline">
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد أصناف بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  {% if can('modules.write') %}
+  <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="actions" style="margin-bottom:14px;flex-wrap:wrap;" onsubmit="return confirm({{ _('سيتم حذف كل حركات المستودع وتصفير الأرصدة. الأصناف لن تُحذف. هل تريد المتابعة؟')|tojson }});">
+    <div style="flex:1;min-width:220px;">
+      <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('مسح الأرصدة (حذف الحركات فقط)') }}</label>
+      <input type="text" name="confirm" placeholder="{{ _('اكتب: مسح') }}" required autocomplete="off">
+    </div>
+    <button class="btn ghost" type="submit" style="border-color:#c45c5c;color:#a33;">{{ _('مسح الأرصدة') }}</button>
+  </form>
   {% endif %}
 
   <form method="get" class="actions" style="margin-bottom:12px;">
@@ -48,7 +118,6 @@
           <th>{{ _('منصرف') }}</th>
           <th>{{ _('الرصيد') }}</th>
           <th>{{ _('حد أدنى') }}</th>
-          <th>{{ _('بلاغات مربوطة') }}</th>
           <th></th>
         </tr>
       </thead>
@@ -69,22 +138,20 @@
             {% endif %}
           </td>
           <td>{{ r.min_qty or 0 }}</td>
-          <td style="white-space:normal;max-width:180px;">
-            {% if r.tickets %}
-              {% for t in r.tickets %}
-              <a href="{{ url_for('module_list', name='warehouse_tx', ticket_no=t) }}">{{ t }}</a>{% if not loop.last %}، {% endif %}
-              {% endfor %}
-            {% else %}—{% endif %}
-          </td>
           <td class="actions">
-            <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', item_no=r.item_no) }}">{{ _('الحركات') }}</a>
+            {% if r.tickets %}
+              {% for t in r.tickets[:3] %}
+              <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=t) }}">{{ t }}</a>
+              {% endfor %}
+            {% endif %}
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="10">{{ _('لا توجد أصناف — أضف المواد من') }} <a href="{{ url_for('module_list', name='warehouse_items') }}">{{ _('أصناف المستودع') }}</a></td></tr>
+        <tr><td colspan="9" class="meta">{{ _('لا توجد أصناف — أضفها من تبويب الأصناف.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% endif %}
 </div>
 {% endblock %}

@@ -3,6 +3,7 @@
 {% set hub_path = url_for(section_meta.home) if section_meta else '' %}
 {% set on_hub = section_meta and (p == hub_path or p.rstrip('/') == hub_path.rstrip('/')) and not name %}
 {% set wh_source = warehouse_source if warehouse_source is defined else (request.args.get('source') or '') %}
+{% set on_balances = section == 'warehouses' and (p.startswith('/warehouses/balances') or name == 'warehouse_items' or name == 'balances') %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1">
     {% if section_meta %}
@@ -12,9 +13,7 @@
     <a class="btn ghost{% if name=='warehouse_tx' and wh_source=='constructions' %} primary{% endif %}" href="{{ url_for('module_list', name='warehouse_tx', source='constructions') }}">{{ _('الإنشاءات') }}</a>
     <a class="btn ghost{% if name=='warehouse_tx' and wh_source=='ops' %} primary{% endif %}" href="{{ url_for('module_list', name='warehouse_tx', source='ops') }}">{{ _('العمليات والصيانة') }}</a>
     <a class="btn ghost{% if name=='warehouse_tx' and wh_source=='projects' %} primary{% endif %}" href="{{ url_for('module_list', name='warehouse_tx', source='projects') }}">{{ _('المشاريع') }}</a>
-    <a class="btn ghost{% if name=='warehouse_tx' and not wh_source %} primary{% endif %}" href="{{ url_for('module_list', name='warehouse_tx') }}">{{ _('كل الحركات') }}</a>
-    <a class="btn ghost{% if name=='warehouse_items' %} primary{% endif %}" href="{{ url_for('module_list', name='warehouse_items') }}">{{ _('أصناف المستودع') }}</a>
-    <a class="btn ghost{% if p.startswith('/warehouses/balances') %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>
+    <a class="btn ghost{% if on_balances %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>
     {% else %}
     {% for key, mod in section_modules %}
     <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>
@@ -23,4 +22,3 @@
   </div>
 </div>
 {% endif %}
-

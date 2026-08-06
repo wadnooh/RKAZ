@@ -17,15 +17,17 @@
   </div>
 
   {% if links %}
+  {% if not hide_link_pills %}
   <div class="actions" style="margin-bottom:14px;" data-tab-strip="1">
     {% for item in links %}
     <a class="btn ghost" href="{{ item.href }}">{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
     {% endfor %}
   </div>
+  {% endif %}
 
   <div class="stats-grid" style="margin-top:4px;">
     <div class="stat-card">
-      <div>{{ _('الأقسام الفرعية') }}</div>
+      <div>{{ _('الأقسام') }}</div>
       <strong>{{ links|length }}</strong>
     </div>
     <div class="stat-card">

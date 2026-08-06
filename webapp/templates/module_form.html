@@ -23,6 +23,8 @@
     </div>
     {% if row.get('ticket_no') and name in ['quantities','photos','metering'] %}
     <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=row.ticket_no) }}">{{ _('رجوع') }}</a>
+    {% elif name == 'warehouse_items' %}
+    <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('رجوع') }}</a>
     {% else %}
     <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('رجوع') }}</a>
     {% endif %}
@@ -127,6 +129,8 @@
       <a class="btn ghost" href="{{ url_for('module_list', name='projects') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'warehouse_tx' and form_ctx == 'ops' and row.get('ticket_no') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=row.ticket_no) }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'warehouse_items' %}
+      <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('إلغاء') }}</a>
       {% else %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('إلغاء') }}</a>
       {% endif %}

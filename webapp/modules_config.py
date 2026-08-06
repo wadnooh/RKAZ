@@ -236,6 +236,7 @@ MODULES = {
         "title": "أصناف المستودع",
         "table": "warehouse_items",
         "section": "warehouses",
+        "hub_hidden": True,
         "fields": [
             ("item_no", "رقم المادة", "text"),
             ("item_name", "اسم المادة", "text"),
@@ -250,6 +251,7 @@ MODULES = {
         "title": "معاملات المستودع",
         "table": "warehouse_tx",
         "section": "warehouses",
+        "hub_hidden": True,
         "fields": [
             ("voucher_no", "رقم السند", "text"),
             ("tx_date", "تاريخ الحركة", "date"),
