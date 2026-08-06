@@ -1069,6 +1069,221 @@ def warehouse_voucher_detail(voucher_no):
     )
 
 
+@app.route("/warehouses/tx/multi", methods=["GET", "POST"])
+@login_required
+def warehouse_tx_multi():
+    """إدخال وارد/صرف/إرجاع متعدد المواد في سند واحد."""
+    form_ctx = _warehouse_form_ctx()
+    if form_ctx not in _warehouse_create_contexts():
+        flash(
+            _t(
+                "إدخال معاملات المستودع يتم من الإنشاءات أو العمليات والصيانة أو المشاريع (أو تبويباتها داخل المستودع)."
+            ),
+            "danger",
+        )
+        return redirect(url_for("warehouses_home"))
+
+    source = _warehouse_source_from_ctx(form_ctx)
+    cancel_url = {
+        "wh_ops": url_for("warehouse_ops"),
+        "ops": url_for("warehouse_ops"),
+        "wh_constructions": url_for("warehouse_constructions"),
+        "constructions": url_for("warehouse_constructions"),
+        "wh_projects": url_for("warehouse_projects"),
+        "projects": url_for("warehouse_projects"),
+    }.get(form_ctx, url_for("warehouses_home"))
+
+    conn = db.connect()
+    ticket_options = db.list_ticket_options(conn)
+    warehouse_items = db.list_warehouse_items()
+
+    header = {
+        "voucher_no": "",
+        "tx_date": datetime.now().strftime("%Y-%m-%d"),
+        "tx_type": (request.values.get("tx_type") or "").strip() or "منصرف للمقاول",
+        "recipient": "",
+        "ticket_no": (request.values.get("ticket_no") or "").strip(),
+        "rekaz_code": "",
+        "source_section": source,
+        "source_ref": (request.values.get("source_ref") or "").strip(),
+        "region": "",
+        "notes": "",
+    }
+    if header["ticket_no"]:
+        ticket = db.resolve_ticket_ref(header["ticket_no"], conn)
+        if ticket:
+            header["rekaz_code"] = ticket.get("rekaz_code") or ""
+        if not header["source_ref"] and source == "ops":
+            header["source_ref"] = header["ticket_no"]
+
+    reuse = str(request.values.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
+    existing_voucher = (request.values.get("voucher_no") or "").strip()
+    if reuse and existing_voucher:
+        header["voucher_no"] = existing_voucher
+        prev = conn.execute(
+            "SELECT * FROM warehouse_tx WHERE voucher_no=? ORDER BY id LIMIT 1",
+            (existing_voucher,),
+        ).fetchone()
+        if prev:
+            prev = dict(prev)
+            for k in (
+                "tx_date",
+                "tx_type",
+                "ticket_no",
+                "rekaz_code",
+                "source_section",
+                "source_ref",
+                "region",
+                "recipient",
+                "notes",
+            ):
+                if request.method == "GET" or not (request.form.get(k) or "").strip():
+                    if prev.get(k) not in (None, "") and not (header.get(k) or "").strip():
+                        header[k] = prev.get(k)
+            if request.values.get("tx_type"):
+                header["tx_type"] = request.values.get("tx_type")
+    else:
+        header["voucher_no"] = db.next_warehouse_voucher_no(conn)
+
+    lines = [{"item_no": "", "item_name": "", "unit": "", "qty": "", "line_recipient": ""}]
+
+    if request.method == "POST":
+        header.update(
+            {
+                "tx_date": (request.form.get("tx_date") or "").strip(),
+                "tx_type": (request.form.get("tx_type") or "").strip(),
+                "recipient": (request.form.get("recipient") or "").strip(),
+                "ticket_no": (request.form.get("ticket_no") or "").strip(),
+                "rekaz_code": (request.form.get("rekaz_code") or "").strip(),
+                "source_section": source,
+                "source_ref": (request.form.get("source_ref") or "").strip(),
+                "region": (request.form.get("region") or "").strip(),
+                "notes": (request.form.get("notes") or "").strip(),
+            }
+        )
+        if reuse and existing_voucher:
+            header["voucher_no"] = existing_voucher
+        else:
+            # لا تعيد استخدام سند موجود إلا عند reuse صريح
+            voucher = (request.form.get("voucher_no") or "").strip() or header["voucher_no"]
+            if not voucher or (
+                not reuse
+                and conn.execute(
+                    "SELECT 1 FROM warehouse_tx WHERE voucher_no=? LIMIT 1", (voucher,)
+                ).fetchone()
+            ):
+                voucher = db.next_warehouse_voucher_no(conn)
+            header["voucher_no"] = voucher
+
+        item_nos = request.form.getlist("item_no[]")
+        item_names = request.form.getlist("item_name[]")
+        units = request.form.getlist("unit[]")
+        qtys = request.form.getlist("qty[]")
+        line_recipients = request.form.getlist("line_recipient[]")
+        parsed = []
+        for i, item_no in enumerate(item_nos):
+            item_no = (item_no or "").strip()
+            qty_raw = (qtys[i] if i < len(qtys) else "") or ""
+            if not item_no and not str(qty_raw).strip():
+                continue
+            try:
+                qty = float(qty_raw)
+            except (TypeError, ValueError):
+                qty = None
+            parsed.append(
+                {
+                    "item_no": item_no,
+                    "item_name": (item_names[i] if i < len(item_names) else "") or "",
+                    "unit": (units[i] if i < len(units) else "") or "",
+                    "qty": qty if qty is not None else "",
+                    "line_recipient": (line_recipients[i] if i < len(line_recipients) else "")
+                    or "",
+                }
+            )
+
+        if not parsed:
+            flash(_t("أضف مادة واحدة على الأقل"), "danger")
+            lines = [{"item_no": "", "item_name": "", "unit": "", "qty": "", "line_recipient": ""}]
+        else:
+            errors = []
+            prepared_rows = []
+            for idx, line in enumerate(parsed, start=1):
+                if not line["item_no"]:
+                    errors.append(_t("السطر {n}: اختر المادة", n=idx))
+                    continue
+                if line["qty"] in ("", None) or float(line["qty"] or 0) <= 0:
+                    errors.append(_t("السطر {n}: أدخل كمية صحيحة", n=idx))
+                    continue
+                data = {
+                    "voucher_no": header["voucher_no"],
+                    "tx_date": header["tx_date"],
+                    "tx_type": header["tx_type"],
+                    "item_no": line["item_no"],
+                    "item_name": line["item_name"],
+                    "unit": line["unit"],
+                    "qty": line["qty"],
+                    "recipient": line["line_recipient"] or header["recipient"],
+                    "ticket_no": header["ticket_no"],
+                    "rekaz_code": header["rekaz_code"],
+                    "source_section": header["source_section"],
+                    "source_ref": header["source_ref"],
+                    "region": header["region"],
+                    "notes": header["notes"],
+                }
+                prepared, err = _prepare_warehouse_tx_create(data, form_ctx, conn)
+                if err:
+                    errors.append(_t("السطر {n}: {err}", n=idx, err=err))
+                else:
+                    prepared_rows.append(prepared)
+
+            if errors:
+                flash(" | ".join(errors), "danger")
+                lines = parsed or lines
+            elif not prepared_rows:
+                flash(_t("أضف مادة واحدة على الأقل"), "danger")
+                lines = parsed or lines
+            else:
+                keys = [f[0] for f in MODULES["warehouse_tx"]["fields"]]
+                for data in prepared_rows:
+                    conn.execute(
+                        f"INSERT INTO warehouse_tx({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
+                        [data.get(k) for k in keys],
+                    )
+                conn.commit()
+                db.log_audit(
+                    current_user_name(),
+                    "إضافة",
+                    "معاملات المستودع",
+                    header["voucher_no"],
+                    _t("{n} مواد", n=len(prepared_rows)),
+                )
+                conn.close()
+                flash(_t("تم حفظ {n} مواد في السند {v}", n=len(prepared_rows), v=header["voucher_no"]), "ok")
+                _after_data_change()
+                return redirect(url_for("warehouse_voucher_detail", voucher_no=header["voucher_no"]))
+
+    conn.close()
+    title_map = {
+        "وارد من الكهرباء": _t("وارد متعدد"),
+        "وارد من موقع العمل": _t("وارد متعدد"),
+        "منصرف للمقاول": _t("صرف متعدد"),
+        "إرجاع للكهرباء": _t("إرجاع متعدد"),
+        "إرجاع للمجمعة": _t("إرجاع متعدد"),
+    }
+    return render_template(
+        "warehouse_tx_multi.html",
+        title=title_map.get(header.get("tx_type") or "", _t("حركة متعددة")),
+        header=header,
+        lines=lines,
+        warehouse_items=warehouse_items,
+        ticket_options=ticket_options,
+        form_ctx=form_ctx,
+        reuse_voucher=reuse,
+        cancel_url=cancel_url,
+        source_label=_warehouse_source_label(source),
+    )
+
+
 @app.route("/warehouses/tx/<int:row_id>/delete", methods=["POST"])
 @login_required
 def warehouse_tx_delete(row_id):
@@ -2120,6 +2335,13 @@ def module_new(name):
     if name == "primary_team_orders":
         # الإضافة من العمليات والصيانة ← الفرق الأولية فقط (وليس المستودع)
         return redirect(url_for("ops_primary_teams"))
+    if name == "warehouse_tx":
+        # الإدخال المتعدد هو الافتراضي للوارد/الصرف/الإرجاع
+        target = url_for("warehouse_tx_multi")
+        qs = request.query_string.decode("utf-8", errors="ignore") if request.query_string else ""
+        if qs:
+            target = f"{target}?{qs}"
+        return redirect(target)
     conn = db.connect()
     ticket_options = db.list_ticket_options(conn)
     tickets = [t["value"] for t in ticket_options]
