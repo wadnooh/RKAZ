@@ -1070,6 +1070,64 @@ def warehouse_voucher_detail(voucher_no):
     )
 
 
+def _warehouse_mirror_tx_type(tx_type: str, source: str = "") -> str | None:
+    """نوع الحركة المقابل للنسخ التلقائي (وارد↔منصرف) — بدون الإرجاع."""
+    t = (tx_type or "").strip()
+    if not t or "إرجاع" in t:
+        return None
+    if "وارد" in t or "افتتاح" in t:
+        return "منصرف للمقاول"
+    if "منصرف" in t:
+        if (source or "").strip().lower() == "ops":
+            return "وارد من الكهرباء"
+        return "وارد من موقع العمل"
+    return None
+
+
+def _insert_warehouse_mirror_zeros(conn, prepared_rows: list[dict], form_ctx: str = "") -> int:
+    """ينشئ سطور صفرية في الاتجاه المقابل لكل مادة مُضافة (إن لم تكن موجودة)."""
+    if not prepared_rows:
+        return 0
+    keys = [f[0] for f in MODULES["warehouse_tx"]["fields"]]
+    fallback_source = _warehouse_source_from_ctx(form_ctx) if form_ctx else ""
+    mirrored = 0
+    for data in prepared_rows:
+        source = (data.get("source_section") or "").strip() or fallback_source
+        opposite = _warehouse_mirror_tx_type(data.get("tx_type") or "", source)
+        if not opposite:
+            continue
+        voucher = (data.get("voucher_no") or "").strip()
+        item_no = (data.get("item_no") or "").strip()
+        if not voucher or not item_no:
+            continue
+        exists = conn.execute(
+            """
+            SELECT id FROM warehouse_tx
+            WHERE voucher_no=? AND lower(item_no)=lower(?) AND tx_type=?
+            LIMIT 1
+            """,
+            (voucher, item_no, opposite),
+        ).fetchone()
+        if exists:
+            continue
+        mirror = dict(data)
+        mirror["tx_type"] = opposite
+        mirror["qty"] = 0
+        if not (mirror.get("source_section") or "").strip() and source:
+            mirror["source_section"] = source
+        # لا نعيد اشتراط الربط عبر التحضير لكمية صفرية؛ ننسخ الحقول كما هي
+        mirror["notes"] = (mirror.get("notes") or "").strip()
+        auto_note = "نسخ تلقائي — كمية صفرية"
+        if auto_note not in (mirror["notes"] or ""):
+            mirror["notes"] = f"{mirror['notes']} | {auto_note}".strip(" |") if mirror["notes"] else auto_note
+        conn.execute(
+            f"INSERT INTO warehouse_tx({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
+            [mirror.get(k) for k in keys],
+        )
+        mirrored += 1
+    return mirrored
+
+
 @app.route("/warehouses/tx/multi", methods=["GET", "POST"])
 @login_required
 def warehouse_tx_multi():
@@ -1258,16 +1316,32 @@ def warehouse_tx_multi():
                         f"INSERT INTO warehouse_tx({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
                         [data.get(k) for k in keys],
                     )
+                mirrored = _insert_warehouse_mirror_zeros(conn, prepared_rows, form_ctx)
                 conn.commit()
                 db.log_audit(
                     current_user_name(),
                     "إضافة",
                     "معاملات المستودع",
                     header["voucher_no"],
-                    _t("{n} مواد", n=len(prepared_rows)),
+                    _t("{n} مواد", n=len(prepared_rows))
+                    + (f" / {_t('{n} نسخ صفري', n=mirrored)}" if mirrored else ""),
                 )
                 conn.close()
-                flash(_t("تم حفظ {n} مواد في السند {v}", n=len(prepared_rows), v=header["voucher_no"]), "ok")
+                if mirrored:
+                    flash(
+                        _t(
+                            "تم حفظ {n} مواد في السند {v} مع {m} سطراً صفرياً في الاتجاه المقابل",
+                            n=len(prepared_rows),
+                            v=header["voucher_no"],
+                            m=mirrored,
+                        ),
+                        "ok",
+                    )
+                else:
+                    flash(
+                        _t("تم حفظ {n} مواد في السند {v}", n=len(prepared_rows), v=header["voucher_no"]),
+                        "ok",
+                    )
                 _after_data_change()
                 return redirect(url_for("warehouse_voucher_detail", voucher_no=header["voucher_no"]))
 
@@ -2520,11 +2594,29 @@ def module_new(name):
             f"INSERT INTO {module['table']}({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
             [data[k] for k in keys],
         )
+        mirrored = 0
+        if name == "warehouse_tx":
+            mirrored = _insert_warehouse_mirror_zeros(conn, [data], form_ctx)
         conn.commit()
         new_id = cur.lastrowid
         conn.close()
-        db.log_audit(current_user_name(), "إضافة", module["title"], new_id, str(data)[:240])
-        flash(_t("تمت الإضافة"), "ok")
+        db.log_audit(
+            current_user_name(),
+            "إضافة",
+            module["title"],
+            new_id,
+            (str(data)[:200] + (f" / {_t('{n} نسخ صفري', n=mirrored)}" if mirrored else ""))[:240],
+        )
+        if name == "warehouse_tx" and mirrored:
+            flash(
+                _t(
+                    "تم الحفظ مع {m} سطراً صفرياً في الاتجاه المقابل",
+                    m=mirrored,
+                ),
+                "ok",
+            )
+        else:
+            flash(_t("تمت الإضافة"), "ok")
         _after_data_change()
         return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
