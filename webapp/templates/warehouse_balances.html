@@ -103,7 +103,7 @@
   {% endif %}
 
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم/اسم المادة أو التصنيف...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أو اسم المادة...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('مسح') }}</a>
   </form>
@@ -115,7 +115,6 @@
           <th>{{ _('رقم المادة') }}</th>
           <th>{{ _('اسم المادة') }}</th>
           <th>{{ _('الوحدة') }}</th>
-          <th>{{ _('التصنيف') }}</th>
           <th>{{ _('وارد') }}</th>
           <th>{{ _('منصرف') }}</th>
           <th>{{ _('الرصيد') }}</th>
@@ -129,7 +128,6 @@
           <td>{{ r.item_no }}</td>
           <td>{{ r.item_name }}</td>
           <td>{{ r.unit or '—' }}</td>
-          <td>{{ r.category or '—' }}</td>
           <td><span class="badge ok">{{ r.inbound or 0 }}</span></td>
           <td><span class="badge warn">{{ r.outbound or 0 }}</span></td>
           <td>
@@ -149,7 +147,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">{{ _('لا توجد أصناف — أضفها من تبويب الأصناف.') }}</td></tr>
+        <tr><td colspan="8" class="meta">{{ _('لا توجد أصناف — أضفها من تبويب الأصناف.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
