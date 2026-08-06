@@ -824,6 +824,7 @@ def warehouse_ticket_detail(ticket_id):
         title=_t("تفاصيل العطل"),
         record=ticket,
         txs=txs,
+        voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_ops", view="tickets"),
         issue_url=url_for(
             "module_new",
@@ -870,6 +871,7 @@ def warehouse_primary_team_detail(row_id):
         title=_t("تفاصيل الفرق الأولية"),
         record=order,
         txs=txs,
+        voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_ops", view="teams"),
         issue_url=url_for(
             "module_new",
@@ -910,6 +912,7 @@ def warehouse_construction_detail(row_id):
         title=_t("تفاصيل معاملة الإنشاءات"),
         record=work,
         txs=txs,
+        voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_constructions", view="works"),
         issue_url=url_for(
             "module_new",
@@ -950,6 +953,7 @@ def warehouse_project_detail(row_id):
         title=_t("تفاصيل المشروع"),
         record=project,
         txs=txs,
+        voucher_groups=db.group_warehouse_txs_by_voucher(txs),
         back_url=url_for("warehouse_projects", view="projects"),
         issue_url=url_for(
             "module_new",
@@ -959,6 +963,110 @@ def warehouse_project_detail(row_id):
         if ref
         else None,
     )
+
+
+@app.route("/warehouses/voucher/<path:voucher_no>")
+@login_required
+def warehouse_voucher_detail(voucher_no):
+    """عرض المعاملة (سند المستودع) مع مواد الوارد/المنصرف — لجميع التخصصات."""
+    voucher_no = (voucher_no or "").strip()
+    mat_view = (request.args.get("mat") or "all").strip().lower()
+    if mat_view not in ("in", "out", "all"):
+        mat_view = "all"
+    lines = db.get_warehouse_voucher_lines(voucher_no)
+    if not lines:
+        flash(_t("المعاملة غير موجودة"), "danger")
+        return redirect(url_for("warehouses_home"))
+
+    for ln in lines:
+        try:
+            ln["item_balance"] = db.warehouse_balance(ln.get("item_no") or "")
+        except Exception:
+            ln["item_balance"] = None
+
+    head = lines[0]
+    parent = db.resolve_warehouse_parent(head)
+    section = (head.get("source_section") or "").strip().lower()
+    warehouse_active = {
+        "ops": "ops",
+        "constructions": "constructions",
+        "projects": "projects",
+    }.get(section, "home")
+
+    inbound = [r for r in lines if r.get("sign", 0) > 0]
+    outbound = [r for r in lines if r.get("sign", 0) < 0]
+    if mat_view == "in":
+        shown = inbound
+    elif mat_view == "out":
+        shown = outbound
+    else:
+        shown = lines
+
+    qty_in = sum(float(r.get("qty") or 0) for r in inbound)
+    qty_out = sum(float(r.get("qty") or 0) for r in outbound)
+    qty_total = sum(float(r.get("qty") or 0) for r in lines)
+    tx_types = []
+    for r in lines:
+        t = r.get("tx_type") or ""
+        if t and t not in tx_types:
+            tx_types.append(t)
+
+    back_url = url_for("warehouses_home")
+    if section == "ops":
+        back_url = url_for("warehouse_ops", view="movements")
+    elif section == "constructions":
+        back_url = url_for("warehouse_constructions", view="movements")
+    elif section == "projects":
+        back_url = url_for("warehouse_projects", view="movements")
+
+    form_from = {
+        "ops": "wh_ops",
+        "constructions": "wh_constructions",
+        "projects": "wh_projects",
+    }.get(section, "warehouses")
+
+    add_line_args = {"from": form_from, "voucher_no": voucher_no, "reuse_voucher": "1"}
+    if head.get("ticket_no"):
+        add_line_args["ticket_no"] = head.get("ticket_no")
+    if head.get("source_ref"):
+        add_line_args["source_ref"] = head.get("source_ref")
+
+    return render_template(
+        "warehouse_voucher_detail.html",
+        warehouse_active=warehouse_active,
+        voucher_no=voucher_no,
+        head=head,
+        parent=parent,
+        lines=lines,
+        shown=shown,
+        mat_view=mat_view,
+        inbound_count=len(inbound),
+        outbound_count=len(outbound),
+        qty_in=qty_in,
+        qty_out=qty_out,
+        qty_total=qty_total,
+        tx_types=tx_types,
+        back_url=back_url,
+        form_from=form_from,
+        add_line_url=url_for("module_new", name="warehouse_tx", **add_line_args),
+        parent_url=_warehouse_parent_url(parent),
+    )
+
+
+def _warehouse_parent_url(parent: dict):
+    kind = (parent or {}).get("parent_kind")
+    pid = (parent or {}).get("parent_id")
+    if not kind or not pid:
+        return None
+    if kind == "ticket":
+        return url_for("warehouse_ticket_detail", ticket_id=pid)
+    if kind == "primary_team":
+        return url_for("warehouse_primary_team_detail", row_id=pid)
+    if kind == "construction":
+        return url_for("warehouse_construction_detail", row_id=pid)
+    if kind == "project":
+        return url_for("warehouse_project_detail", row_id=pid)
+    return None
 
 
 @app.route("/external-purchases")
@@ -1741,6 +1849,16 @@ def _redirect_after_module(name, data, form_ctx=None):
 
     if name == "warehouse_tx":
         # من داخل المستودع: ابقَ في المستودع دائماً (بدون تحويل للصفحات الرئيسية)
+        voucher = (data.get("voucher_no") or "").strip()
+        if voucher and form_ctx in ("wh_ops", "wh_constructions", "wh_projects", "warehouses", "ops", "constructions", "projects"):
+            # بعد الحفظ افتح عرض المعاملة (سند)
+            if form_ctx in ("wh_ops", "wh_constructions", "wh_projects", "warehouses") or not (
+                form_ctx == "ops"
+                and (data.get("ticket_no") or "").strip()
+                and permissions.can("tickets.read")
+                and permissions.can("section.ops")
+            ):
+                return redirect(url_for("warehouse_voucher_detail", voucher_no=voucher))
         if form_ctx == "wh_ops":
             src_ref = (data.get("source_ref") or "").strip()
             tno_tx = (data.get("ticket_no") or "").strip()
@@ -1990,7 +2108,21 @@ def module_new(name):
         if source in ("constructions", "projects", "ops"):
             prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
             prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
-        if not (prefill.get("voucher_no") or "").strip():
+        reuse = str(request.args.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
+        existing_voucher = (request.args.get("voucher_no") or "").strip()
+        if reuse and existing_voucher:
+            prefill["voucher_no"] = existing_voucher
+            # انسخ بيانات السند القائم للمادة الجديدة
+            prev = conn.execute(
+                "SELECT * FROM warehouse_tx WHERE voucher_no=? ORDER BY id LIMIT 1",
+                (existing_voucher,),
+            ).fetchone()
+            if prev:
+                prev = dict(prev)
+                for k in ("tx_date", "ticket_no", "rekaz_code", "source_section", "source_ref", "region", "recipient"):
+                    if not (prefill.get(k) or "").strip() and prev.get(k) not in (None, ""):
+                        prefill[k] = prev.get(k)
+        elif not (prefill.get("voucher_no") or "").strip():
             prefill["voucher_no"] = db.next_warehouse_voucher_no(conn)
     if request.method == "POST":
         data = _module_form_data(module)
@@ -2020,7 +2152,11 @@ def module_new(name):
                 )
         if name == "warehouse_tx":
             voucher = (data.get("voucher_no") or "").strip()
-            if not voucher or conn.execute(
+            reuse = str(request.values.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
+            if reuse and voucher:
+                # إضافة مادة لسند قائم — لا تصدر رقماً جديداً
+                data["voucher_no"] = voucher
+            elif not voucher or conn.execute(
                 "SELECT 1 FROM warehouse_tx WHERE voucher_no=? LIMIT 1", (voucher,)
             ).fetchone():
                 data["voucher_no"] = db.next_warehouse_voucher_no(conn)
@@ -2118,6 +2254,9 @@ def module_new(name):
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
         form_ctx=_warehouse_form_ctx() if name in ("warehouse_tx", "primary_team_orders") else None,
+        reuse_voucher=str(request.args.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
+        if name == "warehouse_tx"
+        else False,
     )
 
 

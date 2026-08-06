@@ -1271,6 +1271,177 @@ def warehouse_tx_sign(tx_type: str) -> int:
     return 0
 
 
+def get_warehouse_voucher_lines(voucher_no: str, conn=None) -> list[dict]:
+    """كل أسطر السند (معاملة المستودع) مرتبة."""
+    voucher_no = (voucher_no or "").strip()
+    if not voucher_no:
+        return []
+    own = conn is None
+    conn = conn or connect()
+    try:
+        rows = rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM warehouse_tx WHERE voucher_no=? ORDER BY id",
+                (voucher_no,),
+            ).fetchall()
+        )
+        for r in rows:
+            r["sign"] = warehouse_tx_sign(r.get("tx_type") or "")
+        return rows
+    finally:
+        if own:
+            conn.close()
+
+
+def resolve_warehouse_parent(line: dict, conn=None) -> dict:
+    """يربط سطر حركة بالمصدر (عطل / فرق أولية / إنشاءات / مشروع)."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        section = (line.get("source_section") or "").strip().lower()
+        ref = (line.get("source_ref") or line.get("ticket_no") or "").strip()
+        tno = (line.get("ticket_no") or "").strip()
+        out = {
+            "section": section,
+            "ref": ref,
+            "label": "",
+            "work_order": "",
+            "extract_no": "",
+            "amount": None,
+            "ticket_no": tno,
+            "site": "",
+            "tab": "",
+            "parent_kind": "",
+            "parent_id": None,
+        }
+        if section == "ops" or tno:
+            # فرق أولية أولاً إذا المرجع أمر عمل
+            if ref:
+                pto = conn.execute(
+                    "SELECT * FROM primary_team_orders WHERE work_order=? LIMIT 1",
+                    (ref,),
+                ).fetchone()
+                if pto:
+                    p = dict(pto)
+                    out.update(
+                        {
+                            "label": _warehouse_section_label("ops"),
+                            "tab": "الفرق الأولية",
+                            "work_order": p.get("work_order") or "",
+                            "extract_no": p.get("extract_no") or "",
+                            "amount": p.get("amount"),
+                            "parent_kind": "primary_team",
+                            "parent_id": p.get("id"),
+                            "site": "الفرق الأولية",
+                        }
+                    )
+                    return out
+            lookup = tno or ref
+            if lookup:
+                ticket = conn.execute(
+                    "SELECT * FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
+                    (lookup, lookup),
+                ).fetchone()
+                if ticket:
+                    t = dict(ticket)
+                    out.update(
+                        {
+                            "label": _warehouse_section_label("ops"),
+                            "tab": "الأعطال",
+                            "ticket_no": t.get("ticket_no") or lookup,
+                            "work_order": t.get("work_order") or "",
+                            "site": t.get("district") or t.get("location") or "الأعطال",
+                            "parent_kind": "ticket",
+                            "parent_id": t.get("id"),
+                        }
+                    )
+                    return out
+            out.update(
+                {
+                    "label": _warehouse_section_label("ops"),
+                    "tab": "العمليات والصيانة",
+                    "site": "العمليات والصيانة",
+                }
+            )
+            return out
+        if section == "constructions" and ref:
+            row = conn.execute(
+                "SELECT * FROM construction_works WHERE work_no=? LIMIT 1", (ref,)
+            ).fetchone()
+            if row:
+                w = dict(row)
+                out.update(
+                    {
+                        "label": _warehouse_section_label("constructions"),
+                        "tab": "الإنشاءات",
+                        "site": w.get("site") or "",
+                        "parent_kind": "construction",
+                        "parent_id": w.get("id"),
+                    }
+                )
+                return out
+        if section == "projects" and ref:
+            row = conn.execute(
+                "SELECT * FROM projects WHERE project_code=? LIMIT 1", (ref,)
+            ).fetchone()
+            if row:
+                p = dict(row)
+                out.update(
+                    {
+                        "label": _warehouse_section_label("projects"),
+                        "tab": "المشاريع",
+                        "site": p.get("site") or p.get("project_name") or "",
+                        "ticket_no": p.get("ticket_no") or "",
+                        "parent_kind": "project",
+                        "parent_id": p.get("id"),
+                    }
+                )
+                return out
+        out["label"] = _warehouse_section_label(section) if section else ""
+        out["tab"] = out["label"]
+        return out
+    finally:
+        if own:
+            conn.close()
+
+
+def _warehouse_section_label(section: str) -> str:
+    return {
+        "ops": "العمليات والصيانة",
+        "constructions": "الإنشاءات",
+        "projects": "المشاريع",
+        "warehouses": "المستودعات",
+    }.get(section or "", section or "")
+
+
+def group_warehouse_txs_by_voucher(txs: list[dict]) -> list[dict]:
+    """تجميع أسطر الحركات حسب رقم السند لعرض المعاملة."""
+    groups: dict[str, dict] = {}
+    order: list[str] = []
+    for t in txs or []:
+        key = (t.get("voucher_no") or "").strip() or f"__id_{t.get('id')}"
+        if key not in groups:
+            groups[key] = {
+                "voucher_no": t.get("voucher_no") or "",
+                "tx_date": t.get("tx_date"),
+                "tx_types": [],
+                "lines": [],
+                "qty_total": 0.0,
+            }
+            order.append(key)
+        g = groups[key]
+        g["lines"].append(t)
+        if t.get("tx_type") and t.get("tx_type") not in g["tx_types"]:
+            g["tx_types"].append(t.get("tx_type"))
+        try:
+            g["qty_total"] += float(t.get("qty") or 0)
+        except (TypeError, ValueError):
+            pass
+        if not g.get("tx_date") and t.get("tx_date"):
+            g["tx_date"] = t.get("tx_date")
+    return [groups[k] for k in order]
+
+
 def warehouse_balance(item_no):
     """رصيد المادة = الوارد - المنصرف حسب نوع الحركة."""
     return warehouse_balance_detail(item_no)["balance"]

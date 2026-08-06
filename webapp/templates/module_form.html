@@ -46,6 +46,9 @@
   <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}>
     {% if name == 'warehouse_tx' and form_ctx %}
     <input type="hidden" name="from" value="{{ form_ctx }}">
+    {% if reuse_voucher %}
+    <input type="hidden" name="reuse_voucher" value="1">
+    {% endif %}
     {% endif %}
     {% for key, label, ftype in module.fields %}
     <div class="field {% if ftype == 'textarea' %}full{% endif %}">

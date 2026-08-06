@@ -60,7 +60,8 @@
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('حركات المواد المرتبطة') }}</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('معاملات المستودع المرتبطة') }}</h3>
+      <div class="meta">{{ _('كل سند يفتح عرض المعاملة بمواده') }}</div>
     </div>
   </div>
   <div class="table-wrap">
@@ -70,22 +71,26 @@
           <th>{{ _('السند') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('النوع') }}</th>
-          <th>{{ _('المادة') }}</th>
-          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('عدد المواد') }}</th>
+          <th>{{ _('إجمالي الكمية') }}</th>
           <th></th>
         </tr>
       </thead>
       <tbody>
-        {% for w in txs %}
+        {% for g in voucher_groups or [] %}
         <tr>
-          <td>{{ w.voucher_no or '—' }}</td>
-          <td>{{ w.tx_date or '—' }}</td>
-          <td>{{ w.tx_type or '—' }}</td>
-          <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
-          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td>
+            {% if g.voucher_no %}
+            <a href="{{ url_for('warehouse_voucher_detail', voucher_no=g.voucher_no) }}"><strong>{{ g.voucher_no }}</strong></a>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ g.tx_date or '—' }}</td>
+          <td>{{ g.tx_types|join(' / ') if g.tx_types else '—' }}</td>
+          <td><span class="badge info">{{ g.lines|length }}</span></td>
+          <td>{{ g.qty_total }}</td>
           <td class="actions">
-            {% if can('modules.write') %}
-            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses">{{ _('تعديل') }}</a>
+            {% if g.voucher_no %}
+            <a class="btn primary" href="{{ url_for('warehouse_voucher_detail', voucher_no=g.voucher_no) }}">{{ _('عرض المعاملة') }}</a>
             {% endif %}
           </td>
         </tr>

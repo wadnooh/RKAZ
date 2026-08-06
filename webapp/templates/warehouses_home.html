@@ -72,6 +72,9 @@
           <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
           <td class="actions">
+            {% if w.voucher_no %}
+            <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}">{{ _('عرض') }}</a>
+            {% endif %}
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses">{{ _('تعديل') }}</a>
             {% endif %}

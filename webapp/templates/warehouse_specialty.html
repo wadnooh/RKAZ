@@ -58,6 +58,9 @@
           <td>{{ w.ticket_no or '—' }}</td>
           <td>{{ w.recipient or '—' }}</td>
           <td class="actions">
+            {% if w.voucher_no %}
+            <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}">{{ _('عرض') }}</a>
+            {% endif %}
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses&source={{ source }}">{{ _('تعديل') }}</a>
             {% endif %}

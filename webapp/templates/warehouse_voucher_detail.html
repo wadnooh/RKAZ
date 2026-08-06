@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_warehouse_subnav.html" %}
+
+<div class="card" id="warehouseVoucherPrint">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('عرض المعاملة') }} {{ voucher_no }}</h2>
+      <div class="meta">{{ _('معاملة مستودع مجمّعة حسب رقم السند — لجميع التخصصات') }}</div>
+    </div>
+    <div class="actions no-print">
+      <a class="btn ghost" href="{{ back_url }}">{{ _('رجوع') }}</a>
+      {% if parent_url %}
+      <a class="btn ghost" href="{{ parent_url }}">{{ _('المصدر') }}</a>
+      {% endif %}
+      <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
+      {% if can('modules.write') %}
+      <a class="btn ghost" href="{{ add_line_url }}">{{ _('+ مادة للسند') }}</a>
+      {% if head.id %}
+      <a class="btn primary" href="{{ url_for('module_edit', name='warehouse_tx', row_id=head.id) }}?from={{ form_from }}">{{ _('تعديل') }}</a>
+      {% endif %}
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <tbody>
+        <tr>
+          <th>{{ _('رقم السند') }}</th><td><strong dir="ltr">{{ voucher_no }}</strong></td>
+          <th>{{ _('نوع المعاملة') }}</th><td>{{ tx_types|join(' / ') if tx_types else (head.tx_type or '—') }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('تاريخ المعاملة') }}</th><td>{{ head.tx_date or '—' }}</td>
+          <th>{{ _('أمر العمل') }}</th><td>{{ parent.work_order or '—' }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('موقع المعاملة') }}</th><td>{{ parent.site or parent.label or '—' }}</td>
+          <th>{{ _('التبويب') }}</th><td>{{ parent.tab or parent.label or '—' }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('القسم المصدر') }}</th><td>{{ parent.label or head.source_section or '—' }}</td>
+          <th>{{ _('مرجع المعاملة') }}</th><td>{{ head.source_ref or '—' }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('رقم العطل') }}</th><td>{{ parent.ticket_no or head.ticket_no or '—' }}</td>
+          <th>{{ _('كود ER') }}</th><td>{{ head.rekaz_code or '—' }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('رقم المستخلص') }}</th><td>{{ parent.extract_no or '—' }}</td>
+          <th>{{ _('المبلغ') }}</th><td>{% if parent.amount is not none %}{{ parent.amount|money }}{% else %}—{% endif %}</td>
+        </tr>
+        <tr>
+          <th>{{ _('المنطقة') }}</th><td>{{ head.region or parent.site or '—' }}</td>
+          <th>{{ _('المستلم / المسلم') }}</th><td>{{ head.recipient or '—' }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('إجمالي الكمية') }}</th><td>{{ qty_total }}</td>
+          <th>{{ _('وارد / منصرف') }}</th><td>{{ qty_in }} / {{ qty_out }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('ملاحظات') }}</th>
+          <td colspan="3">{{ head.notes or '—' }}</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('مواد المعاملة') }}</h3>
+      <div class="meta">{{ _('أسطر السند') }} — {{ lines|length }}</div>
+    </div>
+    <div class="actions no-print" data-tab-strip="1">
+      <a class="btn ghost{% if mat_view == 'in' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='in') }}">{{ _('عرض الوارد') }} ({{ inbound_count }})</a>
+      <a class="btn ghost{% if mat_view == 'out' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='out') }}">{{ _('عرض المنصرف') }} ({{ outbound_count }})</a>
+      <a class="btn ghost{% if mat_view == 'all' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='all') }}">{{ _('عرض الاثنين') }}</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('رقم المادة') }}</th>
+          <th>{{ _('اسم المادة') }}</th>
+          <th>{{ _('النوع') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('تاريخ الحركة') }}</th>
+          <th>{{ _('الرصيد الحالي') }}</th>
+          <th>{{ _('المستلمون / الكميات') }}</th>
+          <th class="no-print"></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in shown %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td dir="ltr">{{ w.item_no or '—' }}</td>
+          <td>{{ w.item_name or '—' }}</td>
+          <td>{{ w.tx_type or '—' }}</td>
+          <td>{{ w.qty if w.qty is not none else '—' }} {% if w.unit %}{{ w.unit }}{% endif %}</td>
+          <td>{{ w.tx_date or '—' }}</td>
+          <td>{{ w.item_balance if w.item_balance is not none else '—' }}</td>
+          <td>{{ w.recipient or '—' }}{% if w.qty is not none %} / {{ w.qty }}{% endif %}</td>
+          <td class="actions no-print">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from={{ form_from }}">{{ _('تعديل') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="meta">{{ _('لا توجد مواد') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<style>
+@media print {
+  .no-print, nav, .tabs, .flash, ._warehouse_subnav, [data-tab-strip] { display: none !important; }
+  .card { box-shadow: none !important; border: 1px solid #ccc; }
+}
+</style>
+{% endblock %}
