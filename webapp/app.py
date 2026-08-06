@@ -594,6 +594,7 @@ def warehouses_home():
     recent_tx = db.rows_to_dicts(
         conn.execute("SELECT * FROM warehouse_tx ORDER BY id DESC LIMIT 12").fetchall()
     )
+    db.enrich_warehouse_txs_work_order(recent_tx, conn)
     conn.close()
     counts = {
         "constructions_works": _count("construction_works"),
@@ -662,8 +663,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 (source,),
             ).fetchall()
         )
-        if source == "ops":
-            db.enrich_warehouse_txs_work_order(tx_rows, conn)
+        db.enrich_warehouse_txs_work_order(tx_rows, conn)
         if q:
             ql = q.lower()
             tx_rows = [
@@ -1166,6 +1166,7 @@ def warehouse_tx_multi():
         "rekaz_code": "",
         "source_section": source,
         "source_ref": (request.values.get("source_ref") or "").strip(),
+        "work_order": (request.values.get("work_order") or "").strip(),
         "region": "",
         "notes": "",
     }
@@ -1173,8 +1174,14 @@ def warehouse_tx_multi():
         ticket = db.resolve_ticket_ref(header["ticket_no"], conn)
         if ticket:
             header["rekaz_code"] = ticket.get("rekaz_code") or ""
+            if not header["work_order"]:
+                header["work_order"] = (ticket.get("work_order") or "").strip()
         if not header["source_ref"] and source == "ops":
             header["source_ref"] = header["ticket_no"]
+    if not header["work_order"] and header["source_ref"]:
+        # من الفرق الأولية / الإنشاءات / المشاريع: المرجع هو أمر العمل المعروض
+        header["work_order"] = header["source_ref"]
+    header = db.apply_warehouse_tx_work_order(header, conn)
 
     reuse = str(request.values.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
     existing_voucher = (request.values.get("voucher_no") or "").strip()
@@ -1193,6 +1200,7 @@ def warehouse_tx_multi():
                 "rekaz_code",
                 "source_section",
                 "source_ref",
+                "work_order",
                 "region",
                 "recipient",
                 "sender",
@@ -1223,10 +1231,18 @@ def warehouse_tx_multi():
                 "rekaz_code": (request.form.get("rekaz_code") or "").strip(),
                 "source_section": source,
                 "source_ref": (request.form.get("source_ref") or "").strip(),
+                "work_order": (request.form.get("work_order") or "").strip(),
                 "region": (request.form.get("region") or "").strip(),
                 "notes": (request.form.get("notes") or "").strip(),
             }
         )
+        if not header["source_ref"] and source == "ops" and header["ticket_no"]:
+            header["source_ref"] = header["ticket_no"]
+        if not header["work_order"] and header["source_ref"] and (
+            source != "ops" or header["source_ref"] != header["ticket_no"]
+        ):
+            header["work_order"] = header["source_ref"]
+        header = db.apply_warehouse_tx_work_order(header, conn)
         if reuse and existing_voucher:
             header["voucher_no"] = existing_voucher
         else:
@@ -1294,6 +1310,7 @@ def warehouse_tx_multi():
                     "rekaz_code": header["rekaz_code"],
                     "source_section": header["source_section"],
                     "source_ref": header["source_ref"],
+                    "work_order": header.get("work_order") or "",
                     "region": header["region"],
                     "notes": header["notes"],
                 }
@@ -1885,6 +1902,12 @@ def ticket_edit(ticket_id):
             f"UPDATE tickets SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?",
             [data[f] for f in TICKET_FIELDS] + [ticket_id],
         )
+        db.sync_warehouse_tx_work_order_for_ticket(
+            data.get("ticket_no") or dict(row).get("ticket_no") or "",
+            data.get("work_order") or "",
+            data.get("rekaz_code") or "",
+            conn,
+        )
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
@@ -2309,11 +2332,13 @@ def _prepare_warehouse_tx_create(data: dict, form_ctx: str, conn) -> tuple:
 
     data = db.enrich_warehouse_tx_from_item(data)
     data = db.enrich_warehouse_tx_codes(data, conn)
+    data = db.apply_warehouse_tx_work_order(data, conn)
 
     linked = (
         (data.get("ticket_no") or "").strip()
         or (data.get("rekaz_code") or "").strip()
         or (data.get("source_ref") or "").strip()
+        or (data.get("work_order") or "").strip()
     )
     if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not linked:
         return None, _t(
@@ -2478,8 +2503,14 @@ def module_new(name):
         source_ref = (request.args.get("source_ref") or "").strip()
         if source_ref:
             prefill["source_ref"] = source_ref
+            if not (prefill.get("work_order") or "").strip():
+                prefill["work_order"] = source_ref
         elif source == "ops" and prefill.get("ticket_no"):
             prefill["source_ref"] = prefill["ticket_no"]
+        if prefill.get("ticket_no"):
+            ticket = db.resolve_ticket_ref(prefill["ticket_no"], conn)
+            if ticket and (ticket.get("work_order") or "").strip():
+                prefill["work_order"] = ticket.get("work_order")
         if source in ("constructions", "projects", "ops"):
             requested_type = (request.args.get("tx_type") or "").strip()
             prefill["tx_type"] = requested_type or prefill.get("tx_type") or "منصرف للمقاول"
@@ -2495,11 +2526,22 @@ def module_new(name):
             ).fetchone()
             if prev:
                 prev = dict(prev)
-                for k in ("tx_date", "ticket_no", "rekaz_code", "source_section", "source_ref", "region", "recipient", "sender"):
+                for k in (
+                    "tx_date",
+                    "ticket_no",
+                    "rekaz_code",
+                    "source_section",
+                    "source_ref",
+                    "work_order",
+                    "region",
+                    "recipient",
+                    "sender",
+                ):
                     if not (prefill.get(k) or "").strip() and prev.get(k) not in (None, ""):
                         prefill[k] = prev.get(k)
         elif not (prefill.get("voucher_no") or "").strip():
             prefill["voucher_no"] = db.next_warehouse_voucher_no(conn)
+        prefill = db.apply_warehouse_tx_work_order(prefill, conn)
     if request.method == "POST":
         data = _module_form_data(module)
         form_ctx = _warehouse_form_ctx()
@@ -2698,10 +2740,17 @@ def module_edit(name, row_id):
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
             data = db.enrich_warehouse_tx_codes(data, conn)
+            # حافظ على المرجع الداخلي إن لم يُرسل (حقل مخفي)
+            if not (data.get("source_ref") or "").strip():
+                data["source_ref"] = (dict(row).get("source_ref") or "").strip()
+            if not (data.get("source_section") or "").strip():
+                data["source_section"] = (dict(row).get("source_section") or "").strip()
+            data = db.apply_warehouse_tx_work_order(data, conn)
             linked = (
                 (data.get("ticket_no") or "").strip()
                 or (data.get("rekaz_code") or "").strip()
                 or (data.get("source_ref") or "").strip()
+                or (data.get("work_order") or "").strip()
             )
             if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not linked:
                 flash(

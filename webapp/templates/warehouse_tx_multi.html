@@ -66,8 +66,9 @@
         <input type="text" value="{{ source_label }}" readonly>
       </div>
       <div class="field">
-        <label>{{ _('مرجع المعاملة / أمر العمل') }}</label>
-        <input type="text" name="source_ref" value="{{ header.source_ref or '' }}" {% if header.source_ref %}readonly{% endif %}>
+        <label>{{ _('أمر العمل') }}</label>
+        <input type="text" name="work_order" value="{{ header.work_order or '' }}" {% if header.work_order %}readonly{% endif %}>
+        <input type="hidden" name="source_ref" value="{{ header.source_ref or '' }}">
       </div>
       <div class="field">
         <label>{{ _('المنطقة') }}</label>

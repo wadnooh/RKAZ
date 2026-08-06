@@ -248,9 +248,14 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("warehouse_tx.source_ref")
             if _ensure_column(conn, "warehouse_tx", "sender"):
                 created.append("warehouse_tx.sender")
+            if _ensure_column(conn, "warehouse_tx", "work_order"):
+                created.append("warehouse_tx.work_order")
             n = backfill_warehouse_tx_sources(conn)
             if n:
                 created.append(f"warehouse_tx.source_backfill:{n}")
+            n_wo = backfill_warehouse_tx_work_orders(conn)
+            if n_wo:
+                created.append(f"warehouse_tx.work_order_backfill:{n_wo}")
         # أعمدة دليل بنود العقد الموسّع (قالب Excel ثنائي اللغة)
         for table in ("boq_items", "contract_boq_items"):
             if table in existing or table in created:
@@ -501,6 +506,7 @@ def init_db():
             rekaz_code TEXT,
             source_section TEXT,
             source_ref TEXT,
+            work_order TEXT,
             region TEXT,
             notes TEXT
         );
@@ -703,7 +709,9 @@ def init_db():
     _ensure_column(conn, "warehouse_tx", "source_section")
     _ensure_column(conn, "warehouse_tx", "source_ref")
     _ensure_column(conn, "warehouse_tx", "sender")
+    _ensure_column(conn, "warehouse_tx", "work_order")
     backfill_warehouse_tx_sources(conn)
+    backfill_warehouse_tx_work_orders(conn)
     for _boq_table in ("boq_items", "contract_boq_items"):
         for _col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
             _ensure_column(conn, _boq_table, _col)
@@ -931,6 +939,94 @@ def backfill_warehouse_tx_sources(conn=None) -> int:
         conn.commit()
         conn.close()
     return int(n or 0)
+
+
+def backfill_warehouse_tx_work_orders(conn=None) -> int:
+    """يملأ أمر العمل للحركات الناقصة من العطل / الفرق / المرجع."""
+    own = conn is None
+    conn = conn or connect()
+    _ensure_column(conn, "warehouse_tx", "work_order")
+    rows = rows_to_dicts(
+        conn.execute(
+            """
+            SELECT id, ticket_no, source_ref, work_order, source_section
+            FROM warehouse_tx
+            WHERE coalesce(trim(work_order),'')=''
+            """
+        ).fetchall()
+    )
+    n = 0
+    for r in rows:
+        wo = resolve_tx_work_order(r, conn)
+        if not wo:
+            continue
+        conn.execute("UPDATE warehouse_tx SET work_order=? WHERE id=?", (wo, r["id"]))
+        n += 1
+    if own:
+        conn.commit()
+        conn.close()
+    return n
+
+
+def apply_warehouse_tx_work_order(data: dict, conn=None) -> dict:
+    """يضع أمر العمل على سطر الحركة (من العطل أو المرجع)."""
+    if data is None:
+        return data
+    own = conn is None
+    conn = conn or connect()
+    try:
+        # إن وُجدت قيمة صريحة من النموذج نُبقيها ما لم يكن هناك عطل يحدّثها
+        explicit = (data.get("work_order") or "").strip()
+        resolved = resolve_tx_work_order(data, conn)
+        data["work_order"] = resolved or explicit
+        return data
+    finally:
+        if own:
+            conn.close()
+
+
+def sync_warehouse_tx_work_order_for_ticket(
+    ticket_no: str,
+    work_order: str,
+    rekaz_code: str = "",
+    conn=None,
+) -> int:
+    """يحدّث أمر العمل في حركات المستودع المرتبطة بالعطل عند تغييره من الصفحة الرئيسية."""
+    tno = (ticket_no or "").strip()
+    if not tno:
+        return 0
+    own = conn is None
+    conn = conn or connect()
+    try:
+        _ensure_column(conn, "warehouse_tx", "work_order")
+        wo = (work_order or "").strip()
+        code = (rekaz_code or "").strip()
+        if code:
+            cur = conn.execute(
+                """
+                UPDATE warehouse_tx
+                SET work_order=?
+                WHERE ticket_no=?
+                   OR (source_section='ops' AND source_ref=?)
+                   OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
+                """,
+                (wo, tno, tno, code),
+            )
+        else:
+            cur = conn.execute(
+                """
+                UPDATE warehouse_tx
+                SET work_order=?
+                WHERE ticket_no=?
+                   OR (source_section='ops' AND source_ref=?)
+                """,
+                (wo, tno, tno),
+            )
+        return int(cur.rowcount or 0)
+    finally:
+        if own:
+            conn.commit()
+            conn.close()
 
 
 def next_warehouse_voucher_no(conn=None) -> str:
@@ -1277,20 +1373,14 @@ def warehouse_tx_sign(tx_type: str) -> int:
 
 
 def resolve_tx_work_order(row: dict, conn=None) -> str:
-    """يستخرج أمر العمل لسطر حركة: فرق أولية أو حقل العطل أو المرجع إن لم يكن رقم عطل."""
+    """يستخرج أمر العمل لسطر حركة: من العطل مباشرة ثم الفرق الأولية ثم المخزّن ثم المرجع."""
     own = conn is None
     conn = conn or connect()
     try:
         ref = (row.get("source_ref") or "").strip()
         tno = (row.get("ticket_no") or "").strip()
-        if ref:
-            pto = conn.execute(
-                "SELECT work_order FROM primary_team_orders WHERE work_order=? LIMIT 1",
-                (ref,),
-            ).fetchone()
-            if pto:
-                return (pto["work_order"] or "").strip()
-        lookup = tno or (ref if ref else "")
+        stored = (row.get("work_order") or "").strip()
+        lookup = tno or ""
         if lookup:
             ticket = conn.execute(
                 "SELECT work_order, ticket_no FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
@@ -1300,9 +1390,28 @@ def resolve_tx_work_order(row: dict, conn=None) -> str:
                 wo = (ticket["work_order"] or "").strip()
                 if wo:
                     return wo
-        # المرجع أمر عمل إذا لم يكن مطابقاً لرقم العطل
-        if ref and ref != tno:
-            return ref
+        if ref:
+            pto = conn.execute(
+                "SELECT work_order FROM primary_team_orders WHERE work_order=? LIMIT 1",
+                (ref,),
+            ).fetchone()
+            if pto:
+                return (pto["work_order"] or "").strip()
+            # المرجع قد يكون أمر عمل حتى لو لم يُسجَّل بعد في الفرق الأولية
+            if not tno or ref != tno:
+                # إن كان المرجع رقم عطل بدون أمر عمل، لا نعرضه كأمر عمل
+                ticket_as_ref = conn.execute(
+                    "SELECT work_order FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
+                    (ref, ref),
+                ).fetchone()
+                if ticket_as_ref:
+                    wo = (ticket_as_ref["work_order"] or "").strip()
+                    if wo:
+                        return wo
+                else:
+                    return ref
+        if stored:
+            return stored
         return ""
     finally:
         if own:
@@ -1314,7 +1423,8 @@ def enrich_warehouse_txs_work_order(rows: list[dict], conn=None) -> list[dict]:
     conn = conn or connect()
     try:
         for r in rows or []:
-            r["work_order"] = resolve_tx_work_order(r, conn)
+            resolved = resolve_tx_work_order(r, conn)
+            r["work_order"] = resolved or (r.get("work_order") or "").strip()
         return rows
     finally:
         if own:

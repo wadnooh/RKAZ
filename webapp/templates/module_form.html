@@ -54,6 +54,9 @@
     {% endif %}
     {% endif %}
     {% for key, label, ftype in module.fields %}
+    {% if name == 'warehouse_tx' and key == 'source_ref' %}
+    <input type="hidden" name="source_ref" value="{{ row[key] or '' }}">
+    {% else %}
     <div class="field {% if ftype == 'textarea' %}full{% endif %}">
       <label>{{ label }}</label>
       {% if ftype == 'ticket' %}
@@ -129,10 +132,11 @@
         <input type="text" name="{{ key }}" value="{{ row[key] or '' }}"
           {% if name == 'warehouse_tx' and key == 'voucher_no' and mode == 'new' %}readonly dir="ltr" style="text-align:left"{% endif %}
           {% if name == 'warehouse_tx' and key == 'rekaz_code' %}id="warehouseRekazCode" dir="ltr" style="text-align:left"{% endif %}
-          {% if name == 'warehouse_tx' and key == 'source_ref' and mode == 'new' %}readonly{% endif %}>
+          {% if name == 'warehouse_tx' and key == 'work_order' and mode == 'new' and row.get('work_order') %}readonly{% endif %}>
         {% endif %}
       {% endif %}
     </div>
+    {% endif %}
     {% endfor %}
     {% if name == 'photos' %}
     <p class="photo-storage-hint" style="grid-column:1/-1">

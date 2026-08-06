@@ -433,7 +433,7 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <thead>
-        <tr><th>{{ _('السند') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('النوع') }}</th><th>{{ _('المادة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('كود ER') }}</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
+        <tr><th>{{ _('السند') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('النوع') }}</th><th>{{ _('المادة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('أمر العمل') }}</th><th>{{ _('كود ER') }}</th>{% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}</tr>
       </thead>
       <tbody>
         {% for w in related.warehouse_tx %}
@@ -443,13 +443,14 @@
           <td>{{ w.tx_type or '—' }}</td>
           <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td>{{ w.work_order or ticket.work_order or '—' }}</td>
           <td>{{ w.rekaz_code or ticket.rekaz_code or '—' }}</td>
           {% if editing and can('tickets.write') and can('modules.write') %}
           <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}">{{ _('تعديل') }}</a></td>
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">{{ _('لا توجد حركات مستودع مرتبطة بهذا العطل.') }}</td></tr>
+        <tr><td colspan="8" class="meta">{{ _('لا توجد حركات مستودع مرتبطة بهذا العطل.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

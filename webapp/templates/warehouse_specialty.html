@@ -27,7 +27,7 @@
   {% if view == 'movements' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="movements">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{% if source == 'ops' %}{{ _('بحث بالسند / أمر العمل / المادة / العطل...') }}{% else %}{{ _('بحث بالسند / المادة / المرجع...') }}{% endif %}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بالسند / أمر العمل / المادة / العطل...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('مسح') }}</a>
   </form>
@@ -40,11 +40,7 @@
           <th>{{ _('النوع') }}</th>
           <th>{{ _('المادة') }}</th>
           <th>{{ _('الكمية') }}</th>
-          {% if source == 'ops' %}
           <th>{{ _('أمر العمل') }}</th>
-          {% else %}
-          <th>{{ _('المرجع') }}</th>
-          {% endif %}
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('المستلم') }}</th>
           <th>{{ _('المسلم') }}</th>
@@ -63,11 +59,7 @@
           <td>{{ w.tx_type or '—' }}</td>
           <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
-          {% if source == 'ops' %}
           <td>{{ w.work_order or '—' }}</td>
-          {% else %}
-          <td>{{ w.source_ref or '—' }}</td>
-          {% endif %}
           <td>{{ w.ticket_no or '—' }}</td>
           <td>{{ w.recipient or '—' }}</td>
           <td>{{ w.sender or '—' }}</td>
