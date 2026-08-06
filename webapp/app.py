@@ -632,12 +632,21 @@ def _warehouse_tx_count_map(source: str, conn) -> dict:
 def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: str, list_endpoint: str):
     db.backfill_warehouse_tx_sources()
     view = (request.args.get("view") or "").strip().lower()
+    # التبويبات الداخلية حسب التخصص (مثل الأعطال / الفرق في العمليات)
+    if source == "ops" and view not in ("tickets", "teams", "movements"):
+        view = "tickets"
+    if source == "constructions" and view not in ("works", "movements"):
+        view = "works"
+    if source == "projects" and view not in ("projects", "movements"):
+        view = "projects"
+
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
     conn = db.connect()
     tx_count = db.count_warehouse_tx_by_source(source, conn)
     tx_rows = []
     rows = []
+    teams = []
 
     if view == "movements":
         tx_rows = db.rows_to_dicts(
@@ -661,7 +670,18 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 or ql in (r.get("source_ref") or "").lower()
                 or ql in (r.get("ticket_no") or "").lower()
             ]
-    elif source == "ops":
+    elif view == "teams":
+        teams = db.rows_to_dicts(conn.execute("SELECT * FROM teams ORDER BY id").fetchall())
+        if q:
+            ql = q.lower()
+            teams = [
+                r
+                for r in teams
+                if ql in (r.get("name") or "").lower()
+                or ql in (r.get("leader") or "").lower()
+                or ql in (r.get("area") or "").lower()
+            ]
+    elif view == "tickets" or (source == "ops" and view == "tickets"):
         sql = "SELECT * FROM tickets WHERE 1=1"
         params = []
         if q:
@@ -676,7 +696,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         cmap = _warehouse_tx_count_map("ops", conn)
         for r in rows:
             r["wh_count"] = cmap.get(str(r.get("ticket_no") or ""), 0)
-    elif source == "constructions":
+    elif view == "works":
         rows = db.rows_to_dicts(
             conn.execute("SELECT * FROM construction_works ORDER BY id DESC").fetchall()
         )
@@ -692,7 +712,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         cmap = _warehouse_tx_count_map("constructions", conn)
         for r in rows:
             r["wh_count"] = cmap.get(str(r.get("work_no") or ""), 0)
-    elif source == "projects":
+    elif view == "projects":
         rows = db.rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY id DESC").fetchall())
         if q:
             ql = q.lower()
@@ -718,10 +738,15 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         q=q,
         status=status,
         rows=rows,
+        teams=teams,
         tx_rows=tx_rows,
         tx_count=tx_count,
-        list_url=url_for(list_endpoint),
-        movements_url=url_for(list_endpoint, view="movements"),
+        list_endpoint=list_endpoint,
+        wh_from={
+            "ops": "wh_ops",
+            "constructions": "wh_constructions",
+            "projects": "wh_projects",
+        }.get(source, "warehouses"),
     )
 
 
@@ -732,7 +757,7 @@ def warehouse_constructions():
         "constructions",
         "constructions",
         _t("الإنشاءات"),
-        _t("نفس معاملات الإنشاءات من الصفحة الرئيسية مع حركات المواد"),
+        _t("عرض معاملات الإنشاءات داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         "warehouse_constructions",
     )
 
@@ -744,7 +769,7 @@ def warehouse_ops():
         "ops",
         "ops",
         _t("العمليات والصيانة"),
-        _t("نفس معاملات الأعطال من الصفحة الرئيسية مع حركات المواد"),
+        _t("عرض الأعطال وفرق المهام العاجلة داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         "warehouse_ops",
     )
 
@@ -756,8 +781,131 @@ def warehouse_projects():
         "projects",
         "projects",
         _t("المشاريع"),
-        _t("نفس معاملات المشاريع من الصفحة الرئيسية مع حركات المواد"),
+        _t("عرض المشاريع داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         "warehouse_projects",
+    )
+
+
+@app.route("/warehouses/ops/ticket/<int:ticket_id>")
+@login_required
+def warehouse_ticket_detail(ticket_id):
+    """تفاصيل عطل للعرض داخل المستودع فقط (لا يفتح تبويب العمليات)."""
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("العطل غير موجود"), "danger")
+        return redirect(url_for("warehouse_ops"))
+    ticket = dict(row)
+    tno = ticket.get("ticket_no") or ""
+    txs = db.rows_to_dicts(
+        conn.execute(
+            """
+            SELECT * FROM warehouse_tx
+            WHERE ticket_no=? OR (source_ref<>'' AND source_ref=?)
+               OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
+            ORDER BY id DESC
+            """,
+            (tno, tno, ticket.get("rekaz_code") or ""),
+        ).fetchall()
+    )
+    conn.close()
+    return render_template(
+        "warehouse_record_detail.html",
+        warehouse_active="ops",
+        kind="ticket",
+        title=_t("تفاصيل العطل"),
+        record=ticket,
+        txs=txs,
+        back_url=url_for("warehouse_ops", view="tickets"),
+        issue_url=url_for(
+            "module_new",
+            name="warehouse_tx",
+            ticket_no=tno,
+            **{"from": "wh_ops"},
+        )
+        if tno
+        else None,
+    )
+
+
+@app.route("/warehouses/constructions/<int:row_id>")
+@login_required
+def warehouse_construction_detail(row_id):
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM construction_works WHERE id=?", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("المعاملة غير موجودة"), "danger")
+        return redirect(url_for("warehouse_constructions"))
+    work = dict(row)
+    ref = work.get("work_no") or ""
+    txs = db.rows_to_dicts(
+        conn.execute(
+            """
+            SELECT * FROM warehouse_tx
+            WHERE source_ref=? OR (source_section='constructions' AND source_ref=?)
+            ORDER BY id DESC
+            """,
+            (ref, ref),
+        ).fetchall()
+    ) if ref else []
+    conn.close()
+    return render_template(
+        "warehouse_record_detail.html",
+        warehouse_active="constructions",
+        kind="construction",
+        title=_t("تفاصيل معاملة الإنشاءات"),
+        record=work,
+        txs=txs,
+        back_url=url_for("warehouse_constructions", view="works"),
+        issue_url=url_for(
+            "module_new",
+            name="warehouse_tx",
+            **{"from": "wh_constructions", "source_ref": ref},
+        )
+        if ref
+        else None,
+    )
+
+
+@app.route("/warehouses/projects/<int:row_id>")
+@login_required
+def warehouse_project_detail(row_id):
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM projects WHERE id=?", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("المشروع غير موجود"), "danger")
+        return redirect(url_for("warehouse_projects"))
+    project = dict(row)
+    ref = project.get("project_code") or ""
+    txs = db.rows_to_dicts(
+        conn.execute(
+            """
+            SELECT * FROM warehouse_tx
+            WHERE source_ref=? OR (source_section='projects' AND source_ref=?)
+            ORDER BY id DESC
+            """,
+            (ref, ref),
+        ).fetchall()
+    ) if ref else []
+    conn.close()
+    return render_template(
+        "warehouse_record_detail.html",
+        warehouse_active="projects",
+        kind="project",
+        title=_t("تفاصيل المشروع"),
+        record=project,
+        txs=txs,
+        back_url=url_for("warehouse_projects", view="projects"),
+        issue_url=url_for(
+            "module_new",
+            name="warehouse_tx",
+            **{"from": "wh_projects", "source_ref": ref},
+        )
+        if ref
+        else None,
     )
 
 
@@ -1478,13 +1626,43 @@ def _apply_photos_from_request(data: dict) -> None:
 
 
 def _warehouse_form_ctx():
-    """سياق نموذج المستودع: الصفحات الرئيسية (ops/constructions/projects) أو المستودع."""
+    """سياق النموذج: من الصفحة الرئيسية أو من داخل المستودع المستقل."""
     ctx = (request.values.get("from") or "").strip().lower()
     if ctx in ("ticket", "ops"):
         return "ops"
+    if ctx in ("wh_ops", "warehouse_ops"):
+        return "wh_ops"
+    if ctx in ("wh_constructions", "warehouse_constructions"):
+        return "wh_constructions"
+    if ctx in ("wh_projects", "warehouse_projects"):
+        return "wh_projects"
     if ctx in ("constructions", "projects", "warehouses"):
         return ctx
     return "warehouses"
+
+
+def _warehouse_source_from_ctx(form_ctx: str) -> str:
+    """يحول سياق النموذج إلى source_section المخزّن."""
+    return {
+        "ops": "ops",
+        "wh_ops": "ops",
+        "constructions": "constructions",
+        "wh_constructions": "constructions",
+        "projects": "projects",
+        "wh_projects": "projects",
+    }.get((form_ctx or "").strip().lower(), "")
+
+
+def _warehouse_create_contexts():
+    """السياقات المسموح منها إنشاء حركة (رئيسية أو داخل المستودع)."""
+    return (
+        "ops",
+        "constructions",
+        "projects",
+        "wh_ops",
+        "wh_constructions",
+        "wh_projects",
+    )
 
 
 def _warehouse_main_sections():
@@ -1507,8 +1685,24 @@ def _redirect_after_module(name, data, form_ctx=None):
     tno = str((data or {}).get("ticket_no") or "").strip()
     form_ctx = form_ctx or _warehouse_form_ctx()
 
-    # معاملات المستودع: الإدخال من الصفحات الرئيسية؛ المستودع يبقى داخله بعد الحفظ/التعديل.
     if name == "warehouse_tx":
+        # من داخل المستودع: ابقَ في المستودع دائماً (بدون تحويل للصفحات الرئيسية)
+        if form_ctx == "wh_ops":
+            return redirect(url_for("warehouse_ops"))
+        if form_ctx == "wh_constructions":
+            return redirect(url_for("warehouse_constructions"))
+        if form_ctx == "wh_projects":
+            return redirect(url_for("warehouse_projects"))
+        if form_ctx == "warehouses":
+            source = (request.values.get("source") or data.get("source_section") or "").strip().lower()
+            if source == "ops":
+                return redirect(url_for("warehouse_ops", view="movements"))
+            if source == "constructions":
+                return redirect(url_for("warehouse_constructions", view="movements"))
+            if source == "projects":
+                return redirect(url_for("warehouse_projects", view="movements"))
+            return redirect(url_for("warehouses_home"))
+        # من الصفحة الرئيسية (معالج العطل)
         if (
             form_ctx == "ops"
             and tno
@@ -1527,21 +1721,11 @@ def _redirect_after_module(name, data, form_ctx=None):
                 flash(_t("تم الحفظ — الخطوة التالية: {label}", label=label), "ok")
                 return _ticket_edit_redirect(row["id"], nxt)
         if form_ctx == "constructions":
-            return redirect(url_for("warehouse_constructions"))
+            return redirect(url_for("module_list", name="construction_works"))
         if form_ctx == "projects":
-            return redirect(url_for("warehouse_projects"))
+            return redirect(url_for("module_list", name="projects"))
         if form_ctx == "ops":
-            # إن لم تُرجع للمعالج، اذهب لتبويب العمليات في المستودع
             return redirect(url_for("warehouse_ops"))
-        source = (request.values.get("source") or "").strip().lower()
-        if source == "constructions":
-            return redirect(url_for("warehouse_constructions", view="movements"))
-        if source == "ops":
-            return redirect(url_for("warehouse_ops", view="movements"))
-        if source == "projects":
-            return redirect(url_for("warehouse_projects", view="movements"))
-        if tno:
-            return redirect(url_for("module_list", name=name, ticket_no=tno))
         return redirect(url_for("warehouses_home"))
 
     next_after = {
@@ -1555,7 +1739,6 @@ def _redirect_after_module(name, data, form_ctx=None):
         conn.close()
         if row:
             nxt = next_after[name]
-            # تخطّي المستودع إن لم تكن ضمن خطوات المستخدم
             allowed = {s[0] for s in _ticket_wizard_steps()}
             if nxt not in allowed:
                 nxt = "done"
@@ -1568,16 +1751,17 @@ def _redirect_after_module(name, data, form_ctx=None):
 
 
 def _prepare_warehouse_tx_create(data: dict, form_ctx: str, conn) -> tuple:
-    """يملأ مصدر الحركة ويتحقق من قواعد الإدخال من الصفحات الرئيسية فقط."""
-    if form_ctx not in _warehouse_main_sections():
+    """يملأ مصدر الحركة — مسموح من الصفحات الرئيسية أو تبويبات المستودع المستقلة."""
+    if form_ctx not in _warehouse_create_contexts():
         return None, _t(
-            "إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع."
+            "إدخال معاملات المستودع يتم من الإنشاءات أو العمليات والصيانة أو المشاريع (أو تبويباتها داخل المستودع)."
         )
 
-    data["source_section"] = form_ctx
+    source = _warehouse_source_from_ctx(form_ctx)
+    data["source_section"] = source
     source_ref = (data.get("source_ref") or request.values.get("source_ref") or "").strip()
     tno = (data.get("ticket_no") or "").strip()
-    if form_ctx == "ops":
+    if source == "ops":
         data["source_ref"] = source_ref or tno
     else:
         data["source_ref"] = source_ref
@@ -1592,7 +1776,7 @@ def _prepare_warehouse_tx_create(data: dict, form_ctx: str, conn) -> tuple:
     )
     if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not linked:
         return None, _t(
-            "الصرف يتطلب ربطاً بمعاملة من الصفحات الرئيسية (عطل / إنشاءات / مشروع)."
+            "الصرف يتطلب ربطاً بمعاملة (عطل / إنشاءات / مشروع)."
         )
     return data, None
 
@@ -1727,22 +1911,23 @@ def module_new(name):
         prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
     if name == "warehouse_tx":
         form_ctx = _warehouse_form_ctx()
-        if form_ctx not in _warehouse_main_sections():
+        if form_ctx not in _warehouse_create_contexts():
             conn.close()
             flash(
                 _t(
-                    "إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع."
+                    "إدخال معاملات المستودع يتم من الإنشاءات أو العمليات والصيانة أو المشاريع (أو تبويباتها داخل المستودع)."
                 ),
                 "danger",
             )
-            return redirect(url_for("module_list", name="warehouse_tx"))
-        prefill["source_section"] = form_ctx
+            return redirect(url_for("warehouses_home"))
+        source = _warehouse_source_from_ctx(form_ctx)
+        prefill["source_section"] = source
         source_ref = (request.args.get("source_ref") or "").strip()
         if source_ref:
             prefill["source_ref"] = source_ref
-        elif form_ctx == "ops" and prefill.get("ticket_no"):
+        elif source == "ops" and prefill.get("ticket_no"):
             prefill["source_ref"] = prefill["ticket_no"]
-        if form_ctx in ("constructions", "projects"):
+        if source in ("constructions", "projects", "ops"):
             prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
             prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
         if not (prefill.get("voucher_no") or "").strip():
@@ -1956,7 +2141,7 @@ def module_edit(name, row_id):
         _after_data_change()
         # التعديل من المستودع يُبقي المستخدم داخل المستودع افتراضياً
         edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None
-        if name == "warehouse_tx" and edit_ctx not in _warehouse_main_sections():
+        if name == "warehouse_tx" and edit_ctx not in _warehouse_create_contexts():
             edit_ctx = "warehouses"
         return _redirect_after_module(name, data, form_ctx=edit_ctx)
     data = dict(row)

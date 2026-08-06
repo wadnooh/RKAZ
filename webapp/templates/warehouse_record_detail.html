@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_warehouse_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ title }}</h2>
+      <div class="meta">{{ _('عرض داخل المستودع فقط — لا ينقلك إلى الصفحات الرئيسية') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ back_url }}">{{ _('رجوع') }}</a>
+      {% if issue_url and can('modules.write') %}
+      <a class="btn primary" href="{{ issue_url }}">{{ _('+ صرف') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <tbody>
+        {% if kind == 'ticket' %}
+        <tr><th>{{ _('رقم العطل') }}</th><td><strong>{{ record.ticket_no }}</strong></td></tr>
+        <tr><th>{{ _('كود ER') }}</th><td>{{ record.rekaz_code or '—' }}</td></tr>
+        <tr><th>{{ _('التاريخ') }}</th><td>{{ record.receive_date or '—' }}</td></tr>
+        <tr><th>{{ _('الحي') }}</th><td>{{ record.district or '—' }}</td></tr>
+        <tr><th>{{ _('العطل') }}</th><td>{{ record.fault_type or '—' }}</td></tr>
+        <tr><th>{{ _('التصنيف') }}</th><td>{{ record.classification or '—' }}</td></tr>
+        <tr><th>{{ _('الفرقة') }}</th><td>{{ record.team or '—' }}</td></tr>
+        <tr><th>{{ _('الحالة') }}</th><td>{{ tv(record.status) if record.status else '—' }}</td></tr>
+        <tr><th>{{ _('الموقع') }}</th><td>{{ record.location or '—' }}</td></tr>
+        {% elif kind == 'construction' %}
+        <tr><th>{{ _('رقم المعاملة') }}</th><td><strong>{{ record.work_no or '—' }}</strong></td></tr>
+        <tr><th>{{ _('التاريخ') }}</th><td>{{ record.work_date or '—' }}</td></tr>
+        <tr><th>{{ _('الموقع') }}</th><td>{{ record.site or '—' }}</td></tr>
+        <tr><th>{{ _('الحي') }}</th><td>{{ record.district or '—' }}</td></tr>
+        <tr><th>{{ _('نوع العمل') }}</th><td>{{ record.work_type or '—' }}</td></tr>
+        <tr><th>{{ _('الحالة') }}</th><td>{{ tv(record.status) if record.status else '—' }}</td></tr>
+        <tr><th>{{ _('القيمة') }}</th><td>{{ record.value|money if record.value is not none else '—' }}</td></tr>
+        <tr><th>{{ _('المشرف') }}</th><td>{{ record.supervisor or '—' }}</td></tr>
+        {% elif kind == 'project' %}
+        <tr><th>{{ _('كود المشروع') }}</th><td><strong>{{ record.project_code or '—' }}</strong></td></tr>
+        <tr><th>{{ _('اسم المشروع') }}</th><td>{{ record.project_name or '—' }}</td></tr>
+        <tr><th>{{ _('النوع') }}</th><td>{{ record.project_type or '—' }}</td></tr>
+        <tr><th>{{ _('الحالة') }}</th><td>{{ tv(record.status) if record.status else '—' }}</td></tr>
+        <tr><th>{{ _('رقم العطل') }}</th><td>{{ record.ticket_no or '—' }}</td></tr>
+        <tr><th>{{ _('الموقع') }}</th><td>{{ record.site or '—' }}</td></tr>
+        {% endif %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('حركات المواد المرتبطة') }}</h3>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('السند') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('النوع') }}</th>
+          <th>{{ _('المادة') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for w in txs %}
+        <tr>
+          <td>{{ w.voucher_no or '—' }}</td>
+          <td>{{ w.tx_date or '—' }}</td>
+          <td>{{ w.tx_type or '—' }}</td>
+          <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
+          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td class="actions">
+            {% if can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses">{{ _('تعديل') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="meta">{{ _('لا توجد حركات مرتبطة.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

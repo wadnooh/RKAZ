@@ -1,6 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-{% if name in ['quantities','photos','metering'] %}
+{% if name == 'warehouse_tx' or name == 'warehouse_items' %}
+  {% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else ('balances' if name == 'warehouse_items' else 'home'))) %}
+  {% include "_warehouse_subnav.html" %}
+{% elif name in ['quantities','photos','metering'] %}
   {% set active = 'tickets' %}
   {% include "_ops_subnav.html" %}
 {% elif section == 'ops' %}
@@ -21,10 +24,18 @@
       <div class="meta">{{ _('لا توجد بنود كميات لهذا العطل بعد — أدخل القيمة المعتمدة يدوياً أو أضف البنود أولاً.') }}</div>
       {% endif %}
     </div>
-    {% if row.get('ticket_no') and name in ['quantities','photos','metering'] %}
-    <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=row.ticket_no) }}">{{ _('رجوع') }}</a>
+    {% if name == 'warehouse_tx' and form_ctx in ['wh_ops','ops'] %}
+    <a class="btn ghost" href="{{ url_for('warehouse_ops') }}">{{ _('رجوع') }}</a>
+    {% elif name == 'warehouse_tx' and form_ctx in ['wh_constructions','constructions'] %}
+    <a class="btn ghost" href="{{ url_for('warehouse_constructions') }}">{{ _('رجوع') }}</a>
+    {% elif name == 'warehouse_tx' and form_ctx in ['wh_projects','projects'] %}
+    <a class="btn ghost" href="{{ url_for('warehouse_projects') }}">{{ _('رجوع') }}</a>
+    {% elif name == 'warehouse_tx' %}
+    <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('رجوع') }}</a>
     {% elif name == 'warehouse_items' %}
     <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('رجوع') }}</a>
+    {% elif row.get('ticket_no') and name in ['quantities','photos','metering'] %}
+    <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=row.ticket_no) }}">{{ _('رجوع') }}</a>
     {% else %}
     <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('رجوع') }}</a>
     {% endif %}
@@ -104,8 +115,8 @@
         <input type="date" name="{{ key }}" value="{{ row[key] or '' }}">
       {% else %}
         {% if name == 'warehouse_tx' and key == 'source_section' %}
-        <input type="hidden" name="{{ key }}" value="{{ row[key] or form_ctx or '' }}">
-        <input type="text" value="{% if (row[key] or form_ctx) == 'ops' %}{{ _('العمليات والصيانة') }}{% elif (row[key] or form_ctx) == 'constructions' %}{{ _('الإنشاءات') }}{% elif (row[key] or form_ctx) == 'projects' %}{{ _('المشاريع') }}{% else %}{{ row[key] or '' }}{% endif %}" readonly>
+        <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
+        <input type="text" value="{% if row[key] == 'ops' or form_ctx in ['ops','wh_ops'] %}{{ _('العمليات والصيانة') }}{% elif row[key] == 'constructions' or form_ctx in ['constructions','wh_constructions'] %}{{ _('الإنشاءات') }}{% elif row[key] == 'projects' or form_ctx in ['projects','wh_projects'] %}{{ _('المشاريع') }}{% else %}{{ row[key] or '' }}{% endif %}" readonly>
         {% else %}
         <input type="text" name="{{ key }}" value="{{ row[key] or '' }}"
           {% if name == 'warehouse_tx' and key == 'voucher_no' and mode == 'new' %}readonly dir="ltr" style="text-align:left"{% endif %}
@@ -123,12 +134,14 @@
     {% endif %}
     <div class="actions" style="grid-column:1/-1">
       <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
-      {% if name == 'warehouse_tx' and form_ctx == 'constructions' %}
+      {% if name == 'warehouse_tx' and form_ctx in ['wh_constructions','constructions'] %}
       <a class="btn ghost" href="{{ url_for('warehouse_constructions') }}">{{ _('إلغاء') }}</a>
-      {% elif name == 'warehouse_tx' and form_ctx == 'projects' %}
+      {% elif name == 'warehouse_tx' and form_ctx in ['wh_projects','projects'] %}
       <a class="btn ghost" href="{{ url_for('warehouse_projects') }}">{{ _('إلغاء') }}</a>
-      {% elif name == 'warehouse_tx' and form_ctx == 'ops' and row.get('ticket_no') %}
+      {% elif name == 'warehouse_tx' and form_ctx in ['wh_ops','ops'] %}
       <a class="btn ghost" href="{{ url_for('warehouse_ops') }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'warehouse_tx' %}
+      <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'warehouse_items' %}
       <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('إلغاء') }}</a>
       {% else %}
