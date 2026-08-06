@@ -33,10 +33,10 @@
     <div class="field {% if ftype == 'textarea' %}full{% endif %}">
       <label>{{ label }}</label>
       {% if ftype == 'ticket' %}
-        <select name="{{ key }}">
+        <select name="{{ key }}" {% if name == 'warehouse_tx' and key == 'ticket_no' %}id="warehouseTicketSelect"{% endif %}>
           <option value="">—</option>
           {% for t in ticket_options or [] %}
-          <option value="{{ t.value }}" {% if row[key]==t.value %}selected{% endif %}>{{ t.label }}</option>
+          <option value="{{ t.value }}" data-rekaz-code="{{ t.rekaz_code or '' }}" {% if row[key]==t.value %}selected{% endif %}>{{ t.label }}</option>
           {% else %}
           {% for t in tickets %}<option value="{{ t }}" {% if row[key]==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
           {% endfor %}
@@ -98,7 +98,9 @@
       {% elif ftype == 'date' %}
         <input type="date" name="{{ key }}" value="{{ row[key] or '' }}">
       {% else %}
-        <input type="text" name="{{ key }}" value="{{ row[key] or '' }}">
+        <input type="text" name="{{ key }}" value="{{ row[key] or '' }}"
+          {% if name == 'warehouse_tx' and key == 'voucher_no' and mode == 'new' %}readonly dir="ltr" style="text-align:left"{% endif %}
+          {% if name == 'warehouse_tx' and key == 'rekaz_code' %}id="warehouseRekazCode" dir="ltr" style="text-align:left"{% endif %}>
       {% endif %}
     </div>
     {% endfor %}
@@ -118,16 +120,31 @@
 <script>
 (function () {
   var sel = document.getElementById("warehouseItemSelect");
-  if (!sel) return;
-  function fill() {
-    var opt = sel.options[sel.selectedIndex];
-    if (!opt) return;
-    var nameInput = document.querySelector('input[name="item_name"]');
-    var unitInput = document.querySelector('input[name="unit"]');
-    if (nameInput && opt.dataset.name) nameInput.value = opt.dataset.name;
-    if (unitInput && opt.dataset.unit) unitInput.value = opt.dataset.unit;
+  if (sel) {
+    function fillItem() {
+      var opt = sel.options[sel.selectedIndex];
+      if (!opt) return;
+      var nameInput = document.querySelector('input[name="item_name"]');
+      var unitInput = document.querySelector('input[name="unit"]');
+      if (nameInput && opt.dataset.name) nameInput.value = opt.dataset.name;
+      if (unitInput && opt.dataset.unit) unitInput.value = opt.dataset.unit;
+    }
+    sel.addEventListener("change", fillItem);
   }
-  sel.addEventListener("change", fill);
+  var ticketSel = document.getElementById("warehouseTicketSelect");
+  var rekazInput = document.getElementById("warehouseRekazCode");
+  if (ticketSel && rekazInput) {
+    function fillRekaz() {
+      var opt = ticketSel.options[ticketSel.selectedIndex];
+      if (!opt || !opt.value) {
+        rekazInput.value = "";
+        return;
+      }
+      rekazInput.value = opt.getAttribute("data-rekaz-code") || "";
+    }
+    ticketSel.addEventListener("change", fillRekaz);
+    if (ticketSel.value && !rekazInput.value) fillRekaz();
+  }
 })();
 </script>
 {% endif %}

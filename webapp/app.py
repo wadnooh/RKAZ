@@ -1428,6 +1428,8 @@ def module_new(name):
     if name == "warehouse_tx" and request.args.get("ticket_no"):
         prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
         prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
+    if name == "warehouse_tx" and not (prefill.get("voucher_no") or "").strip():
+        prefill["voucher_no"] = db.next_warehouse_voucher_no(conn)
     if request.method == "POST":
         data = _module_form_data(module)
         if name == "photos":
@@ -1454,6 +1456,11 @@ def module_new(name):
                     photo_ephemeral=backup_svc.is_trial_free(),
                 )
         if name == "warehouse_tx":
+            voucher = (data.get("voucher_no") or "").strip()
+            if not voucher or conn.execute(
+                "SELECT 1 FROM warehouse_tx WHERE voucher_no=? LIMIT 1", (voucher,)
+            ).fetchone():
+                data["voucher_no"] = db.next_warehouse_voucher_no(conn)
             data = db.enrich_warehouse_tx_from_item(data)
             data = db.enrich_warehouse_tx_codes(data, conn)
             if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (

@@ -1,6 +1,8 @@
 import json
 import os
+import re
 import sqlite3
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -861,6 +863,28 @@ def next_series_code(series: str, conn=None) -> str:
     if own:
         conn.close()
     raise RuntimeError("تعذر توليد كود جديد")
+
+
+def next_warehouse_voucher_no(conn=None) -> str:
+    """يولد رقم سند متسلسل بصيغة R-YY-001 (مثال: R-26-001)."""
+    own = conn is None
+    conn = conn or connect()
+    year = datetime.now().strftime("%y")
+    prefix = f"R-{year}-"
+    rows = conn.execute(
+        "SELECT voucher_no FROM warehouse_tx WHERE voucher_no LIKE ?",
+        (f"{prefix}%",),
+    ).fetchall()
+    if own:
+        conn.close()
+    max_n = 0
+    pat = re.compile(rf"^R-{re.escape(year)}-(\d+)$", re.IGNORECASE)
+    for row in rows:
+        voucher = (row[0] if not isinstance(row, sqlite3.Row) else row["voucher_no"]) or ""
+        m = pat.match(str(voucher).strip())
+        if m:
+            max_n = max(max_n, int(m.group(1)))
+    return f"{prefix}{max_n + 1:03d}"
 
 
 def list_ticket_options(conn=None):
