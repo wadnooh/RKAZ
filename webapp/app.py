@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 from datetime import datetime, timedelta
 from functools import wraps
@@ -1274,6 +1275,24 @@ def warehouse_tx_multi():
         "إرجاع للكهرباء": _t("إرجاع متعدد"),
         "إرجاع للمجمعة": _t("إرجاع متعدد"),
     }
+    items_payload = [
+        {
+            "item_no": it.get("item_no") or "",
+            "item_name": it.get("item_name") or "",
+            "unit": it.get("unit") or "",
+        }
+        for it in (warehouse_items or [])
+    ]
+    initial_lines = [
+        {
+            "item_no": ln.get("item_no") or "",
+            "item_name": ln.get("item_name") or "",
+            "unit": ln.get("unit") or "",
+            "qty": ln.get("qty") if ln.get("qty") not in ("", None) else "",
+        }
+        for ln in (lines or [])
+        if (ln.get("item_no") or "").strip()
+    ]
     return render_template(
         "warehouse_tx_multi.html",
         title=title_map.get(header.get("tx_type") or "", _t("حركة متعددة")),
@@ -1285,6 +1304,8 @@ def warehouse_tx_multi():
         reuse_voucher=reuse,
         cancel_url=cancel_url,
         source_label=_warehouse_source_label(source),
+        items_json=json.dumps(items_payload, ensure_ascii=False),
+        initial_lines_json=json.dumps(initial_lines, ensure_ascii=False),
     )
 
 

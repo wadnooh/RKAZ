@@ -7,7 +7,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ title }}</h2>
-      <div class="meta">{{ _('إدخال متعدد — عدة مواد في نفس السند دفعة واحدة') }}</div>
+      <div class="meta">{{ _('إدخال متعدد — ابحث برقم المادة ثم أضف الكمية') }}</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ cancel_url }}">{{ _('رجوع') }}</a>
@@ -40,7 +40,7 @@
       </div>
       <div class="field">
         <label>{{ _('المستلم / المسلم') }}</label>
-        <input type="text" name="recipient" value="{{ header.recipient or '' }}">
+        <input type="text" name="recipient" id="headerRecipient" value="{{ header.recipient or '' }}">
       </div>
       <div class="field">
         <label>{{ _('رقم العطل / كود ER') }}</label>
@@ -74,13 +74,39 @@
       </div>
     </div>
 
+    <div class="card" style="margin-top:18px;box-shadow:none;border:1px solid var(--border);">
+      <div class="toolbar" style="margin-bottom:8px;">
+        <div>
+          <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('إضافة مادة') }}</h3>
+          <div class="meta">{{ _('اكتب رقم المادة للبحث ثم أدخل الكمية واضغط إضافة') }}</div>
+        </div>
+      </div>
+
+      <div class="form-grid" style="align-items:end;">
+        <div class="field" style="grid-column:span 2;position:relative;">
+          <label>{{ _('بحث برقم المادة') }}</label>
+          <input type="text" id="itemSearch" autocomplete="off" dir="ltr" style="text-align:left"
+                 placeholder="{{ _('مثال: 10001234') }}">
+          <div id="itemSuggest" class="item-suggest" hidden></div>
+          <div class="meta" id="itemPreview" style="margin-top:6px;"></div>
+          <input type="hidden" id="pickedItemNo">
+          <input type="hidden" id="pickedItemName">
+          <input type="hidden" id="pickedItemUnit">
+        </div>
+        <div class="field">
+          <label>{{ _('الكمية') }}</label>
+          <input type="number" id="itemQty" step="0.01" min="0" value="1">
+        </div>
+        <div class="field">
+          <button class="btn primary" type="button" id="addItemBtn" style="width:100%;">{{ _('+ إضافة للمذكرة') }}</button>
+        </div>
+      </div>
+    </div>
+
     <div class="toolbar" style="margin-top:18px;">
       <div>
-        <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('المواد') }}</h3>
-        <div class="meta">{{ _('أضف سطراً لكل مادة — تُحفظ كلها بنفس السند') }}</div>
-      </div>
-      <div class="actions">
-        <button class="btn ghost" type="button" id="addLineBtn">{{ _('+ سطر') }}</button>
+        <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('مواد المذكرة') }}</h3>
+        <div class="meta"><span id="linesCount">0</span> {{ _('مادة') }} — {{ _('تُحفظ كلها بنفس السند') }}</div>
       </div>
     </div>
 
@@ -88,110 +114,374 @@
       <table class="table" id="linesTable">
         <thead>
           <tr>
-            <th style="min-width:220px">{{ _('المادة') }}</th>
+            <th>#</th>
+            <th>{{ _('رقم المادة') }}</th>
             <th>{{ _('اسم المادة') }}</th>
             <th>{{ _('الوحدة') }}</th>
-            <th style="min-width:110px">{{ _('الكمية') }}</th>
-            <th>{{ _('مستلم السطر') }}</th>
+            <th style="min-width:120px">{{ _('الكمية') }}</th>
             <th></th>
           </tr>
         </thead>
-        <tbody id="linesBody">
-          {% for line in lines %}
-          <tr class="line-row">
-            <td>
-              <select name="item_no[]" class="item-select" required>
-                <option value="">{{ _('— اختر مادة —') }}</option>
-                {% for it in warehouse_items or [] %}
-                <option value="{{ it.item_no }}"
-                        data-name="{{ it.item_name or '' }}"
-                        data-unit="{{ it.unit or '' }}"
-                        {% if line.item_no==it.item_no %}selected{% endif %}>
-                  {{ it.item_no }} — {{ it.item_name }}
-                </option>
-                {% endfor %}
-              </select>
-            </td>
-            <td><input type="text" name="item_name[]" class="item-name" value="{{ line.item_name or '' }}" readonly></td>
-            <td><input type="text" name="unit[]" class="item-unit" value="{{ line.unit or '' }}" readonly style="width:80px"></td>
-            <td><input type="number" step="0.01" min="0" name="qty[]" value="{{ line.qty if line.qty is not none else '' }}" required style="width:110px"></td>
-            <td><input type="text" name="line_recipient[]" value="{{ line.line_recipient or '' }}"></td>
-            <td><button class="btn danger remove-line" type="button">{{ _('حذف') }}</button></td>
-          </tr>
-          {% endfor %}
-        </tbody>
+        <tbody id="linesBody"></tbody>
       </table>
+      <p class="meta" id="emptyLinesHint" style="padding:12px;">{{ _('لا توجد مواد بعد — ابحث برقم المادة أعلاه لإضافتها.') }}</p>
     </div>
 
+    <div id="hiddenLines"></div>
+
     <div class="actions" style="margin-top:14px;">
-      <button class="btn primary" type="submit">{{ _('حفظ الكل') }}</button>
+      <button class="btn primary" type="submit" id="saveAllBtn">{{ _('حفظ الكل') }}</button>
       <a class="btn ghost" href="{{ cancel_url }}">{{ _('إلغاء') }}</a>
     </div>
   </form>
 </div>
 
-<template id="lineRowTemplate">
-  <tr class="line-row">
-    <td>
-      <select name="item_no[]" class="item-select" required>
-        <option value="">{{ _('— اختر مادة —') }}</option>
-        {% for it in warehouse_items or [] %}
-        <option value="{{ it.item_no }}" data-name="{{ it.item_name or '' }}" data-unit="{{ it.unit or '' }}">
-          {{ it.item_no }} — {{ it.item_name }}
-        </option>
-        {% endfor %}
-      </select>
-    </td>
-    <td><input type="text" name="item_name[]" class="item-name" value="" readonly></td>
-    <td><input type="text" name="unit[]" class="item-unit" value="" readonly style="width:80px"></td>
-    <td><input type="number" step="0.01" min="0" name="qty[]" value="" required style="width:110px"></td>
-    <td><input type="text" name="line_recipient[]" value=""></td>
-    <td><button class="btn danger remove-line" type="button">{{ _('حذف') }}</button></td>
-  </tr>
-</template>
+<style>
+.item-suggest {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2px);
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 10px;
+  max-height: 240px;
+  overflow: auto;
+  box-shadow: 0 8px 24px rgba(16,24,40,.12);
+}
+.item-suggest button {
+  display: block;
+  width: 100%;
+  text-align: right;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border, #eee);
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.item-suggest button:last-child { border-bottom: 0; }
+.item-suggest button:hover,
+.item-suggest button.active {
+  background: color-mix(in srgb, var(--primary, #2563eb) 10%, transparent);
+}
+.item-suggest .sg-code { font-weight: 700; direction: ltr; display: inline-block; margin-left: 8px; }
+.item-suggest .sg-meta { color: var(--muted, #667085); font-size: .92em; }
+.line-qty { width: 120px; }
+</style>
 
 <script>
 (function () {
+  var ITEMS = {{ items_json|safe }};
+  var I18N = {
+    pick: {{ _('اختر مادة من نتائج البحث')|tojson }},
+    notFound: {{ _('لا توجد مادة بهذا الرقم')|tojson }},
+    qty: {{ _('أدخل كمية صحيحة')|tojson }},
+    dup: {{ _('المادة مضافة مسبقاً في المذكرة')|tojson }},
+    added: {{ _('تمت الإضافة')|tojson }},
+    needLines: {{ _('أضف مادة واحدة على الأقل قبل الحفظ')|tojson }},
+    unit: {{ _('الوحدة:')|tojson }}
+  };
+
+  var search = document.getElementById("itemSearch");
+  var suggest = document.getElementById("itemSuggest");
+  var preview = document.getElementById("itemPreview");
+  var qtyInput = document.getElementById("itemQty");
+  var addBtn = document.getElementById("addItemBtn");
   var body = document.getElementById("linesBody");
-  var tpl = document.getElementById("lineRowTemplate");
-  var addBtn = document.getElementById("addLineBtn");
+  var hidden = document.getElementById("hiddenLines");
+  var emptyHint = document.getElementById("emptyLinesHint");
+  var linesCount = document.getElementById("linesCount");
+  var form = document.getElementById("multiTxForm");
+  var pickedNo = document.getElementById("pickedItemNo");
+  var pickedName = document.getElementById("pickedItemName");
+  var pickedUnit = document.getElementById("pickedItemUnit");
 
-  function bindRow(row) {
-    var sel = row.querySelector(".item-select");
-    if (!sel) return;
-    sel.addEventListener("change", function () {
-      var opt = sel.options[sel.selectedIndex];
-      var nameInput = row.querySelector(".item-name");
-      var unitInput = row.querySelector(".item-unit");
-      if (nameInput) nameInput.value = (opt && opt.dataset.name) || "";
-      if (unitInput) unitInput.value = (opt && opt.dataset.unit) || "";
-    });
-    var rm = row.querySelector(".remove-line");
-    if (rm) {
-      rm.addEventListener("click", function () {
-        if (body.querySelectorAll(".line-row").length <= 1) {
-          sel.value = "";
-          row.querySelector(".item-name").value = "";
-          row.querySelector(".item-unit").value = "";
-          row.querySelector('input[name="qty[]"]').value = "";
-          row.querySelector('input[name="line_recipient[]"]').value = "";
-          return;
-        }
-        row.remove();
-      });
+  var lines = [];
+  var activeIdx = -1;
+
+  function norm(s) { return String(s || "").trim().toLowerCase(); }
+
+  function findExact(code) {
+    var n = norm(code);
+    for (var i = 0; i < ITEMS.length; i++) {
+      if (norm(ITEMS[i].item_no) === n) return ITEMS[i];
     }
+    return null;
   }
 
-  body.querySelectorAll(".line-row").forEach(bindRow);
+  function filterItems(q) {
+    q = norm(q);
+    if (!q) return [];
+    var out = [];
+    for (var i = 0; i < ITEMS.length; i++) {
+      var it = ITEMS[i];
+      var no = norm(it.item_no);
+      var name = norm(it.item_name);
+      if (no.indexOf(q) === 0 || no.indexOf(q) >= 0 || name.indexOf(q) >= 0) {
+        out.push(it);
+        if (out.length >= 12) break;
+      }
+    }
+    // prefer prefix matches first
+    out.sort(function (a, b) {
+      var ap = norm(a.item_no).indexOf(q) === 0 ? 0 : 1;
+      var bp = norm(b.item_no).indexOf(q) === 0 ? 0 : 1;
+      if (ap !== bp) return ap - bp;
+      return String(a.item_no).localeCompare(String(b.item_no));
+    });
+    return out;
+  }
 
-  if (addBtn) {
-    addBtn.addEventListener("click", function () {
-      var node = tpl.content.cloneNode(true);
-      var row = node.querySelector(".line-row");
-      body.appendChild(node);
-      bindRow(body.querySelector(".line-row:last-child"));
+  function clearPick() {
+    pickedNo.value = "";
+    pickedName.value = "";
+    pickedUnit.value = "";
+    preview.textContent = "";
+    preview.style.color = "";
+  }
+
+  function setPick(it) {
+    if (!it) { clearPick(); return; }
+    pickedNo.value = it.item_no || "";
+    pickedName.value = it.item_name || "";
+    pickedUnit.value = it.unit || "";
+    search.value = it.item_no || "";
+    var parts = [];
+    if (it.item_name) parts.push(it.item_name);
+    if (it.unit) parts.push(I18N.unit + " " + it.unit);
+    preview.textContent = parts.join(" — ");
+    preview.style.color = "";
+    hideSuggest();
+  }
+
+  function hideSuggest() {
+    suggest.hidden = true;
+    suggest.innerHTML = "";
+    activeIdx = -1;
+  }
+
+  function showSuggest(list) {
+    suggest.innerHTML = "";
+    if (!list.length) {
+      hideSuggest();
+      return;
+    }
+    list.forEach(function (it, idx) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.dataset.idx = String(idx);
+      btn.innerHTML = '<span class="sg-code">' + escapeHtml(it.item_no || "") + '</span>' +
+        '<span class="sg-meta">' + escapeHtml(it.item_name || "") + (it.unit ? " · " + escapeHtml(it.unit) : "") + '</span>';
+      btn.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        setPick(it);
+        qtyInput.focus();
+        qtyInput.select();
+      });
+      suggest.appendChild(btn);
+    });
+    suggest.hidden = false;
+    activeIdx = 0;
+    markActive();
+  }
+
+  function markActive() {
+    var buttons = suggest.querySelectorAll("button");
+    buttons.forEach(function (b, i) {
+      b.classList.toggle("active", i === activeIdx);
     });
   }
+
+  function escapeHtml(s) {
+    return String(s || "").replace(/[&<>"']/g, function (c) {
+      return ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c];
+    });
+  }
+
+  function renderLines() {
+    body.innerHTML = "";
+    hidden.innerHTML = "";
+    linesCount.textContent = String(lines.length);
+    emptyHint.hidden = lines.length > 0;
+    lines.forEach(function (line, idx) {
+      var tr = document.createElement("tr");
+      tr.innerHTML =
+        "<td>" + (idx + 1) + "</td>" +
+        "<td dir=\"ltr\"><strong>" + escapeHtml(line.item_no) + "</strong></td>" +
+        "<td>" + escapeHtml(line.item_name) + "</td>" +
+        "<td>" + escapeHtml(line.unit) + "</td>" +
+        "<td><input type=\"number\" class=\"line-qty\" step=\"0.01\" min=\"0\" value=\"" + escapeHtml(line.qty) + "\" data-idx=\"" + idx + "\"></td>" +
+        "<td><button type=\"button\" class=\"btn danger remove-line\" data-idx=\"" + idx + "\">{{ _('حذف') }}</button></td>";
+      body.appendChild(tr);
+
+      // hidden fields for POST
+      [["item_no[]", line.item_no], ["item_name[]", line.item_name], ["unit[]", line.unit], ["qty[]", line.qty], ["line_recipient[]", ""]].forEach(function (pair) {
+        var inp = document.createElement("input");
+        inp.type = "hidden";
+        inp.name = pair[0];
+        inp.value = pair[1];
+        inp.dataset.lineIdx = String(idx);
+        if (pair[0] === "qty[]") inp.className = "hidden-qty";
+        hidden.appendChild(inp);
+      });
+    });
+
+    body.querySelectorAll(".line-qty").forEach(function (inp) {
+      inp.addEventListener("input", function () {
+        var i = parseInt(inp.dataset.idx, 10);
+        lines[i].qty = inp.value;
+        var hq = hidden.querySelectorAll(".hidden-qty")[i];
+        if (hq) hq.value = inp.value;
+      });
+    });
+    body.querySelectorAll(".remove-line").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var i = parseInt(btn.dataset.idx, 10);
+        lines.splice(i, 1);
+        renderLines();
+      });
+    });
+  }
+
+  function addCurrent() {
+    var code = (pickedNo.value || search.value || "").trim();
+    var it = findExact(code) || (pickedNo.value ? { item_no: pickedNo.value, item_name: pickedName.value, unit: pickedUnit.value } : null);
+    if (!it || !it.item_no) {
+      preview.textContent = I18N.pick;
+      preview.style.color = "var(--danger, #b42318)";
+      search.focus();
+      return;
+    }
+    // resolve from catalog if possible
+    var exact = findExact(it.item_no);
+    if (exact) it = exact;
+    else if (!findExact(it.item_no) && !pickedNo.value) {
+      preview.textContent = I18N.notFound;
+      preview.style.color = "var(--danger, #b42318)";
+      return;
+    }
+
+    var qty = parseFloat(qtyInput.value);
+    if (!(qty > 0)) {
+      preview.textContent = I18N.qty;
+      preview.style.color = "var(--danger, #b42318)";
+      qtyInput.focus();
+      return;
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      if (norm(lines[i].item_no) === norm(it.item_no)) {
+        preview.textContent = I18N.dup;
+        preview.style.color = "var(--danger, #b42318)";
+        return;
+      }
+    }
+
+    lines.push({
+      item_no: it.item_no,
+      item_name: it.item_name || "",
+      unit: it.unit || "",
+      qty: String(qty)
+    });
+    renderLines();
+    clearPick();
+    search.value = "";
+    qtyInput.value = "1";
+    preview.textContent = I18N.added;
+    preview.style.color = "";
+    search.focus();
+  }
+
+  var timer = null;
+  search.addEventListener("input", function () {
+    clearPick();
+    clearTimeout(timer);
+    timer = setTimeout(function () {
+      var q = search.value.trim();
+      if (!q) { hideSuggest(); preview.textContent = ""; return; }
+      var list = filterItems(q);
+      showSuggest(list);
+      var exact = findExact(q);
+      if (exact) {
+        pickedNo.value = exact.item_no;
+        pickedName.value = exact.item_name || "";
+        pickedUnit.value = exact.unit || "";
+        var parts = [];
+        if (exact.item_name) parts.push(exact.item_name);
+        if (exact.unit) parts.push(I18N.unit + " " + exact.unit);
+        preview.textContent = parts.join(" — ");
+        preview.style.color = "";
+      } else if (!list.length) {
+        preview.textContent = I18N.notFound;
+        preview.style.color = "var(--danger, #b42318)";
+      } else {
+        preview.textContent = "";
+      }
+    }, 180);
+  });
+
+  search.addEventListener("keydown", function (e) {
+    var buttons = suggest.querySelectorAll("button");
+    if (e.key === "ArrowDown" && !suggest.hidden && buttons.length) {
+      e.preventDefault();
+      activeIdx = Math.min(activeIdx + 1, buttons.length - 1);
+      markActive();
+    } else if (e.key === "ArrowUp" && !suggest.hidden && buttons.length) {
+      e.preventDefault();
+      activeIdx = Math.max(activeIdx - 1, 0);
+      markActive();
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (!suggest.hidden && buttons.length && activeIdx >= 0) {
+        buttons[activeIdx].dispatchEvent(new Event("mousedown"));
+      } else {
+        var exact = findExact(search.value);
+        if (exact) setPick(exact);
+        addCurrent();
+      }
+    } else if (e.key === "Escape") {
+      hideSuggest();
+    }
+  });
+
+  search.addEventListener("blur", function () {
+    setTimeout(hideSuggest, 150);
+  });
+
+  addBtn.addEventListener("click", addCurrent);
+  qtyInput.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      addCurrent();
+    }
+  });
+
+  form.addEventListener("submit", function (e) {
+    if (!lines.length) {
+      e.preventDefault();
+      preview.textContent = I18N.needLines;
+      preview.style.color = "var(--danger, #b42318)";
+      search.focus();
+    }
+  });
+
+  // restore lines after validation errors
+  var initial = {{ initial_lines_json|safe }};
+  if (Array.isArray(initial)) {
+    initial.forEach(function (ln) {
+      if (!ln || !ln.item_no) return;
+      lines.push({
+        item_no: ln.item_no,
+        item_name: ln.item_name || "",
+        unit: ln.unit || "",
+        qty: String(ln.qty != null ? ln.qty : "")
+      });
+    });
+  }
+  renderLines();
 
   var ticketSel = document.getElementById("warehouseTicketSelect");
   var rekazInput = document.getElementById("warehouseRekazCode");
