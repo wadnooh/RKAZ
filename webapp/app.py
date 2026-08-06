@@ -634,6 +634,7 @@ def _warehouse_tx_count_map(source: str, conn) -> dict:
 
 def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: str, list_endpoint: str):
     db.backfill_warehouse_tx_sources()
+    db.ensure_schema()
     view = (request.args.get("view") or "").strip().lower()
     # التبويبات الداخلية حسب التخصص (أعطال / الفرق الأولية / حركات)
     if view == "work_orders":
@@ -1178,9 +1179,10 @@ def warehouse_tx_multi():
                 header["work_order"] = (ticket.get("work_order") or "").strip()
         if not header["source_ref"] and source == "ops":
             header["source_ref"] = header["ticket_no"]
+    # لا تنسخ رقم العطل إلى أمر العمل — فقط المرجع غير العطل (فرق/إنشاءات/مشاريع)
     if not header["work_order"] and header["source_ref"]:
-        # من الفرق الأولية / الإنشاءات / المشاريع: المرجع هو أمر العمل المعروض
-        header["work_order"] = header["source_ref"]
+        if header["source_ref"] != (header.get("ticket_no") or "").strip():
+            header["work_order"] = header["source_ref"]
     header = db.apply_warehouse_tx_work_order(header, conn)
 
     reuse = str(request.values.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
@@ -1238,10 +1240,9 @@ def warehouse_tx_multi():
         )
         if not header["source_ref"] and source == "ops" and header["ticket_no"]:
             header["source_ref"] = header["ticket_no"]
-        if not header["work_order"] and header["source_ref"] and (
-            source != "ops" or header["source_ref"] != header["ticket_no"]
-        ):
-            header["work_order"] = header["source_ref"]
+        if not header["work_order"] and header["source_ref"]:
+            if header["source_ref"] != (header.get("ticket_no") or "").strip():
+                header["work_order"] = header["source_ref"]
         header = db.apply_warehouse_tx_work_order(header, conn)
         if reuse and existing_voucher:
             header["voucher_no"] = existing_voucher
@@ -2503,14 +2504,20 @@ def module_new(name):
         source_ref = (request.args.get("source_ref") or "").strip()
         if source_ref:
             prefill["source_ref"] = source_ref
+            # source_ref قد يكون رقم عطل للربط — لا تضعه في أمر العمل
             if not (prefill.get("work_order") or "").strip():
-                prefill["work_order"] = source_ref
+                tno = (prefill.get("ticket_no") or "").strip()
+                if source_ref != tno and not db.resolve_ticket_ref(source_ref, conn):
+                    prefill["work_order"] = source_ref
         elif source == "ops" and prefill.get("ticket_no"):
             prefill["source_ref"] = prefill["ticket_no"]
         if prefill.get("ticket_no"):
             ticket = db.resolve_ticket_ref(prefill["ticket_no"], conn)
             if ticket and (ticket.get("work_order") or "").strip():
                 prefill["work_order"] = ticket.get("work_order")
+            elif ticket and "rekaz_code" in prefill and not (prefill.get("rekaz_code") or "").strip():
+                prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+        prefill = db.apply_warehouse_tx_work_order(prefill, conn)
         if source in ("constructions", "projects", "ops"):
             requested_type = (request.args.get("tx_type") or "").strip()
             prefill["tx_type"] = requested_type or prefill.get("tx_type") or "منصرف للمقاول"
@@ -2539,9 +2546,9 @@ def module_new(name):
                 ):
                     if not (prefill.get(k) or "").strip() and prev.get(k) not in (None, ""):
                         prefill[k] = prev.get(k)
+            prefill = db.apply_warehouse_tx_work_order(prefill, conn)
         elif not (prefill.get("voucher_no") or "").strip():
             prefill["voucher_no"] = db.next_warehouse_voucher_no(conn)
-        prefill = db.apply_warehouse_tx_work_order(prefill, conn)
     if request.method == "POST":
         data = _module_form_data(module)
         form_ctx = _warehouse_form_ctx()
