@@ -483,6 +483,7 @@ def dashboard():
 @login_required
 def ops_home():
     tools = [
+        {"label": _t("الفرق الأولية"), "href": url_for("ops_primary_teams")},
         {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
     ]
 
@@ -1843,7 +1844,7 @@ def _redirect_after_module(name, data, form_ctx=None):
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
     if name == "primary_team_orders":
-        return redirect(url_for("warehouse_ops", view="teams"))
+        return redirect(url_for("ops_primary_teams"))
     tno = str((data or {}).get("ticket_no") or "").strip()
     form_ctx = form_ctx or _warehouse_form_ctx()
 
@@ -2002,7 +2003,7 @@ def module_list(name):
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
     if name == "primary_team_orders":
-        return redirect(url_for("warehouse_ops", view="teams"))
+        return redirect(url_for("ops_primary_teams"))
     if name == "warehouse_tx":
         source_filter = (request.args.get("source") or "").strip().lower()
         if source_filter == "constructions":
@@ -2070,6 +2071,9 @@ def module_new(name):
     module = MODULES.get(name)
     if not module:
         return redirect(url_for("ops_home"))
+    if name == "primary_team_orders":
+        # الإضافة من العمليات والصيانة ← الفرق الأولية فقط (وليس المستودع)
+        return redirect(url_for("ops_primary_teams"))
     conn = db.connect()
     ticket_options = db.list_ticket_options(conn)
     tickets = [t["value"] for t in ticket_options]
@@ -2211,7 +2215,7 @@ def module_new(name):
                 section=section,
                 section_meta=_smeta(SECTION_META.get(section)),
                 section_modules=modules_for_section(section) if section else [],
-                form_ctx="wh_ops",
+                form_ctx=None,
             )
         keys = [f[0] for f in module["fields"]]
         cur = conn.execute(
@@ -2234,7 +2238,9 @@ def module_new(name):
         if name == "quantities":
             prefill = db.enrich_quantity_from_boq(prefill, conn)
     if name == "primary_team_orders":
-        prefill["order_date"] = prefill.get("order_date") or datetime.now().strftime("%Y-%m-%d")
+        # الإضافة من صفحة العمليات ← الفرق الأولية فقط
+        conn.close()
+        return redirect(url_for("ops_primary_teams"))
     conn.close()
     section = module.get("section")
     return render_template(
@@ -2253,7 +2259,7 @@ def module_new(name):
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
-        form_ctx=_warehouse_form_ctx() if name in ("warehouse_tx", "primary_team_orders") else None,
+        form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None,
         reuse_voucher=str(request.args.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
         if name == "warehouse_tx"
         else False,
@@ -2363,7 +2369,7 @@ def module_edit(name, row_id):
                 section=section,
                 section_meta=_smeta(SECTION_META.get(section)),
                 section_modules=modules_for_section(section) if section else [],
-                form_ctx="wh_ops",
+                form_ctx=None,
             )
         keys = [f[0] for f in module["fields"]]
         sets = ", ".join([f"{k}=?" for k in keys])
@@ -2377,7 +2383,7 @@ def module_edit(name, row_id):
         flash(_t("تم الحفظ"), "ok")
         _after_data_change()
         # التعديل من المستودع يُبقي المستخدم داخل المستودع افتراضياً
-        edit_ctx = _warehouse_form_ctx() if name in ("warehouse_tx", "primary_team_orders") else None
+        edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None
         if name == "warehouse_tx" and edit_ctx not in _warehouse_create_contexts():
             edit_ctx = "warehouses"
         return _redirect_after_module(name, data, form_ctx=edit_ctx)
@@ -2410,7 +2416,7 @@ def module_edit(name, row_id):
         form_ctx=(
             _warehouse_form_ctx() or "warehouses"
             if name == "warehouse_tx"
-            else ("wh_ops" if name == "primary_team_orders" else None)
+            else None
         ),
     )
 
@@ -2431,7 +2437,7 @@ def module_delete(name, row_id):
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
     if name == "primary_team_orders":
-        return redirect(url_for("warehouse_ops", view="teams"))
+        return redirect(url_for("ops_primary_teams"))
     return redirect(url_for("module_list", name=name))
 
 
@@ -2441,6 +2447,85 @@ def module_delete(name, row_id):
 def cashflow():
     flash(_t("صفحة التدفق النقدي غير مفعّلة في الواجهة. راجع المستخلصات من المتابعات المالية."), "ok")
     return redirect(url_for("financial_home"))
+
+
+@app.route("/ops/primary-teams", methods=["GET", "POST"])
+@login_required
+def ops_primary_teams():
+    """الفرق الأولية (أوامر عمل الكهرباء) — الإضافة من العمليات والصيانة وليس من المستودع."""
+    conn = db.connect()
+    if request.method == "POST":
+        if not permissions.can("modules.write"):
+            conn.close()
+            flash(_t("لا تملك صلاحية الإضافة."), "danger")
+            return redirect(url_for("ops_primary_teams"))
+        action = request.form.get("action")
+        if action == "add":
+            work_order = (request.form.get("work_order") or "").strip()
+            if not work_order:
+                flash(_t("أمر العمل مطلوب"), "danger")
+            else:
+                amount_raw = (request.form.get("amount") or "").strip()
+                amount = None
+                if amount_raw:
+                    try:
+                        amount = float(amount_raw)
+                    except ValueError:
+                        amount = None
+                order_date = (request.form.get("order_date") or "").strip() or datetime.now().strftime(
+                    "%Y-%m-%d"
+                )
+                cur = conn.execute(
+                    """
+                    INSERT INTO primary_team_orders(work_order, extract_no, amount, order_date, notes)
+                    VALUES (?,?,?,?,?)
+                    """,
+                    (
+                        work_order,
+                        (request.form.get("extract_no") or "").strip(),
+                        amount,
+                        order_date,
+                        (request.form.get("notes") or "").strip(),
+                    ),
+                )
+                conn.commit()
+                db.log_audit(
+                    current_user_name(),
+                    "إضافة",
+                    "الفرق الأولية",
+                    cur.lastrowid,
+                    work_order,
+                )
+                flash(_t("تمت إضافة أمر العمل"), "ok")
+                _after_data_change()
+        elif action == "delete":
+            row_id = request.form.get("id")
+            conn.execute("DELETE FROM primary_team_orders WHERE id=?", (row_id,))
+            conn.commit()
+            db.log_audit(current_user_name(), "حذف", "الفرق الأولية", row_id)
+            flash(_t("تم الحذف"), "ok")
+            _after_data_change()
+    q = (request.args.get("q") or "").strip()
+    rows = db.rows_to_dicts(
+        conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall()
+    )
+    conn.close()
+    if q:
+        ql = q.lower()
+        rows = [
+            r
+            for r in rows
+            if ql in (r.get("work_order") or "").lower()
+            or ql in (r.get("extract_no") or "").lower()
+            or ql in (str(r.get("amount") or "")).lower()
+            or ql in (r.get("notes") or "").lower()
+        ]
+    return render_template(
+        "primary_teams.html",
+        rows=rows,
+        q=q,
+        today=datetime.now().strftime("%Y-%m-%d"),
+    )
 
 
 @app.route("/teams", methods=["GET", "POST"])

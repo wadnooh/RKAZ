@@ -5,6 +5,7 @@
     {% if can('tickets.read') %}
     <a class="btn ghost{% if active=='tickets' %} primary{% endif %}" href="{{ url_for('tickets_list') }}">{{ _('الأعطال') }}</a>
     {% endif %}
+    <a class="btn ghost{% if active=='primary_teams' %} primary{% endif %}" href="{{ url_for('ops_primary_teams') }}">{{ _('الفرق الأولية') }}</a>
     <a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام العاجلة') }}</a>
   </div>
 </div>

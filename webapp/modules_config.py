@@ -117,7 +117,7 @@ MODULES = {
     "primary_team_orders": {
         "title": "الفرق الأولية",
         "table": "primary_team_orders",
-        "section": "warehouses",
+        "section": "ops",
         "hub_hidden": True,
         "fields": [
             ("work_order", "أمر العمل", "text"),
