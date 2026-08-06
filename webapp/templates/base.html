@@ -217,15 +217,17 @@
     <div class="delete-pw-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePasswordTitle">
       <h3 id="deletePasswordTitle" class="section-title" style="font-size:1.05rem;margin:0 0 8px;">{{ _('تأكيد الحذف') }}</h3>
       <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">{{ _('أدخل كلمة سر الحذف للمتابعة') }}</p>
-      <label class="field" style="display:block;margin-bottom:12px;">
-        <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كلمة سر الحذف') }}</span>
-        <input type="text" id="deletePasswordInput" autocomplete="off" inputmode="numeric" dir="ltr" placeholder="••••••" style="text-align:left;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:1.05rem;letter-spacing:0.12em;">
-      </label>
-      <p class="meta" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
-      <div class="actions" style="justify-content:flex-end;">
-        <button type="button" class="btn ghost" id="deletePasswordCancel">{{ _('إلغاء') }}</button>
-        <button type="button" class="btn danger" id="deletePasswordConfirm">{{ _('تأكيد الحذف') }}</button>
-      </div>
+      <form id="deletePasswordForm" action="#" method="post" style="margin:0;" onsubmit="return window.__confirmWarehouseDelete(event);">
+        <label class="field" style="display:block;margin-bottom:12px;">
+          <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كلمة سر الحذف') }}</span>
+          <input type="text" id="deletePasswordInput" name="delete_password_ui" autocomplete="off" inputmode="numeric" dir="ltr" placeholder="112233" style="text-align:left;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:1.05rem;letter-spacing:0.08em;">
+        </label>
+        <p class="meta" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
+        <div class="actions" style="justify-content:flex-end;">
+          <button type="button" class="btn ghost" id="deletePasswordCancel" onclick="window.__closeDeletePasswordModal();">{{ _('إلغاء') }}</button>
+          <button type="submit" class="btn danger" id="deletePasswordConfirm">{{ _('تأكيد الحذف') }}</button>
+        </div>
+      </form>
     </div>
   </div>
   <script>
@@ -236,7 +238,6 @@
     var err = document.getElementById("deletePasswordError");
     var pendingForm = null;
     var emptyMsg = {{ _('أدخل كلمة سر الحذف')|tojson }};
-    var wrongMsg = {{ _('كلمة سر الحذف غير صحيحة')|tojson }};
 
     function ensurePasswordField(form) {
       var field = form.querySelector('input[name="delete_password"]');
@@ -249,106 +250,83 @@
       return field;
     }
 
-    function closeModal(clearPending) {
-      if (!modal) return;
-      modal.hidden = true;
-      if (clearPending !== false) pendingForm = null;
-      if (input) input.value = "";
-      if (err) { err.style.display = "none"; err.textContent = ""; }
-    }
-
     function showError(msg) {
       if (!err) return;
       err.textContent = msg || emptyMsg;
       err.style.display = "block";
     }
 
-    function openModal(form, message, errorText) {
+    function closeModal() {
+      if (modal) modal.hidden = true;
+      pendingForm = null;
+      if (input) input.value = "";
+      if (err) { err.style.display = "none"; err.textContent = ""; }
+    }
+
+    function openModal(form, message) {
       pendingForm = form;
       if (hint && message) hint.textContent = message;
       if (input) input.value = "";
-      if (errorText) showError(errorText);
-      else if (err) { err.style.display = "none"; err.textContent = ""; }
-      modal.hidden = false;
-      setTimeout(function () { if (input) { input.focus(); input.select(); } }, 40);
+      if (err) { err.style.display = "none"; err.textContent = ""; }
+      if (modal) modal.hidden = false;
+      setTimeout(function () {
+        if (!input) return;
+        input.focus();
+        input.select();
+      }, 50);
     }
 
-    function submitWithPassword() {
-      if (!pendingForm || !input) return;
+    function confirmDelete(e) {
+      if (e && e.preventDefault) e.preventDefault();
+      if (!pendingForm) {
+        showError({{ _('اضغط حذف أولاً ثم أدخل كلمة السر')|tojson }});
+        return false;
+      }
+      if (!input) return false;
       var p = String(input.value || "").trim();
       if (!p) {
         showError(emptyMsg);
         input.focus();
-        return;
+        return false;
       }
+
       var form = pendingForm;
-      var field = ensurePasswordField(form);
-      field.value = p;
+      ensurePasswordField(form).value = p;
+
+      // أوقف حارس onsubmit ثم أرسل مباشرة بدون requestSubmit
+      form.onsubmit = null;
+      form.removeAttribute("onsubmit");
       form.setAttribute("data-delete-ready", "1");
-      closeModal(false);
+
       pendingForm = null;
-      // requestSubmit يمر عبر onsubmit مع العلم data-delete-ready
-      if (typeof form.requestSubmit === "function") {
-        form.requestSubmit();
-      } else {
-        HTMLFormElement.prototype.submit.call(form);
-      }
+      if (modal) modal.hidden = true;
+
+      HTMLFormElement.prototype.submit.call(form);
+      return false;
     }
 
     window.requireDeletePassword = function (form, message) {
       if (!form) return false;
       if (form.getAttribute("data-delete-ready") === "1") {
         form.removeAttribute("data-delete-ready");
-        // تأكد أن الحقل ليس فارغاً قبل السماح
-        var field = ensurePasswordField(form);
-        if (!(field.value || "").trim()) {
-          openModal(form, message || emptyMsg, emptyMsg);
-          return false;
-        }
         return true;
       }
       openModal(form, message || emptyMsg);
       return false;
     };
 
-    window.showDeletePasswordError = function (message) {
-      showError(message || wrongMsg);
-      if (modal) modal.hidden = false;
-      if (input) setTimeout(function () { input.focus(); }, 40);
-    };
+    window.__confirmWarehouseDelete = confirmDelete;
+    window.__closeDeletePasswordModal = closeModal;
 
-    var cancelBtn = document.getElementById("deletePasswordCancel");
-    var confirmBtn = document.getElementById("deletePasswordConfirm");
-    if (cancelBtn) cancelBtn.addEventListener("click", function () { closeModal(true); });
-    if (confirmBtn) confirmBtn.addEventListener("click", submitWithPassword);
     if (modal) {
-      modal.addEventListener("click", function (e) {
-        if (e.target === modal) closeModal(true);
+      modal.addEventListener("click", function (ev) {
+        if (ev.target === modal) closeModal();
       });
     }
-    if (input) {
-      input.addEventListener("keydown", function (e) {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          submitWithPassword();
-        } else if (e.key === "Escape") {
-          closeModal(true);
-        }
-      });
-    }
-
-    // بعد رفض السيرفر: أعد فتح مربع الإدخال تلقائياً
-    try {
-      var params = new URLSearchParams(window.location.search || "");
-      if (params.get("delete_pw_error") === "1") {
-        showDeletePasswordError(wrongMsg);
-        params.delete("delete_pw_error");
-        var next = window.location.pathname + (params.toString() ? ("?" + params.toString()) : "") + (window.location.hash || "");
-        if (window.history && window.history.replaceState) {
-          window.history.replaceState({}, "", next);
-        }
-      }
-    } catch (e) {}
+    document.addEventListener("keydown", function (ev) {
+      if (!modal || modal.hidden) return;
+      if (ev.key === "Escape") closeModal();
+    });
   })();
   </script>
 </body>

@@ -1416,14 +1416,9 @@ def _delete_password_ok() -> bool:
 
 
 def _reject_bad_delete_password(fallback_url: str):
-    flash(_t("كلمة سر الحذف غير صحيحة — أعد المحاولة من مربع كلمة السر"), "danger")
+    flash(_t("كلمة سر الحذف غير صحيحة — اضغط حذف وأدخل 112233 في مربع التأكيد"), "danger")
     nxt = (request.form.get("next") or "").strip()
-    target = nxt or fallback_url
-    # أعد فتح مربع إدخال كلمة السر في الصفحة
-    sep = "&" if "?" in target else "?"
-    if "delete_pw_error=" not in target:
-        target = f"{target}{sep}delete_pw_error=1"
-    return redirect(target)
+    return redirect(nxt or fallback_url)
 
 
 @app.route("/warehouses/tx/<int:row_id>/delete", methods=["POST"])

@@ -196,6 +196,7 @@ PHRASE_EN = {
     'لا تملك صلاحية الإضافة.': 'You do not have permission to add.',
     'بحث بالسند / أمر العمل / المادة / العطل...': 'Search by voucher / work order / item / ticket...',
     'كلمة سر الحذف غير صحيحة': 'Incorrect delete password',
+    'كلمة سر الحذف غير صحيحة — اضغط حذف وأدخل 112233 في مربع التأكيد': 'Incorrect delete password — click Delete and enter 112233 in the confirm box',
     'كلمة سر الحذف غير صحيحة — أعد المحاولة من مربع كلمة السر': 'Incorrect delete password — try again in the password box',
     'أدخل كلمة سر الحذف': 'Enter delete password',
     'أدخل كلمة سر الحذف للمتابعة': 'Enter the delete password to continue',
