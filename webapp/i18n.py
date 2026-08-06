@@ -455,6 +455,7 @@ PHRASE_EN = {
     'المستخلصات و SAP': 'Invoices & SAP',
     'المستخلصات و SAP ودليل البنود للتمتير.': 'Invoices, SAP, and BOQ catalog for metering.',
     'المستلم': 'Receiver',
+    'المسلم': 'Issuer / sender',
     'المستلم / المسلم': 'Receiver / issuer',
     'المستودع': 'Warehouse',
     'المستودعات': 'Warehouses',

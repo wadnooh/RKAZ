@@ -91,7 +91,6 @@
           <th>{{ _('الرصيد الحالي') }}</th>
           <th>{{ _('المستلم') }}</th>
           <th>{{ _('المسلم') }}</th>
-          <th>{{ _('الكمية') }}</th>
           <th class="no-print">{{ _('إجراءات') }}</th>
         </tr>
       </thead>
@@ -118,7 +117,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">{{ _('لا توجد مواد') }}</td></tr>
+        <tr><td colspan="10" class="meta">{{ _('لا توجد مواد') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
