@@ -82,7 +82,7 @@
         <tr>
           <th>#</th>
           <th>{{ _('رقم المادة') }}</th>
-          <th>{{ _('اسم المادة') }}</th>
+          <th class="col-item-name">{{ _('اسم المادة') }}</th>
           <th>{{ _('النوع') }}</th>
           <th>{{ _('الكمية') }}</th>
           <th>{{ _('تاريخ الحركة') }}</th>
@@ -97,7 +97,7 @@
         <tr>
           <td>{{ loop.index }}</td>
           <td dir="ltr">{{ w.item_no or '—' }}</td>
-          <td>{{ w.item_name or '—' }}</td>
+          <td class="col-item-name" title="{{ w.item_name or '' }}">{{ w.item_name or '—' }}</td>
           <td>{{ w.tx_type or '—' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }} {% if w.unit %}{{ w.unit }}{% endif %}</td>
           <td>{{ w.tx_date or '—' }}</td>

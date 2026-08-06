@@ -287,6 +287,19 @@ body {
   border: 1px solid var(--border);
   border-radius: 12px;
 }
+.col-item-name {
+  max-width: 9.5rem;
+  width: 9.5rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+th.col-item-name {
+  white-space: nowrap;
+}
+td.col-item-name[title]:hover {
+  cursor: help;
+}
 .table {
   width: 100%;
   border-collapse: collapse;

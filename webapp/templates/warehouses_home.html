@@ -51,7 +51,7 @@
           <th>{{ _('المصدر') }}</th>
           <th>{{ _('رقم أمر العمل') }}</th>
           <th>{{ _('النوع') }}</th>
-          <th>{{ _('المادة') }}</th>
+          <th class="col-item-name">{{ _('المادة') }}</th>
           <th>{{ _('الكمية') }}</th>
           <th></th>
         </tr>
@@ -73,7 +73,7 @@
           </td>
           <td><strong>{{ w.work_order or '—' }}</strong></td>
           <td>{{ w.tx_type or '—' }}</td>
-          <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
+          <td class="col-item-name" title="{{ (w.item_no or '') ~ (' — ' if w.item_no or w.item_name else '') ~ (w.item_name or '') }}">{{ w.item_no or '—' }}{% if w.item_name %} — {{ w.item_name }}{% endif %}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
           <td class="actions">
             {% if w.voucher_no %}

@@ -48,7 +48,7 @@
       <thead>
         <tr>
           <th>{{ _('رقم المادة') }}</th>
-          <th>{{ _('اسم المادة') }}</th>
+          <th class="col-item-name">{{ _('اسم المادة') }}</th>
           <th>{{ _('الوحدة') }}</th>
           <th>{{ _('التصنيف') }}</th>
           <th>{{ _('حد أدنى') }}</th>
@@ -60,7 +60,7 @@
         {% for r in rows %}
         <tr>
           <td>{{ r.item_no }}</td>
-          <td>{{ r.item_name }}</td>
+          <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
           <td>{{ r.unit or '—' }}</td>
           <td>{{ r.category or '—' }}</td>
           <td>{{ r.min_qty or 0 }}</td>
@@ -113,7 +113,7 @@
       <thead>
         <tr>
           <th>{{ _('رقم المادة') }}</th>
-          <th>{{ _('اسم المادة') }}</th>
+          <th class="col-item-name">{{ _('اسم المادة') }}</th>
           <th>{{ _('الوحدة') }}</th>
           <th>{{ _('وارد') }}</th>
           <th>{{ _('منصرف') }}</th>
@@ -126,7 +126,7 @@
         {% for r in rows %}
         <tr>
           <td>{{ r.item_no }}</td>
-          <td>{{ r.item_name }}</td>
+          <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
           <td>{{ r.unit or '—' }}</td>
           <td><span class="badge ok">{{ r.inbound or 0 }}</span></td>
           <td><span class="badge warn">{{ r.outbound or 0 }}</span></td>
