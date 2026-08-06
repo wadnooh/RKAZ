@@ -215,17 +215,17 @@
   {% endif %}
   <div id="deletePasswordModal" class="delete-pw-backdrop" hidden>
     <div class="delete-pw-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePasswordTitle">
-      <h3 id="deletePasswordTitle" class="section-title" style="font-size:1.05rem;margin:0 0 8px;">{{ _('تأكيد الحذف') }}</h3>
+      <h3 id="deletePasswordTitle" class="section-title" style="font-size:1.1rem;margin:0 0 8px;">{{ _('تأكيد الحذف') }}</h3>
       <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">{{ _('أدخل كلمة سر الحذف للمتابعة') }}</p>
       <div id="deletePasswordForm" style="margin:0;">
-        <label class="field" style="display:block;margin-bottom:12px;">
+        <label class="field" style="display:block;margin-bottom:12px;" for="deletePasswordInput">
           <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كلمة سر الحذف') }}</span>
-          <input type="text" id="deletePasswordInput" name="delete_password_ui" autocomplete="off" inputmode="numeric" dir="ltr" placeholder="112233" style="text-align:left;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:1.05rem;letter-spacing:0.08em;">
+          <input type="text" id="deletePasswordInput" name="delete_password_ui" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" dir="ltr" placeholder="112233" tabindex="1" style="text-align:left;width:100%;padding:12px 14px;border:2px solid #8a7349;border-radius:10px;font-size:1.15rem;letter-spacing:0.1em;box-sizing:border-box;">
         </label>
         <p class="meta" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
         <div class="actions" style="justify-content:flex-end;gap:8px;">
-          <button type="button" class="btn ghost" id="deletePasswordCancel">{{ _('إلغاء') }}</button>
-          <button type="button" class="btn danger" id="deletePasswordConfirm">{{ _('تأكيد الحذف') }}</button>
+          <button type="button" class="btn ghost" id="deletePasswordCancel" tabindex="3">{{ _('إلغاء') }}</button>
+          <button type="button" class="btn danger" id="deletePasswordConfirm" tabindex="2">{{ _('تأكيد الحذف') }}</button>
         </div>
       </div>
     </div>
@@ -238,11 +238,15 @@
     var err = document.getElementById("deletePasswordError");
     var pendingForm = null;
     var emptyMsg = {{ _('أدخل كلمة سر الحذف')|tojson }};
+    var focusTimer = null;
 
-    // ارفع المربع إلى أعلى body دائماً لتفادي الطبقات الفرعية
-    if (modal && modal.parentNode !== document.body) {
-      document.body.appendChild(modal);
+    function mountModalTop() {
+      if (!modal) return;
+      if (modal.parentNode !== document.body) document.body.appendChild(modal);
+      // دائماً آخر عنصر في body ليكون فوق كل الطبقات
+      if (document.body.lastElementChild !== modal) document.body.appendChild(modal);
     }
+    mountModalTop();
 
     function ensurePasswordField(form) {
       var field = form.querySelector('input[name="delete_password"]');
@@ -265,7 +269,22 @@
       document.body.classList.toggle("delete-pw-open", !!lock);
     }
 
+    function activateInput() {
+      if (!input) return;
+      try {
+        input.removeAttribute("readonly");
+        input.removeAttribute("disabled");
+        input.tabIndex = 1;
+        input.focus({ preventScroll: false });
+        input.click();
+        input.select();
+      } catch (e) {
+        try { input.focus(); } catch (e2) {}
+      }
+    }
+
     function closeModal() {
+      if (focusTimer) { clearTimeout(focusTimer); focusTimer = null; }
       if (modal) {
         modal.hidden = true;
         modal.style.display = "none";
@@ -279,20 +298,24 @@
     function openModal(form, message) {
       pendingForm = form;
       if (hint && message) hint.textContent = message;
-      if (input) input.value = "";
+      if (input) {
+        input.value = "";
+        input.removeAttribute("readonly");
+        input.removeAttribute("disabled");
+      }
       if (err) { err.style.display = "none"; err.textContent = ""; }
+      mountModalTop();
       if (modal) {
-        // تأكيد الظهور فوق كل شيء
-        if (modal.parentNode !== document.body) document.body.appendChild(modal);
         modal.hidden = false;
-        modal.style.display = "flex";
-        modal.style.zIndex = "2147483000";
+        modal.style.cssText = "display:flex !important;z-index:2147483646 !important;align-items:flex-start;padding-top:28px;";
       }
       lockBody(true);
-      setTimeout(function () {
-        if (!input) return;
-        try { input.focus(); input.select(); } catch (e) {}
-      }, 60);
+      // تفعيل فوري + إعادة تركيز لضمان الكتابة على الموبايل/الكمبيوتر
+      activateInput();
+      if (focusTimer) clearTimeout(focusTimer);
+      focusTimer = setTimeout(activateInput, 30);
+      setTimeout(activateInput, 120);
+      setTimeout(activateInput, 280);
     }
 
     function confirmDelete(e) {
@@ -306,7 +329,7 @@
       var p = String(input.value || "").trim();
       if (!p) {
         showError(emptyMsg);
-        input.focus();
+        activateInput();
         return false;
       }
 
@@ -352,13 +375,14 @@
         ev.preventDefault();
         ev.stopPropagation();
         confirmDelete(ev);
-      });
+      }, true);
     }
     if (cancelBtn) {
       cancelBtn.addEventListener("click", function (ev) {
         ev.preventDefault();
+        ev.stopPropagation();
         closeModal();
-      });
+      }, true);
     }
     if (input) {
       input.addEventListener("keydown", function (ev) {
@@ -366,6 +390,10 @@
           ev.preventDefault();
           confirmDelete(ev);
         }
+      });
+      input.addEventListener("pointerdown", function (ev) {
+        ev.stopPropagation();
+        activateInput();
       });
     }
     if (modal) {
@@ -376,7 +404,7 @@
     document.addEventListener("keydown", function (ev) {
       if (!modal || modal.hidden) return;
       if (ev.key === "Escape") closeModal();
-    });
+    }, true);
   })();
   </script>
 </body>
