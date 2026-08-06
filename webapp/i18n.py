@@ -88,6 +88,13 @@ I18N = {
 }
 
 PHRASE_EN = {
+    'نسخ الحركات من الصفحات الرئيسية (الإنشاءات / العمليات والصيانة / المشاريع) — بدون إدخال جديد من هنا': 'Copies of movements from main pages (Constructions / Operations & Maintenance / Projects) — no new entry here',
+    'إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع.': 'Warehouse transactions can only be entered from main pages: Constructions, Operations & Maintenance, and Projects.',
+    'الأرصدة تُحدَّث تلقائياً من حركات الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع. لا يُسمح بإدخال حركة جديدة من المستودع.': 'Balances update automatically from main-page movements: Constructions, Operations & Maintenance, and Projects. New movements cannot be entered from the warehouse.',
+    'الصرف يتطلب ربطاً بمعاملة من الصفحات الرئيسية (عطل / إنشاءات / مشروع).': 'Issue requires linking to a main-page transaction (ticket / construction / project).',
+    '+ صرف مستودع': '+ Warehouse issue',
+    'القسم المصدر': 'Source section',
+    'مرجع المعاملة': 'Transaction reference',
     'خريص': 'Khurais',
     'عرض فقط — لا تملك صلاحية إدارة الفرق.': 'View only — you do not have permission to manage teams.',
     'نشطة': 'Active',

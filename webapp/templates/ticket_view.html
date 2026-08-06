@@ -423,7 +423,7 @@
     </div>
     <div class="actions">
       {% if editing and can('tickets.write') and can('modules.write') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('+ صرف / حركة') }}</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, **{'from': 'ops'}) }}">{{ _('+ صرف / حركة') }}</a>
       {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
@@ -492,7 +492,7 @@
     <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">{{ _('+ فسوح / إخلاء أسفلت (RR)') }}</a>
     {% endif %}
     {% if can('section.warehouses') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('+ حركة مستودع') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, **{'from': 'ops'}) }}">{{ _('+ حركة مستودع') }}</a>
     {% endif %}
     {% if can('section.safety') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">{{ _('+ تصريح سلامة') }}</a>

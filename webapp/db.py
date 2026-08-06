@@ -230,6 +230,10 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "warehouse_tx" in existing or "warehouse_tx" in created:
             if _ensure_column(conn, "warehouse_tx", "rekaz_code"):
                 created.append("warehouse_tx.rekaz_code")
+            if _ensure_column(conn, "warehouse_tx", "source_section"):
+                created.append("warehouse_tx.source_section")
+            if _ensure_column(conn, "warehouse_tx", "source_ref"):
+                created.append("warehouse_tx.source_ref")
         # أعمدة دليل بنود العقد الموسّع (قالب Excel ثنائي اللغة)
         for table in ("boq_items", "contract_boq_items"):
             if table in existing or table in created:
@@ -477,6 +481,8 @@ def init_db():
             recipient TEXT,
             ticket_no TEXT,
             rekaz_code TEXT,
+            source_section TEXT,
+            source_ref TEXT,
             region TEXT,
             notes TEXT
         );
@@ -676,6 +682,8 @@ def init_db():
     _ensure_column(conn, "tickets", "rekaz_code")
     _ensure_column(conn, "quality_clearances", "rekaz_code")
     _ensure_column(conn, "warehouse_tx", "rekaz_code")
+    _ensure_column(conn, "warehouse_tx", "source_section")
+    _ensure_column(conn, "warehouse_tx", "source_ref")
     for _boq_table in ("boq_items", "contract_boq_items"):
         for _col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
             _ensure_column(conn, _boq_table, _col)

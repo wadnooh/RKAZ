@@ -29,6 +29,9 @@
   </div>
 
   <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}>
+    {% if name == 'warehouse_tx' and form_ctx %}
+    <input type="hidden" name="from" value="{{ form_ctx }}">
+    {% endif %}
     {% for key, label, ftype in module.fields %}
     <div class="field {% if ftype == 'textarea' %}full{% endif %}">
       <label>{{ label }}</label>
@@ -98,9 +101,15 @@
       {% elif ftype == 'date' %}
         <input type="date" name="{{ key }}" value="{{ row[key] or '' }}">
       {% else %}
+        {% if name == 'warehouse_tx' and key == 'source_section' %}
+        <input type="hidden" name="{{ key }}" value="{{ row[key] or form_ctx or '' }}">
+        <input type="text" value="{% if (row[key] or form_ctx) == 'ops' %}{{ _('العمليات والصيانة') }}{% elif (row[key] or form_ctx) == 'constructions' %}{{ _('الإنشاءات') }}{% elif (row[key] or form_ctx) == 'projects' %}{{ _('المشاريع') }}{% else %}{{ row[key] or '' }}{% endif %}" readonly>
+        {% else %}
         <input type="text" name="{{ key }}" value="{{ row[key] or '' }}"
           {% if name == 'warehouse_tx' and key == 'voucher_no' and mode == 'new' %}readonly dir="ltr" style="text-align:left"{% endif %}
-          {% if name == 'warehouse_tx' and key == 'rekaz_code' %}id="warehouseRekazCode" dir="ltr" style="text-align:left"{% endif %}>
+          {% if name == 'warehouse_tx' and key == 'rekaz_code' %}id="warehouseRekazCode" dir="ltr" style="text-align:left"{% endif %}
+          {% if name == 'warehouse_tx' and key == 'source_ref' and mode == 'new' %}readonly{% endif %}>
+        {% endif %}
       {% endif %}
     </div>
     {% endfor %}
@@ -112,7 +121,15 @@
     {% endif %}
     <div class="actions" style="grid-column:1/-1">
       <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
+      {% if name == 'warehouse_tx' and form_ctx == 'constructions' %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='construction_works') }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'warehouse_tx' and form_ctx == 'projects' %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='projects') }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'warehouse_tx' and form_ctx == 'ops' and row.get('ticket_no') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=row.ticket_no) }}">{{ _('إلغاء') }}</a>
+      {% else %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('إلغاء') }}</a>
+      {% endif %}
     </div>
   </form>
 </div>

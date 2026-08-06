@@ -14,6 +14,8 @@
       <div class="meta">
         {% if name == 'warehouse_items' %}
         {{ _('سجل المواد المستخدمة في المعاملات — الاستيراد والإضافة من هنا') }}
+        {% elif name == 'warehouse_tx' %}
+        {{ _('نسخ الحركات من الصفحات الرئيسية (الإنشاءات / العمليات والصيانة / المشاريع) — بدون إدخال جديد من هنا') }}
         {% elif ticket_filter %}
         {{ _('سجلات مرتبطة برقم العطل') }} <strong>{{ ticket_filter }}</strong>
         {% else %}
@@ -29,7 +31,13 @@
         <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب المواد Excel') }}</a>
         <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('عرض الأرصدة') }}</a>
         {% endif %}
-        {% if ticket_filter %}
+        {% if name == 'warehouse_tx' %}
+        {# الإضافة ممنوعة من المستودع — الإدخال من الصفحات الرئيسية فقط #}
+        {% elif name == 'construction_works' %}
+        <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
+        {% elif name == 'projects' %}
+        <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
+        {% elif ticket_filter %}
         <a class="btn primary" href="{{ url_for('module_new', name=name, ticket_no=ticket_filter) }}">{{ _('+ إضافة') }}</a>
         {% else %}
         <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
@@ -90,6 +98,11 @@
               {% else %}
                 —
               {% endif %}
+            {% elif key == 'source_section' %}
+              {% if r[key] == 'ops' %}{{ _('العمليات والصيانة') }}
+              {% elif r[key] == 'constructions' %}{{ _('الإنشاءات') }}
+              {% elif r[key] == 'projects' %}{{ _('المشاريع') }}
+              {% else %}{{ r[key] if r[key] not in [None, ''] else '—' }}{% endif %}
             {% elif ftype == 'number' and r[key] is not none %}
               {% if 'value' in key or 'price' in key or 'collected' in key or 'approved' in key %}
                 {{ r[key]|money }}
@@ -106,7 +119,13 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
-            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">{{ _('تعديل') }}</a>{% endif %}
+            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% endif %}">{{ _('تعديل') }}</a>{% endif %}
+            {% if can_mod_write and name == 'construction_works' and r.work_no and can('section.warehouses') %}
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
+            {% endif %}
+            {% if can_mod_write and name == 'projects' and r.project_code and can('section.warehouses') %}
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف مستودع') }}</a>
+            {% endif %}
             {% if can_mod_delete %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" onsubmit="return confirm({{ _('حذف؟')|tojson }});" style="display:inline">
               <button class="btn danger" type="submit">{{ _('حذف') }}</button>

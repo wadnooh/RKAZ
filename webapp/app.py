@@ -1317,14 +1317,65 @@ def _apply_photos_from_request(data: dict) -> None:
     )
 
 
-def _redirect_after_module(name, data):
+def _warehouse_form_ctx():
+    """سياق نموذج المستودع: الصفحات الرئيسية (ops/constructions/projects) أو المستودع."""
+    ctx = (request.values.get("from") or "").strip().lower()
+    if ctx in ("ticket", "ops"):
+        return "ops"
+    if ctx in ("constructions", "projects", "warehouses"):
+        return ctx
+    return "warehouses"
+
+
+def _warehouse_main_sections():
+    return ("ops", "constructions", "projects")
+
+
+def _warehouse_source_label(section: str) -> str:
+    return {
+        "ops": _t("العمليات والصيانة"),
+        "constructions": _t("الإنشاءات"),
+        "projects": _t("المشاريع"),
+        "warehouses": _t("المستودعات"),
+    }.get(section or "", section or "")
+
+
+def _redirect_after_module(name, data, form_ctx=None):
     """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل والخطوة التالية في المعالج."""
     tno = str((data or {}).get("ticket_no") or "").strip()
+    form_ctx = form_ctx or _warehouse_form_ctx()
+
+    # معاملات المستودع: الإدخال من الصفحات الرئيسية؛ المستودع يبقى داخله بعد الحفظ/التعديل.
+    if name == "warehouse_tx":
+        if (
+            form_ctx == "ops"
+            and tno
+            and permissions.can("tickets.read")
+            and permissions.can("section.ops")
+        ):
+            conn = db.connect()
+            row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
+            conn.close()
+            if row:
+                nxt = "done"
+                allowed = {s[0] for s in _ticket_wizard_steps()}
+                if nxt not in allowed:
+                    nxt = "done"
+                label = dict(_ticket_wizard_steps()).get(nxt, nxt)
+                flash(_t("تم الحفظ — الخطوة التالية: {label}", label=label), "ok")
+                return _ticket_edit_redirect(row["id"], nxt)
+        if form_ctx == "constructions":
+            return redirect(url_for("module_list", name="construction_works"))
+        if form_ctx == "projects":
+            return redirect(url_for("module_list", name="projects"))
+        if tno:
+            return redirect(url_for("module_list", name=name, ticket_no=tno))
+        return redirect(url_for("module_list", name=name))
+
     next_after = {
         "quantities": "photos",
         "photos": "metering",
         "metering": "warehouse" if permissions.can("section.warehouses") else "done",
-        "warehouse_tx": "done",
     }
     if tno and name in next_after:
         conn = db.connect()
@@ -1342,6 +1393,57 @@ def _redirect_after_module(name, data):
     if tno:
         return redirect(url_for("module_list", name=name, ticket_no=tno))
     return redirect(url_for("module_list", name=name))
+
+
+def _prepare_warehouse_tx_create(data: dict, form_ctx: str, conn) -> tuple:
+    """يملأ مصدر الحركة ويتحقق من قواعد الإدخال من الصفحات الرئيسية فقط."""
+    if form_ctx not in _warehouse_main_sections():
+        return None, _t(
+            "إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع."
+        )
+
+    data["source_section"] = form_ctx
+    source_ref = (data.get("source_ref") or request.values.get("source_ref") or "").strip()
+    tno = (data.get("ticket_no") or "").strip()
+    if form_ctx == "ops":
+        data["source_ref"] = source_ref or tno
+    else:
+        data["source_ref"] = source_ref
+
+    data = db.enrich_warehouse_tx_from_item(data)
+    data = db.enrich_warehouse_tx_codes(data, conn)
+
+    linked = (
+        (data.get("ticket_no") or "").strip()
+        or (data.get("rekaz_code") or "").strip()
+        or (data.get("source_ref") or "").strip()
+    )
+    if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not linked:
+        return None, _t(
+            "الصرف يتطلب ربطاً بمعاملة من الصفحات الرئيسية (عطل / إنشاءات / مشروع)."
+        )
+    return data, None
+
+
+def _render_warehouse_tx_form(module, name, data, tickets, ticket_options, mode, form_ctx, extra=None):
+    section = module.get("section")
+    ctx = {
+        "name": name,
+        "module": _mod(module),
+        "row": data,
+        "tickets": tickets,
+        "ticket_options": ticket_options,
+        "warehouse_items": db.list_warehouse_items(),
+        "boq_items": [],
+        "mode": mode,
+        "section": section,
+        "section_meta": _smeta(SECTION_META.get(section)),
+        "section_modules": modules_for_section(section) if section else [],
+        "form_ctx": form_ctx,
+    }
+    if extra:
+        ctx.update(extra)
+    return render_template("module_form.html", **ctx)
 
 
 @app.route("/media/<storage>/<path:key>")
@@ -1428,10 +1530,31 @@ def module_new(name):
     if name == "warehouse_tx" and request.args.get("ticket_no"):
         prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
         prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
-    if name == "warehouse_tx" and not (prefill.get("voucher_no") or "").strip():
-        prefill["voucher_no"] = db.next_warehouse_voucher_no(conn)
+    if name == "warehouse_tx":
+        form_ctx = _warehouse_form_ctx()
+        if form_ctx not in _warehouse_main_sections():
+            conn.close()
+            flash(
+                _t(
+                    "إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع."
+                ),
+                "danger",
+            )
+            return redirect(url_for("module_list", name="warehouse_tx"))
+        prefill["source_section"] = form_ctx
+        source_ref = (request.args.get("source_ref") or "").strip()
+        if source_ref:
+            prefill["source_ref"] = source_ref
+        elif form_ctx == "ops" and prefill.get("ticket_no"):
+            prefill["source_ref"] = prefill["ticket_no"]
+        if form_ctx in ("constructions", "projects"):
+            prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
+            prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
+        if not (prefill.get("voucher_no") or "").strip():
+            prefill["voucher_no"] = db.next_warehouse_voucher_no(conn)
     if request.method == "POST":
         data = _module_form_data(module)
+        form_ctx = _warehouse_form_ctx()
         if name == "photos":
             try:
                 _apply_photos_from_request(data)
@@ -1461,27 +1584,13 @@ def module_new(name):
                 "SELECT 1 FROM warehouse_tx WHERE voucher_no=? LIMIT 1", (voucher,)
             ).fetchone():
                 data["voucher_no"] = db.next_warehouse_voucher_no(conn)
-            data = db.enrich_warehouse_tx_from_item(data)
-            data = db.enrich_warehouse_tx_codes(data, conn)
-            if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (
-                (data.get("ticket_no") or "").strip() or (data.get("rekaz_code") or "").strip()
-            ):
-                flash(_t("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER"), "danger")
-                section = module.get("section")
-                return render_template(
-                    "module_form.html",
-                    name=name,
-                    module=_mod(module),
-                    row=data,
-                    tickets=tickets,
-                    ticket_options=ticket_options,
-                    warehouse_items=db.list_warehouse_items(),
-                    boq_items=[],
-                    mode="new",
-                    section=section,
-                    section_meta=_smeta(SECTION_META.get(section)),
-                    section_modules=modules_for_section(section) if section else [],
+            prepared, err = _prepare_warehouse_tx_create(data, form_ctx, conn)
+            if err:
+                flash(err, "danger")
+                return _render_warehouse_tx_form(
+                    module, name, data, tickets, ticket_options, "new", form_ctx
                 )
+            data = prepared
         if name == "quantities":
             item_no = (data.get("item_no") or "").strip()
             if item_no and not db.get_contract_boq_item(item_no, conn):
@@ -1521,7 +1630,7 @@ def module_new(name):
         db.log_audit(current_user_name(), "إضافة", module["title"], new_id, str(data)[:240])
         flash(_t("تمت الإضافة"), "ok")
         _after_data_change()
-        return _redirect_after_module(name, data)
+        return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     boq_items = []
     if request.args.get("item_no") and "item_no" in prefill:
@@ -1548,6 +1657,7 @@ def module_new(name):
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
+        form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None,
     )
 
 
@@ -1593,24 +1703,24 @@ def module_edit(name, row_id):
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
             data = db.enrich_warehouse_tx_codes(data, conn)
-            if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not (
-                (data.get("ticket_no") or "").strip() or (data.get("rekaz_code") or "").strip()
-            ):
-                flash(_t("صرف المستودع يتطلب ربط رقم العطل أو كود ركاز ER"), "danger")
-                section = module.get("section")
-                return render_template(
-                    "module_form.html",
-                    name=name,
-                    module=_mod(module),
-                    row=data,
-                    tickets=tickets,
-                    ticket_options=ticket_options,
-                    warehouse_items=db.list_warehouse_items(),
-                    boq_items=[],
-                    mode="edit",
-                    section=section,
-                    section_meta=_smeta(SECTION_META.get(section)),
-                    section_modules=modules_for_section(section) if section else [],
+            linked = (
+                (data.get("ticket_no") or "").strip()
+                or (data.get("rekaz_code") or "").strip()
+                or (data.get("source_ref") or "").strip()
+            )
+            if db.is_outbound_warehouse_tx(data.get("tx_type") or "") and not linked:
+                flash(
+                    _t("الصرف يتطلب ربطاً بمعاملة من الصفحات الرئيسية (عطل / إنشاءات / مشروع)."),
+                    "danger",
+                )
+                return _render_warehouse_tx_form(
+                    module,
+                    name,
+                    data,
+                    tickets,
+                    ticket_options,
+                    "edit",
+                    _warehouse_form_ctx(),
                 )
         if name == "quantities":
             item_no = (data.get("item_no") or "").strip()
@@ -1649,7 +1759,11 @@ def module_edit(name, row_id):
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
         flash(_t("تم الحفظ"), "ok")
         _after_data_change()
-        return _redirect_after_module(name, data)
+        # التعديل من المستودع يُبقي المستخدم داخل المستودع افتراضياً
+        edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None
+        if name == "warehouse_tx" and edit_ctx not in _warehouse_main_sections():
+            edit_ctx = "warehouses"
+        return _redirect_after_module(name, data, form_ctx=edit_ctx)
     data = dict(row)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     boq_items = []
@@ -1676,6 +1790,7 @@ def module_edit(name, row_id):
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
+        form_ctx="warehouses" if name == "warehouse_tx" else None,
     )
 
 
@@ -1900,22 +2015,13 @@ def warehouse_balances_clear():
 def warehouse_tx_import():
     if not permissions.can("modules.write"):
         return permissions.deny_redirect()
-    f = request.files.get("file")
-    if not f or not f.filename:
-        flash(_t("اختر ملف Excel للحركات"), "danger")
-        return redirect(url_for("warehouse_balances"))
-    try:
-        result = warehouse_excel.import_tx_from_excel(f)
-        flash(
-            f"استيراد الحركات: {result['ok']} حركة | مربوطة ببلاغات: {result['linked']}",
-            "ok",
-        )
-        if result.get("errors"):
-            flash(" / ".join(result["errors"][:5]), "danger")
-        db.log_audit(current_user_name(), "استيراد Excel", "معاملات المستودع", details=str(result)[:240])
-    except Exception as exc:
-        flash(_t("تعذر الاستيراد: {exc}", exc=exc), "danger")
-    return redirect(url_for("warehouse_balances"))
+    flash(
+        _t(
+            "إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع."
+        ),
+        "danger",
+    )
+    return redirect(url_for("module_list", name="warehouse_tx"))
 
 
 @app.route("/users/list", methods=["GET", "POST"])
