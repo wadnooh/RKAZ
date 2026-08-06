@@ -27,7 +27,7 @@
   {% if view == 'movements' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="movements">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بالسند / المادة / المرجع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{% if source == 'ops' %}{{ _('بحث بالسند / أمر العمل / المادة / العطل...') }}{% else %}{{ _('بحث بالسند / المادة / المرجع...') }}{% endif %}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('مسح') }}</a>
   </form>
@@ -40,7 +40,11 @@
           <th>{{ _('النوع') }}</th>
           <th>{{ _('المادة') }}</th>
           <th>{{ _('الكمية') }}</th>
+          {% if source == 'ops' %}
+          <th>{{ _('أمر العمل') }}</th>
+          {% else %}
           <th>{{ _('المرجع') }}</th>
+          {% endif %}
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('المستلم') }}</th>
           <th></th>
@@ -58,7 +62,11 @@
           <td>{{ w.tx_type or '—' }}</td>
           <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          {% if source == 'ops' %}
+          <td>{{ w.work_order or '—' }}</td>
+          {% else %}
           <td>{{ w.source_ref or '—' }}</td>
+          {% endif %}
           <td>{{ w.ticket_no or '—' }}</td>
           <td>{{ w.recipient or '—' }}</td>
           <td class="actions">
@@ -67,6 +75,10 @@
             {% endif %}
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses&source={{ source }}">{{ _('تعديل') }}</a>
+            <form method="post" action="{{ url_for('warehouse_tx_delete', row_id=w.id) }}" style="display:inline" onsubmit="return confirm({{ _('حذف مادة الحركة؟')|tojson }});">
+              <input type="hidden" name="next" value="{{ url_for(list_endpoint, view='movements') }}">
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+            </form>
             {% endif %}
           </td>
         </tr>
@@ -108,7 +120,9 @@
           <td class="actions">
             <a class="btn ghost" href="{{ url_for('warehouse_primary_team_detail', row_id=r.id) }}">{{ _('عرض') }}</a>
             {% if can('modules.write') and r.work_order %}
-            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order}) }}">{{ _('+ صرف') }}</a>
+            <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order, 'tx_type': 'وارد من الكهرباء'}) }}">{{ _('+ وارد') }}</a>
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order, 'tx_type': 'منصرف للمقاول'}) }}">{{ _('+ صرف') }}</a>
+            <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order, 'tx_type': 'إرجاع للكهرباء'}) }}">{{ _('+ إرجاع') }}</a>
             {% endif %}
           </td>
         </tr>
@@ -161,7 +175,9 @@
           <td class="actions">
             <a class="btn ghost" href="{{ url_for('warehouse_ticket_detail', ticket_id=t.id) }}">{{ _('عرض') }}</a>
             {% if can('modules.write') %}
-            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from}) }}">{{ _('+ صرف') }}</a>
+            <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from, 'tx_type': 'وارد من الكهرباء'}) }}">{{ _('+ وارد') }}</a>
+            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from, 'tx_type': 'منصرف للمقاول'}) }}">{{ _('+ صرف') }}</a>
+            <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from, 'tx_type': 'إرجاع للكهرباء'}) }}">{{ _('+ إرجاع') }}</a>
             {% endif %}
           </td>
         </tr>

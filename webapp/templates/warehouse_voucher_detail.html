@@ -6,7 +6,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ _('عرض المعاملة') }} {{ voucher_no }}</h2>
-      <div class="meta">{{ _('معاملة مستودع مجمّعة حسب رقم السند — لجميع التخصصات') }}</div>
+      <div class="meta">{{ _('معاملة مستودع مجمّعة حسب رقم السند — وارد / منصرف / إرجاع') }}</div>
     </div>
     <div class="actions no-print">
       <a class="btn ghost" href="{{ back_url }}">{{ _('رجوع') }}</a>
@@ -15,10 +15,9 @@
       {% endif %}
       <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
       {% if can('modules.write') %}
-      <a class="btn ghost" href="{{ add_line_url }}">{{ _('+ مادة للسند') }}</a>
-      {% if head.id %}
-      <a class="btn primary" href="{{ url_for('module_edit', name='warehouse_tx', row_id=head.id) }}?from={{ form_from }}">{{ _('تعديل') }}</a>
-      {% endif %}
+      <a class="btn ghost" href="{{ in_url }}">{{ _('+ وارد') }}</a>
+      <a class="btn primary" href="{{ out_url }}">{{ _('+ صرف') }}</a>
+      <a class="btn ghost" href="{{ return_url }}">{{ _('+ إرجاع') }}</a>
       {% endif %}
     </div>
   </div>
@@ -32,7 +31,7 @@
         </tr>
         <tr>
           <th>{{ _('تاريخ المعاملة') }}</th><td>{{ head.tx_date or '—' }}</td>
-          <th>{{ _('أمر العمل') }}</th><td>{{ parent.work_order or '—' }}</td>
+          <th>{{ _('أمر العمل') }}</th><td>{{ work_order or parent.work_order or '—' }}</td>
         </tr>
         <tr>
           <th>{{ _('موقع المعاملة') }}</th><td>{{ parent.site or parent.label or '—' }}</td>
@@ -40,27 +39,23 @@
         </tr>
         <tr>
           <th>{{ _('القسم المصدر') }}</th><td>{{ parent.label or head.source_section or '—' }}</td>
-          <th>{{ _('مرجع المعاملة') }}</th><td>{{ head.source_ref or '—' }}</td>
-        </tr>
-        <tr>
           <th>{{ _('رقم العطل') }}</th><td>{{ parent.ticket_no or head.ticket_no or '—' }}</td>
+        </tr>
+        <tr>
           <th>{{ _('كود ER') }}</th><td>{{ head.rekaz_code or '—' }}</td>
-        </tr>
-        <tr>
           <th>{{ _('رقم المستخلص') }}</th><td>{{ parent.extract_no or '—' }}</td>
-          <th>{{ _('المبلغ') }}</th><td>{% if parent.amount is not none %}{{ parent.amount|money }}{% else %}—{% endif %}</td>
         </tr>
         <tr>
+          <th>{{ _('المبلغ') }}</th><td>{% if parent.amount is not none %}{{ parent.amount|money }}{% else %}—{% endif %}</td>
           <th>{{ _('المنطقة') }}</th><td>{{ head.region or parent.site or '—' }}</td>
+        </tr>
+        <tr>
           <th>{{ _('المستلم / المسلم') }}</th><td>{{ head.recipient or '—' }}</td>
+          <th>{{ _('وارد / منصرف / إرجاع') }}</th><td>{{ qty_in }} / {{ qty_out_issue }} / {{ qty_return }}</td>
         </tr>
         <tr>
           <th>{{ _('إجمالي الكمية') }}</th><td>{{ qty_total }}</td>
-          <th>{{ _('وارد / منصرف') }}</th><td>{{ qty_in }} / {{ qty_out }}</td>
-        </tr>
-        <tr>
-          <th>{{ _('ملاحظات') }}</th>
-          <td colspan="3">{{ head.notes or '—' }}</td>
+          <th>{{ _('ملاحظات') }}</th><td>{{ head.notes or '—' }}</td>
         </tr>
       </tbody>
     </table>
@@ -75,8 +70,9 @@
     </div>
     <div class="actions no-print" data-tab-strip="1">
       <a class="btn ghost{% if mat_view == 'in' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='in') }}">{{ _('عرض الوارد') }} ({{ inbound_count }})</a>
-      <a class="btn ghost{% if mat_view == 'out' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='out') }}">{{ _('عرض المنصرف') }} ({{ outbound_count }})</a>
-      <a class="btn ghost{% if mat_view == 'all' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='all') }}">{{ _('عرض الاثنين') }}</a>
+      <a class="btn ghost{% if mat_view == 'out' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='out') }}">{{ _('عرض المنصرف') }} ({{ outbound_issue_count }})</a>
+      <a class="btn ghost{% if mat_view == 'return' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='return') }}">{{ _('عرض الإرجاع') }} ({{ return_count }})</a>
+      <a class="btn ghost{% if mat_view == 'all' %} primary{% endif %}" href="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no, mat='all') }}">{{ _('عرض الكل') }}</a>
     </div>
   </div>
   <div class="table-wrap">
@@ -91,7 +87,7 @@
           <th>{{ _('تاريخ الحركة') }}</th>
           <th>{{ _('الرصيد الحالي') }}</th>
           <th>{{ _('المستلمون / الكميات') }}</th>
-          <th class="no-print"></th>
+          <th class="no-print">{{ _('إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -108,6 +104,10 @@
           <td class="actions no-print">
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from={{ form_from }}">{{ _('تعديل') }}</a>
+            <form method="post" action="{{ url_for('warehouse_tx_delete', row_id=w.id) }}" style="display:inline" onsubmit="return confirm({{ _('حذف مادة الحركة؟')|tojson }});">
+              <input type="hidden" name="next" value="{{ url_for('warehouse_voucher_detail', voucher_no=voucher_no) }}">
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+            </form>
             {% endif %}
           </td>
         </tr>

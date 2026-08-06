@@ -62,6 +62,7 @@ DEFAULT_LISTS = {
     "warehouse_tx_types": [
         "وارد من الكهرباء",
         "منصرف للمقاول",
+        "إرجاع للكهرباء",
         "إرجاع للمجمعة",
         "وارد من موقع العمل",
         "رصيد افتتاحي",
@@ -1262,13 +1263,58 @@ def log_audit(user_name, action, entity, entity_id="", details=""):
 
 
 def warehouse_tx_sign(tx_type: str) -> int:
-    """+1 وارد، -1 منصرف، 0 غير معروف."""
+    """+1 وارد، -1 منصرف/إرجاع، 0 غير معروف."""
     t = tx_type or ""
     if "وارد" in t or "افتتاح" in t:
         return 1
     if "منصرف" in t or "إرجاع" in t:
         return -1
     return 0
+
+
+def resolve_tx_work_order(row: dict, conn=None) -> str:
+    """يستخرج أمر العمل لسطر حركة: فرق أولية أو حقل العطل أو المرجع إن لم يكن رقم عطل."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ref = (row.get("source_ref") or "").strip()
+        tno = (row.get("ticket_no") or "").strip()
+        if ref:
+            pto = conn.execute(
+                "SELECT work_order FROM primary_team_orders WHERE work_order=? LIMIT 1",
+                (ref,),
+            ).fetchone()
+            if pto:
+                return (pto["work_order"] or "").strip()
+        lookup = tno or (ref if ref else "")
+        if lookup:
+            ticket = conn.execute(
+                "SELECT work_order, ticket_no FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
+                (lookup, lookup),
+            ).fetchone()
+            if ticket:
+                wo = (ticket["work_order"] or "").strip()
+                if wo:
+                    return wo
+        # المرجع أمر عمل إذا لم يكن مطابقاً لرقم العطل
+        if ref and ref != tno:
+            return ref
+        return ""
+    finally:
+        if own:
+            conn.close()
+
+
+def enrich_warehouse_txs_work_order(rows: list[dict], conn=None) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        for r in rows or []:
+            r["work_order"] = resolve_tx_work_order(r, conn)
+        return rows
+    finally:
+        if own:
+            conn.close()
 
 
 def get_warehouse_voucher_lines(voucher_no: str, conn=None) -> list[dict]:

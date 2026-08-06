@@ -661,6 +661,8 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 (source,),
             ).fetchall()
         )
+        if source == "ops":
+            db.enrich_warehouse_txs_work_order(tx_rows, conn)
         if q:
             ql = q.lower()
             tx_rows = [
@@ -671,6 +673,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 or ql in (r.get("item_name") or "").lower()
                 or ql in (r.get("source_ref") or "").lower()
                 or ql in (r.get("ticket_no") or "").lower()
+                or ql in (r.get("work_order") or "").lower()
             ]
     elif view == "teams":
         # الفرق الأولية = أوامر عمل الكهرباء (منفصلة تماماً عن الأعطال و tickets.team)
@@ -969,10 +972,10 @@ def warehouse_project_detail(row_id):
 @app.route("/warehouses/voucher/<path:voucher_no>")
 @login_required
 def warehouse_voucher_detail(voucher_no):
-    """عرض المعاملة (سند المستودع) مع مواد الوارد/المنصرف — لجميع التخصصات."""
+    """عرض المعاملة (سند المستودع) مع مواد الوارد/المنصرف/الإرجاع — لجميع التخصصات."""
     voucher_no = (voucher_no or "").strip()
     mat_view = (request.args.get("mat") or "all").strip().lower()
-    if mat_view not in ("in", "out", "all"):
+    if mat_view not in ("in", "out", "return", "all"):
         mat_view = "all"
     lines = db.get_warehouse_voucher_lines(voucher_no)
     if not lines:
@@ -984,9 +987,12 @@ def warehouse_voucher_detail(voucher_no):
             ln["item_balance"] = db.warehouse_balance(ln.get("item_no") or "")
         except Exception:
             ln["item_balance"] = None
+        t = ln.get("tx_type") or ""
+        ln["is_return"] = "إرجاع" in t
 
     head = lines[0]
     parent = db.resolve_warehouse_parent(head)
+    work_order = db.resolve_tx_work_order(head) or (parent.get("work_order") or "")
     section = (head.get("source_section") or "").strip().lower()
     warehouse_active = {
         "ops": "ops",
@@ -995,16 +1001,20 @@ def warehouse_voucher_detail(voucher_no):
     }.get(section, "home")
 
     inbound = [r for r in lines if r.get("sign", 0) > 0]
-    outbound = [r for r in lines if r.get("sign", 0) < 0]
+    returns = [r for r in lines if r.get("is_return")]
+    outbound_issue = [r for r in lines if r.get("sign", 0) < 0 and not r.get("is_return")]
     if mat_view == "in":
         shown = inbound
     elif mat_view == "out":
-        shown = outbound
+        shown = outbound_issue
+    elif mat_view == "return":
+        shown = returns
     else:
         shown = lines
 
     qty_in = sum(float(r.get("qty") or 0) for r in inbound)
-    qty_out = sum(float(r.get("qty") or 0) for r in outbound)
+    qty_out_issue = sum(float(r.get("qty") or 0) for r in outbound_issue)
+    qty_return = sum(float(r.get("qty") or 0) for r in returns)
     qty_total = sum(float(r.get("qty") or 0) for r in lines)
     tx_types = []
     for r in lines:
@@ -1026,11 +1036,11 @@ def warehouse_voucher_detail(voucher_no):
         "projects": "wh_projects",
     }.get(section, "warehouses")
 
-    add_line_args = {"from": form_from, "voucher_no": voucher_no, "reuse_voucher": "1"}
+    base_args = {"from": form_from, "voucher_no": voucher_no, "reuse_voucher": "1"}
     if head.get("ticket_no"):
-        add_line_args["ticket_no"] = head.get("ticket_no")
+        base_args["ticket_no"] = head.get("ticket_no")
     if head.get("source_ref"):
-        add_line_args["source_ref"] = head.get("source_ref")
+        base_args["source_ref"] = head.get("source_ref")
 
     return render_template(
         "warehouse_voucher_detail.html",
@@ -1038,20 +1048,56 @@ def warehouse_voucher_detail(voucher_no):
         voucher_no=voucher_no,
         head=head,
         parent=parent,
+        work_order=work_order,
         lines=lines,
         shown=shown,
         mat_view=mat_view,
         inbound_count=len(inbound),
-        outbound_count=len(outbound),
+        outbound_issue_count=len(outbound_issue),
+        return_count=len(returns),
         qty_in=qty_in,
-        qty_out=qty_out,
+        qty_out_issue=qty_out_issue,
+        qty_return=qty_return,
         qty_total=qty_total,
         tx_types=tx_types,
         back_url=back_url,
         form_from=form_from,
-        add_line_url=url_for("module_new", name="warehouse_tx", **add_line_args),
+        in_url=url_for("module_new", name="warehouse_tx", tx_type="وارد من الكهرباء", **base_args),
+        out_url=url_for("module_new", name="warehouse_tx", tx_type="منصرف للمقاول", **base_args),
+        return_url=url_for("module_new", name="warehouse_tx", tx_type="إرجاع للكهرباء", **base_args),
         parent_url=_warehouse_parent_url(parent),
     )
+
+
+@app.route("/warehouses/tx/<int:row_id>/delete", methods=["POST"])
+@login_required
+def warehouse_tx_delete(row_id):
+    """حذف سطر مادة من حركة مستودع مع الرجوع لعرض المعاملة أو القائمة."""
+    if not permissions.can("modules.write"):
+        flash(_t("لا تملك صلاحية الحذف."), "danger")
+        return redirect(request.form.get("next") or url_for("warehouses_home"))
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM warehouse_tx WHERE id=?", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("السجل غير موجود"), "danger")
+        return redirect(request.form.get("next") or url_for("warehouses_home"))
+    voucher = (row["voucher_no"] or "").strip() if hasattr(row, "keys") else ""
+    conn.execute("DELETE FROM warehouse_tx WHERE id=?", (row_id,))
+    conn.commit()
+    conn.close()
+    db.log_audit(current_user_name(), "حذف", "معاملات المستودع", row_id, voucher)
+    flash(_t("تم حذف مادة الحركة"), "ok")
+    _after_data_change()
+    nxt = (request.form.get("next") or "").strip()
+    if nxt:
+        return redirect(nxt)
+    if voucher:
+        # إن بقي السند افتحه، وإلا قائمة الحركات
+        left = db.get_warehouse_voucher_lines(voucher)
+        if left:
+            return redirect(url_for("warehouse_voucher_detail", voucher_no=voucher))
+    return redirect(url_for("warehouse_ops", view="movements"))
 
 
 def _warehouse_parent_url(parent: dict):
@@ -2110,7 +2156,8 @@ def module_new(name):
         elif source == "ops" and prefill.get("ticket_no"):
             prefill["source_ref"] = prefill["ticket_no"]
         if source in ("constructions", "projects", "ops"):
-            prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
+            requested_type = (request.args.get("tx_type") or "").strip()
+            prefill["tx_type"] = requested_type or prefill.get("tx_type") or "منصرف للمقاول"
             prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
         reuse = str(request.args.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
         existing_voucher = (request.args.get("voucher_no") or "").strip()
