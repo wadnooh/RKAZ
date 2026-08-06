@@ -59,7 +59,11 @@
       <tbody>
         {% for w in recent_tx %}
         <tr>
-          <td>{{ w.voucher_no or '—' }}</td>
+          <td>
+            {% if w.voucher_no %}
+            <a href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}"><strong>{{ w.voucher_no }}</strong></a>
+            {% else %}—{% endif %}
+          </td>
           <td>{{ w.tx_date or '—' }}</td>
           <td>
             {% if w.source_section == 'ops' %}{{ _('العمليات والصيانة') }}
