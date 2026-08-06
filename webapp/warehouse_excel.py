@@ -28,7 +28,8 @@ TX_HEADERS = [
     "اسم المادة",
     "الوحدة",
     "الكمية",
-    "المستلم / المسلم",
+    "المستلم",
+    "المسلم",
     "رقم العطل",
     "المنطقة",
     "ملاحظات",
@@ -82,6 +83,8 @@ _TX_ALIASES = {
     "المستلم / المسلم": "recipient",
     "المستلم": "recipient",
     "recipient": "recipient",
+    "المسلم": "sender",
+    "sender": "sender",
     "رقم العطل": "ticket_no",
     "رقم البلاغ": "ticket_no",  # توافق مع القوالب القديمة
     "البلاغ": "ticket_no",
@@ -286,8 +289,8 @@ def import_items_from_excel(file_storage) -> dict:
                     """
                     INSERT INTO warehouse_tx(
                         voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
-                        recipient, ticket_no, region, notes
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                        recipient, sender, ticket_no, region, notes
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
                     """,
                     (
                         f"OPEN-{item_no}",
@@ -298,6 +301,7 @@ def import_items_from_excel(file_storage) -> dict:
                         unit,
                         open_qty,
                         "استيراد Excel",
+                        "",
                         "",
                         "",
                         "رصيد افتتاحي من استيراد المواد",
@@ -389,8 +393,8 @@ def import_tx_from_excel(file_storage) -> dict:
             """
             INSERT INTO warehouse_tx(
                 voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
-                recipient, ticket_no, region, notes
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                recipient, sender, ticket_no, region, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 voucher_no,
@@ -401,6 +405,7 @@ def import_tx_from_excel(file_storage) -> dict:
                 unit,
                 qty,
                 _cell(row, inv.get("recipient")),
+                _cell(row, inv.get("sender")),
                 ticket_no,
                 _cell(row, inv.get("region")),
                 _cell(row, inv.get("notes")),

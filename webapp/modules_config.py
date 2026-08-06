@@ -275,7 +275,8 @@ MODULES = {
             ("item_name", "اسم المادة", "text"),
             ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),
-            ("recipient", "المستلم / المسلم", "text"),
+            ("recipient", "المستلم", "text"),
+            ("sender", "المسلم", "text"),
             ("ticket_no", "رقم العطل / كود ER", "ticket"),
             ("rekaz_code", "كود ركاز (ER)", "text"),
             ("source_section", "القسم المصدر", "text"),
@@ -295,6 +296,7 @@ MODULES = {
             "source_ref",
             "rekaz_code",
             "recipient",
+            "sender",
         ],
     },
     # ---- المشتريات والعهد ----

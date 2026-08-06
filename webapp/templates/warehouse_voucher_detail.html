@@ -50,12 +50,15 @@
           <th>{{ _('المنطقة') }}</th><td>{{ head.region or parent.site or '—' }}</td>
         </tr>
         <tr>
-          <th>{{ _('المستلم / المسلم') }}</th><td>{{ head.recipient or '—' }}</td>
-          <th>{{ _('وارد / منصرف / إرجاع') }}</th><td>{{ qty_in }} / {{ qty_out_issue }} / {{ qty_return }}</td>
+          <th>{{ _('المستلم') }}</th><td>{{ head.recipient or '—' }}</td>
+          <th>{{ _('المسلم') }}</th><td>{{ head.sender or '—' }}</td>
         </tr>
         <tr>
+          <th>{{ _('وارد / منصرف / إرجاع') }}</th><td>{{ qty_in }} / {{ qty_out_issue }} / {{ qty_return }}</td>
           <th>{{ _('إجمالي الكمية') }}</th><td>{{ qty_total }}</td>
-          <th>{{ _('ملاحظات') }}</th><td>{{ head.notes or '—' }}</td>
+        </tr>
+        <tr>
+          <th>{{ _('ملاحظات') }}</th><td colspan="3">{{ head.notes or '—' }}</td>
         </tr>
       </tbody>
     </table>
@@ -86,7 +89,9 @@
           <th>{{ _('الكمية') }}</th>
           <th>{{ _('تاريخ الحركة') }}</th>
           <th>{{ _('الرصيد الحالي') }}</th>
-          <th>{{ _('المستلمون / الكميات') }}</th>
+          <th>{{ _('المستلم') }}</th>
+          <th>{{ _('المسلم') }}</th>
+          <th>{{ _('الكمية') }}</th>
           <th class="no-print">{{ _('إجراءات') }}</th>
         </tr>
       </thead>
@@ -100,7 +105,8 @@
           <td>{{ w.qty if w.qty is not none else '—' }} {% if w.unit %}{{ w.unit }}{% endif %}</td>
           <td>{{ w.tx_date or '—' }}</td>
           <td>{{ w.item_balance if w.item_balance is not none else '—' }}</td>
-          <td>{{ w.recipient or '—' }}{% if w.qty is not none %} / {{ w.qty }}{% endif %}</td>
+          <td>{{ w.recipient or '—' }}</td>
+          <td>{{ w.sender or '—' }}</td>
           <td class="actions no-print">
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from={{ form_from }}">{{ _('تعديل') }}</a>

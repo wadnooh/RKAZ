@@ -47,6 +47,7 @@
           {% endif %}
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('المستلم') }}</th>
+          <th>{{ _('المسلم') }}</th>
           <th></th>
         </tr>
       </thead>
@@ -69,6 +70,7 @@
           {% endif %}
           <td>{{ w.ticket_no or '—' }}</td>
           <td>{{ w.recipient or '—' }}</td>
+          <td>{{ w.sender or '—' }}</td>
           <td class="actions">
             {% if w.voucher_no %}
             <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}">{{ _('عرض') }}</a>

@@ -246,6 +246,8 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("warehouse_tx.source_section")
             if _ensure_column(conn, "warehouse_tx", "source_ref"):
                 created.append("warehouse_tx.source_ref")
+            if _ensure_column(conn, "warehouse_tx", "sender"):
+                created.append("warehouse_tx.sender")
             n = backfill_warehouse_tx_sources(conn)
             if n:
                 created.append(f"warehouse_tx.source_backfill:{n}")
@@ -494,6 +496,7 @@ def init_db():
             unit TEXT,
             qty REAL,
             recipient TEXT,
+            sender TEXT,
             ticket_no TEXT,
             rekaz_code TEXT,
             source_section TEXT,
@@ -699,6 +702,7 @@ def init_db():
     _ensure_column(conn, "warehouse_tx", "rekaz_code")
     _ensure_column(conn, "warehouse_tx", "source_section")
     _ensure_column(conn, "warehouse_tx", "source_ref")
+    _ensure_column(conn, "warehouse_tx", "sender")
     backfill_warehouse_tx_sources(conn)
     for _boq_table in ("boq_items", "contract_boq_items"):
         for _col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):

@@ -39,8 +39,12 @@
         </select>
       </div>
       <div class="field">
-        <label>{{ _('المستلم / المسلم') }}</label>
+        <label>{{ _('المستلم') }}</label>
         <input type="text" name="recipient" id="headerRecipient" value="{{ header.recipient or '' }}">
+      </div>
+      <div class="field">
+        <label>{{ _('المسلم') }}</label>
+        <input type="text" name="sender" id="headerSender" value="{{ header.sender or '' }}">
       </div>
       <div class="field">
         <label>{{ _('رقم العطل / كود ER') }}</label>

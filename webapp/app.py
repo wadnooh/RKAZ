@@ -1103,6 +1103,7 @@ def warehouse_tx_multi():
         "tx_date": datetime.now().strftime("%Y-%m-%d"),
         "tx_type": (request.values.get("tx_type") or "").strip() or "منصرف للمقاول",
         "recipient": "",
+        "sender": "",
         "ticket_no": (request.values.get("ticket_no") or "").strip(),
         "rekaz_code": "",
         "source_section": source,
@@ -1136,6 +1137,7 @@ def warehouse_tx_multi():
                 "source_ref",
                 "region",
                 "recipient",
+                "sender",
                 "notes",
             ):
                 if request.method == "GET" or not (request.form.get(k) or "").strip():
@@ -1158,6 +1160,7 @@ def warehouse_tx_multi():
                 "tx_date": (request.form.get("tx_date") or "").strip(),
                 "tx_type": (request.form.get("tx_type") or "").strip(),
                 "recipient": (request.form.get("recipient") or "").strip(),
+                "sender": (request.form.get("sender") or "").strip(),
                 "ticket_no": (request.form.get("ticket_no") or "").strip(),
                 "rekaz_code": (request.form.get("rekaz_code") or "").strip(),
                 "source_section": source,
@@ -1228,6 +1231,7 @@ def warehouse_tx_multi():
                     "unit": line["unit"],
                     "qty": line["qty"],
                     "recipient": line["line_recipient"] or header["recipient"],
+                    "sender": header.get("sender") or "",
                     "ticket_no": header["ticket_no"],
                     "rekaz_code": header["rekaz_code"],
                     "source_section": header["source_section"],
@@ -2417,7 +2421,7 @@ def module_new(name):
             ).fetchone()
             if prev:
                 prev = dict(prev)
-                for k in ("tx_date", "ticket_no", "rekaz_code", "source_section", "source_ref", "region", "recipient"):
+                for k in ("tx_date", "ticket_no", "rekaz_code", "source_section", "source_ref", "region", "recipient", "sender"):
                     if not (prefill.get(k) or "").strip() and prev.get(k) not in (None, ""):
                         prefill[k] = prev.get(k)
         elif not (prefill.get("voucher_no") or "").strip():
