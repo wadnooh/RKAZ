@@ -1148,6 +1148,10 @@ def warehouse_tx_multi():
     lines = [{"item_no": "", "item_name": "", "unit": "", "qty": "", "line_recipient": ""}]
 
     if request.method == "POST":
+        if not permissions.can("modules.write"):
+            conn.close()
+            flash(_t("لا تملك صلاحية الإضافة."), "danger")
+            return redirect(cancel_url)
         header.update(
             {
                 "tx_date": (request.form.get("tx_date") or "").strip(),
