@@ -122,7 +122,7 @@
           <tr>
             <th>#</th>
             <th>{{ _('رقم المادة') }}</th>
-            <th>{{ _('اسم المادة') }}</th>
+            <th class="col-item-name">{{ _('اسم المادة') }}</th>
             <th>{{ _('الوحدة') }}</th>
             <th style="min-width:120px">{{ _('الكمية') }}</th>
             <th></th>
@@ -317,7 +317,7 @@
       tr.innerHTML =
         "<td>" + (idx + 1) + "</td>" +
         "<td dir=\"ltr\"><strong>" + escapeHtml(line.item_no) + "</strong></td>" +
-        "<td>" + escapeHtml(line.item_name) + "</td>" +
+        "<td class=\"col-item-name\" title=\"" + escapeHtml(line.item_name || "") + "\">" + escapeHtml(line.item_name) + "</td>" +
         "<td>" + escapeHtml(line.unit) + "</td>" +
         "<td><input type=\"number\" class=\"line-qty\" step=\"0.01\" min=\"0\" value=\"" + escapeHtml(line.qty) + "\" data-idx=\"" + idx + "\"></td>" +
         "<td><button type=\"button\" class=\"btn danger remove-line\" data-idx=\"" + idx + "\">{{ _('حذف') }}</button></td>";
