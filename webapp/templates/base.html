@@ -213,21 +213,96 @@
   })();
   </script>
   {% endif %}
+  <div id="deletePasswordModal" class="delete-pw-backdrop" hidden>
+    <div class="delete-pw-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePasswordTitle">
+      <h3 id="deletePasswordTitle" class="section-title" style="font-size:1.05rem;margin:0 0 8px;">{{ _('تأكيد الحذف') }}</h3>
+      <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">{{ _('أدخل كلمة سر الحذف للمتابعة') }}</p>
+      <label class="field" style="display:block;margin-bottom:12px;">
+        <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كلمة سر الحذف') }}</span>
+        <input type="password" id="deletePasswordInput" autocomplete="off" inputmode="numeric" dir="ltr" style="text-align:left;width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+      </label>
+      <p class="meta" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
+      <div class="actions" style="justify-content:flex-end;">
+        <button type="button" class="btn ghost" id="deletePasswordCancel">{{ _('إلغاء') }}</button>
+        <button type="button" class="btn danger" id="deletePasswordConfirm">{{ _('تأكيد الحذف') }}</button>
+      </div>
+    </div>
+  </div>
   <script>
-  window.requireDeletePassword = function (form, message) {
-    var msg = message || {{ _('أدخل كلمة سر الحذف')|tojson }};
-    var p = window.prompt(msg);
-    if (p === null) return false;
-    var input = form.querySelector('input[name="delete_password"]');
-    if (!input) {
-      input = document.createElement("input");
-      input.type = "hidden";
-      input.name = "delete_password";
-      form.appendChild(input);
+  (function () {
+    var modal = document.getElementById("deletePasswordModal");
+    var input = document.getElementById("deletePasswordInput");
+    var hint = document.getElementById("deletePasswordHint");
+    var err = document.getElementById("deletePasswordError");
+    var pendingForm = null;
+    var emptyMsg = {{ _('أدخل كلمة سر الحذف')|tojson }};
+
+    function closeModal() {
+      if (!modal) return;
+      modal.hidden = true;
+      pendingForm = null;
+      if (input) input.value = "";
+      if (err) { err.style.display = "none"; err.textContent = ""; }
     }
-    input.value = p;
-    return true;
-  };
+
+    function openModal(form, message) {
+      pendingForm = form;
+      if (hint && message) hint.textContent = message;
+      if (err) { err.style.display = "none"; err.textContent = ""; }
+      if (input) input.value = "";
+      modal.hidden = false;
+      setTimeout(function () { if (input) input.focus(); }, 30);
+    }
+
+    function submitWithPassword() {
+      if (!pendingForm || !input) return;
+      var p = (input.value || "").trim();
+      if (!p) {
+        if (err) {
+          err.textContent = emptyMsg;
+          err.style.display = "block";
+        }
+        input.focus();
+        return;
+      }
+      var field = pendingForm.querySelector('input[name="delete_password"]');
+      if (!field) {
+        field = document.createElement("input");
+        field.type = "hidden";
+        field.name = "delete_password";
+        pendingForm.appendChild(field);
+      }
+      field.value = p;
+      var form = pendingForm;
+      closeModal();
+      form.submit();
+    }
+
+    window.requireDeletePassword = function (form, message) {
+      openModal(form, message || emptyMsg);
+      return false;
+    };
+
+    var cancelBtn = document.getElementById("deletePasswordCancel");
+    var confirmBtn = document.getElementById("deletePasswordConfirm");
+    if (cancelBtn) cancelBtn.addEventListener("click", closeModal);
+    if (confirmBtn) confirmBtn.addEventListener("click", submitWithPassword);
+    if (modal) {
+      modal.addEventListener("click", function (e) {
+        if (e.target === modal) closeModal();
+      });
+    }
+    if (input) {
+      input.addEventListener("keydown", function (e) {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          submitWithPassword();
+        } else if (e.key === "Escape") {
+          closeModal();
+        }
+      });
+    }
+  })();
   </script>
 </body>
 </html>

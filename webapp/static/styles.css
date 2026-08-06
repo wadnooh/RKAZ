@@ -243,6 +243,25 @@ body {
   outline: 2px solid rgba(138, 115, 73, 0.35);
   outline-offset: 1px;
 }
+.delete-pw-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  background: rgba(18, 32, 48, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.delete-pw-backdrop[hidden] { display: none !important; }
+.delete-pw-dialog {
+  width: min(420px, 100%);
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 18px 16px 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+}
 
 .stats-grid {
   display: grid;
