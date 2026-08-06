@@ -632,8 +632,10 @@ def _warehouse_tx_count_map(source: str, conn) -> dict:
 def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: str, list_endpoint: str):
     db.backfill_warehouse_tx_sources()
     view = (request.args.get("view") or "").strip().lower()
-    # التبويبات الداخلية حسب التخصص (مثل الأعطال / الفرق في العمليات)
-    if source == "ops" and view not in ("tickets", "teams", "movements"):
+    # التبويبات الداخلية حسب التخصص (أعطال / أوامر عمل / حركات)
+    if view == "teams":
+        view = "work_orders"
+    if source == "ops" and view not in ("tickets", "work_orders", "movements"):
         view = "tickets"
     if source == "constructions" and view not in ("works", "movements"):
         view = "works"
@@ -646,7 +648,6 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
     tx_count = db.count_warehouse_tx_by_source(source, conn)
     tx_rows = []
     rows = []
-    teams = []
 
     if view == "movements":
         tx_rows = db.rows_to_dicts(
@@ -670,18 +671,25 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 or ql in (r.get("source_ref") or "").lower()
                 or ql in (r.get("ticket_no") or "").lower()
             ]
-    elif view == "teams":
-        teams = db.rows_to_dicts(conn.execute("SELECT * FROM teams ORDER BY id").fetchall())
+    elif view == "work_orders":
+        # أوامر العمل = أعطال لها رقم أمر عمل (ليست أسماء فرق)
+        sql = "SELECT * FROM tickets WHERE trim(coalesce(work_order,'')) <> ''"
+        params = []
         if q:
-            ql = q.lower()
-            teams = [
-                r
-                for r in teams
-                if ql in (r.get("name") or "").lower()
-                or ql in (r.get("leader") or "").lower()
-                or ql in (r.get("area") or "").lower()
-            ]
-    elif view == "tickets" or (source == "ops" and view == "tickets"):
+            sql += " AND (work_order LIKE ? OR ticket_no LIKE ? OR rekaz_code LIKE ? OR district LIKE ? OR fault_type LIKE ?)"
+            like = f"%{q}%"
+            params.extend([like, like, like, like, like])
+        if status:
+            sql += " AND status=?"
+            params.append(status)
+        sql += " ORDER BY id DESC"
+        rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
+        cmap = _warehouse_tx_count_map("ops", conn)
+        for r in rows:
+            tno = str(r.get("ticket_no") or "")
+            wo = str(r.get("work_order") or "")
+            r["wh_count"] = cmap.get(tno, 0) + (cmap.get(wo, 0) if wo and wo != tno else 0)
+    elif view == "tickets":
         sql = "SELECT * FROM tickets WHERE 1=1"
         params = []
         if q:
@@ -738,7 +746,6 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         q=q,
         status=status,
         rows=rows,
-        teams=teams,
         tx_rows=tx_rows,
         tx_count=tx_count,
         list_endpoint=list_endpoint,
@@ -769,7 +776,7 @@ def warehouse_ops():
         "ops",
         "ops",
         _t("العمليات والصيانة"),
-        _t("عرض الأعطال وفرق المهام العاجلة داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
+        _t("عرض الأعطال وأوامر العمل داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         "warehouse_ops",
     )
 
@@ -789,35 +796,53 @@ def warehouse_projects():
 @app.route("/warehouses/ops/ticket/<int:ticket_id>")
 @login_required
 def warehouse_ticket_detail(ticket_id):
-    """تفاصيل عطل للعرض داخل المستودع فقط (لا يفتح تبويب العمليات)."""
+    """تفاصيل عطل/أمر عمل للعرض داخل المستودع فقط (لا يفتح تبويب العمليات)."""
+    from_view = (request.args.get("from_view") or "tickets").strip().lower()
+    if from_view not in ("tickets", "work_orders"):
+        from_view = "tickets"
     conn = db.connect()
     row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
     if not row:
         conn.close()
         flash(_t("العطل غير موجود"), "danger")
-        return redirect(url_for("warehouse_ops"))
+        return redirect(url_for("warehouse_ops", view=from_view))
     ticket = dict(row)
     tno = ticket.get("ticket_no") or ""
-    txs = db.rows_to_dicts(
-        conn.execute(
-            """
-            SELECT * FROM warehouse_tx
-            WHERE ticket_no=? OR (source_ref<>'' AND source_ref=?)
-               OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
-            ORDER BY id DESC
-            """,
-            (tno, tno, ticket.get("rekaz_code") or ""),
-        ).fetchall()
-    )
+    wo = (ticket.get("work_order") or "").strip()
+    if wo:
+        txs = db.rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM warehouse_tx
+                WHERE ticket_no=? OR (source_ref<>'' AND source_ref IN (?, ?))
+                   OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
+                ORDER BY id DESC
+                """,
+                (tno, tno, wo, ticket.get("rekaz_code") or ""),
+            ).fetchall()
+        )
+    else:
+        txs = db.rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM warehouse_tx
+                WHERE ticket_no=? OR (source_ref<>'' AND source_ref=?)
+                   OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
+                ORDER BY id DESC
+                """,
+                (tno, tno, ticket.get("rekaz_code") or ""),
+            ).fetchall()
+        )
     conn.close()
+    is_wo = from_view == "work_orders"
     return render_template(
         "warehouse_record_detail.html",
         warehouse_active="ops",
-        kind="ticket",
-        title=_t("تفاصيل العطل"),
+        kind="work_order" if is_wo else "ticket",
+        title=_t("تفاصيل أمر العمل") if is_wo else _t("تفاصيل العطل"),
         record=ticket,
         txs=txs,
-        back_url=url_for("warehouse_ops", view="tickets"),
+        back_url=url_for("warehouse_ops", view=from_view),
         issue_url=url_for(
             "module_new",
             name="warehouse_tx",

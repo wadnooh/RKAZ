@@ -19,14 +19,24 @@
   <div class="table-wrap">
     <table class="table" style="min-width:0">
       <tbody>
-        {% if kind == 'ticket' %}
-        <tr><th>{{ _('رقم العطل') }}</th><td><strong>{{ record.ticket_no }}</strong></td></tr>
+        {% if kind == 'work_order' %}
+        <tr><th>{{ _('رقم أمر العمل') }}</th><td><strong>{{ record.work_order or '—' }}</strong></td></tr>
+        <tr><th>{{ _('رقم العطل') }}</th><td>{{ record.ticket_no or '—' }}</td></tr>
         <tr><th>{{ _('كود ER') }}</th><td>{{ record.rekaz_code or '—' }}</td></tr>
         <tr><th>{{ _('التاريخ') }}</th><td>{{ record.receive_date or '—' }}</td></tr>
         <tr><th>{{ _('الحي') }}</th><td>{{ record.district or '—' }}</td></tr>
         <tr><th>{{ _('العطل') }}</th><td>{{ record.fault_type or '—' }}</td></tr>
         <tr><th>{{ _('التصنيف') }}</th><td>{{ record.classification or '—' }}</td></tr>
-        <tr><th>{{ _('الفرقة') }}</th><td>{{ record.team or '—' }}</td></tr>
+        <tr><th>{{ _('الحالة') }}</th><td>{{ tv(record.status) if record.status else '—' }}</td></tr>
+        <tr><th>{{ _('الموقع') }}</th><td>{{ record.location or '—' }}</td></tr>
+        {% elif kind == 'ticket' %}
+        <tr><th>{{ _('رقم العطل') }}</th><td><strong>{{ record.ticket_no }}</strong></td></tr>
+        <tr><th>{{ _('كود ER') }}</th><td>{{ record.rekaz_code or '—' }}</td></tr>
+        <tr><th>{{ _('أمر العمل') }}</th><td>{{ record.work_order or '—' }}</td></tr>
+        <tr><th>{{ _('التاريخ') }}</th><td>{{ record.receive_date or '—' }}</td></tr>
+        <tr><th>{{ _('الحي') }}</th><td>{{ record.district or '—' }}</td></tr>
+        <tr><th>{{ _('العطل') }}</th><td>{{ record.fault_type or '—' }}</td></tr>
+        <tr><th>{{ _('التصنيف') }}</th><td>{{ record.classification or '—' }}</td></tr>
         <tr><th>{{ _('الحالة') }}</th><td>{{ tv(record.status) if record.status else '—' }}</td></tr>
         <tr><th>{{ _('الموقع') }}</th><td>{{ record.location or '—' }}</td></tr>
         {% elif kind == 'construction' %}
