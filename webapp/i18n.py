@@ -250,6 +250,7 @@ PHRASE_EN = {
     'إدارة فرق الطوارئ بمكتب خريص': 'Manage emergency teams at Khurais office',
     'الفرق الميدانية': 'Field teams',
     'بحث برقم/اسم المادة أو التصنيف...': 'Search by material No./name or category...',
+    'بحث برقم أو اسم المادة...': 'Search by material No. or name...',
     'إدارة قائمة المواد من شاشة': 'Manage materials list from',
     'لربط المنصرف/الوارد بالمعاملة.': 'to link issue/receipt to the transaction.',
     'رقم البلاغ': 'Ticket/report No.',
