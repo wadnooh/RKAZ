@@ -1418,7 +1418,7 @@ def _delete_password_ok() -> bool:
 
 
 def _reject_bad_delete_password(fallback_url: str):
-    flash(_t("كلمة سر الحذف غير صحيحة — اضغط حذف وأدخل 112233 في مربع التأكيد"), "danger")
+    flash(_t("كلمة سر الحذف غير صحيحة — أعد المحاولة من مربع التأكيد"), "danger")
     nxt = (request.form.get("next") or "").strip()
     return redirect(nxt or fallback_url)
 

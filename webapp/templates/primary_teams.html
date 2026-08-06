@@ -57,11 +57,11 @@
           <td class="actions">
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='primary_team_orders', row_id=r.id) }}?from=ops">{{ _('تعديل') }}</a>
-            <form method="post" style="display:inline" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لحذف أمر العمل')|tojson }});">
+            <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف أمر العمل') }}" style="display:inline">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="{{ r.id }}">
               <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
             </form>
             {% else %}—{% endif %}
           </td>

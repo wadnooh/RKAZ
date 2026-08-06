@@ -51,11 +51,11 @@
           <td><span class="badge ok">{{ t.status or '—' }}</span></td>
           <td>
             {% if can('teams.write') %}
-            <form method="post" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لحذف الفرقة')|tojson }});">
+            <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف الفرقة') }}">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="{{ t.id }}">
               <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
             </form>
             {% else %}—{% endif %}
           </td>

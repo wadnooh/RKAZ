@@ -220,7 +220,7 @@
       <div id="deletePasswordForm" style="margin:0;">
         <label class="field" style="display:block;margin-bottom:12px;" for="deletePasswordInput">
           <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كلمة سر الحذف') }}</span>
-          <input type="text" id="deletePasswordInput" name="delete_password_ui" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" dir="ltr" placeholder="112233" tabindex="1" style="text-align:left;width:100%;padding:12px 14px;border:2px solid #8a7349;border-radius:10px;font-size:1.15rem;letter-spacing:0.1em;box-sizing:border-box;">
+          <input type="password" id="deletePasswordInput" name="delete_password_ui" autocomplete="new-password" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" dir="ltr" placeholder="••••••" tabindex="1" style="text-align:left;width:100%;padding:12px 14px;border:2px solid #8a7349;border-radius:10px;font-size:1.15rem;letter-spacing:0.2em;box-sizing:border-box;">
         </label>
         <p class="meta" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
         <div class="actions" style="justify-content:flex-end;gap:8px;">
@@ -239,12 +239,11 @@
     var pendingForm = null;
     var emptyMsg = {{ _('أدخل كلمة سر الحذف')|tojson }};
     var focusTimer = null;
+    var submitting = false;
 
     function mountModalTop() {
       if (!modal) return;
-      if (modal.parentNode !== document.body) document.body.appendChild(modal);
-      // دائماً آخر عنصر في body ليكون فوق كل الطبقات
-      if (document.body.lastElementChild !== modal) document.body.appendChild(modal);
+      document.body.appendChild(modal);
     }
     mountModalTop();
 
@@ -270,17 +269,12 @@
     }
 
     function activateInput() {
-      if (!input) return;
+      if (!input || submitting) return;
       try {
-        input.removeAttribute("readonly");
-        input.removeAttribute("disabled");
-        input.tabIndex = 1;
-        input.focus({ preventScroll: false });
-        input.click();
-        input.select();
-      } catch (e) {
-        try { input.focus(); } catch (e2) {}
-      }
+        input.readOnly = false;
+        input.disabled = false;
+        input.focus();
+      } catch (e) {}
     }
 
     function closeModal() {
@@ -291,17 +285,19 @@
       }
       lockBody(false);
       pendingForm = null;
+      submitting = false;
       if (input) input.value = "";
       if (err) { err.style.display = "none"; err.textContent = ""; }
     }
 
     function openModal(form, message) {
+      if (!form || submitting) return;
       pendingForm = form;
-      if (hint && message) hint.textContent = message;
+      if (hint) hint.textContent = message || emptyMsg;
       if (input) {
         input.value = "";
-        input.removeAttribute("readonly");
-        input.removeAttribute("disabled");
+        input.readOnly = false;
+        input.disabled = false;
       }
       if (err) { err.style.display = "none"; err.textContent = ""; }
       mountModalTop();
@@ -310,17 +306,40 @@
         modal.style.cssText = "display:flex !important;z-index:2147483646 !important;align-items:flex-start;padding-top:28px;";
       }
       lockBody(true);
-      // تفعيل فوري + إعادة تركيز لضمان الكتابة على الموبايل/الكمبيوتر
-      activateInput();
       if (focusTimer) clearTimeout(focusTimer);
-      focusTimer = setTimeout(activateInput, 30);
-      setTimeout(activateInput, 120);
-      setTimeout(activateInput, 280);
+      focusTimer = setTimeout(activateInput, 50);
+      setTimeout(activateInput, 150);
+    }
+
+    function submitPendingForm(password) {
+      var form = pendingForm;
+      if (!form) return false;
+      var field = ensurePasswordField(form);
+      field.value = password;
+      form.setAttribute("data-delete-ready", "1");
+      pendingForm = null;
+      submitting = true;
+      if (modal) {
+        modal.hidden = true;
+        modal.style.display = "none";
+      }
+      lockBody(false);
+      // إرسال أصلي يتجاوز onsubmit ويعتمد على الحقل المخفي
+      try {
+        HTMLFormElement.prototype.submit.call(form);
+      } catch (submitErr) {
+        submitting = false;
+        openModal(form, hint ? hint.textContent : emptyMsg);
+        showError(emptyMsg);
+        return false;
+      }
+      return true;
     }
 
     function confirmDelete(e) {
       if (e && e.preventDefault) e.preventDefault();
       if (e && e.stopPropagation) e.stopPropagation();
+      if (submitting) return false;
       if (!pendingForm) {
         showError({{ _('اضغط حذف أولاً ثم أدخل كلمة السر')|tojson }});
         return false;
@@ -332,27 +351,7 @@
         activateInput();
         return false;
       }
-
-      var form = pendingForm;
-      ensurePasswordField(form).value = p;
-      form.onsubmit = null;
-      form.removeAttribute("onsubmit");
-      form.setAttribute("data-delete-ready", "1");
-
-      pendingForm = null;
-      if (modal) {
-        modal.hidden = true;
-        modal.style.display = "none";
-      }
-      lockBody(false);
-
-      try {
-        HTMLFormElement.prototype.submit.call(form);
-      } catch (submitErr) {
-        openModal(form, hint ? hint.textContent : emptyMsg);
-        showError(String((submitErr && submitErr.message) || emptyMsg));
-      }
-      return false;
+      return submitPendingForm(p);
     }
 
     window.requireDeletePassword = function (form, message) {
@@ -361,12 +360,42 @@
         form.removeAttribute("data-delete-ready");
         return true;
       }
-      openModal(form, message || emptyMsg);
+      openModal(form, message || form.getAttribute("data-delete-msg") || emptyMsg);
       return false;
     };
 
     window.__confirmWarehouseDelete = confirmDelete;
     window.__closeDeletePasswordModal = closeModal;
+
+    // زر حذف type=button — يفتح المربع دون إرسال النموذج فارغاً
+    document.addEventListener("click", function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest("[data-delete-confirm]") : null;
+      if (!btn) return;
+      var form = btn.closest("form");
+      if (!form) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      // تحقق من الحقول المطلوبة (مثل كتابة «مسح») قبل فتح كلمة السر
+      if (typeof form.reportValidity === "function" && !form.reportValidity()) return;
+      openModal(form, form.getAttribute("data-delete-msg") || emptyMsg);
+    }, true);
+
+    // حماية إضافية: أي submit لنموذج محمي بدون كلمة سر يُوقف ويُفتح المربع
+    document.addEventListener("submit", function (ev) {
+      var form = ev.target;
+      if (!form || !form.classList || !form.classList.contains("js-delete-guard")) return;
+      if (form.getAttribute("data-delete-ready") === "1") {
+        form.removeAttribute("data-delete-ready");
+        return;
+      }
+      var field = form.querySelector('input[name="delete_password"]');
+      var p = field ? String(field.value || "").trim() : "";
+      if (p) return;
+      ev.preventDefault();
+      ev.stopPropagation();
+      if (ev.stopImmediatePropagation) ev.stopImmediatePropagation();
+      openModal(form, form.getAttribute("data-delete-msg") || emptyMsg);
+    }, true);
 
     var confirmBtn = document.getElementById("deletePasswordConfirm");
     var cancelBtn = document.getElementById("deletePasswordCancel");
@@ -390,10 +419,6 @@
           ev.preventDefault();
           confirmDelete(ev);
         }
-      });
-      input.addEventListener("pointerdown", function (ev) {
-        ev.stopPropagation();
-        activateInput();
       });
     }
     if (modal) {

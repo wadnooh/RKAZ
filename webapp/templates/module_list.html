@@ -148,9 +148,9 @@
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}
             {% if can_mod_delete %}
-            <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف')|tojson }});" style="display:inline">
+            <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
               <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
             </form>
             {% endif %}
           </td>

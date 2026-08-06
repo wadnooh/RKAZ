@@ -47,9 +47,9 @@
       {% endif %}
       <a class="btn {% if editing %}ghost{% else %}primary{% endif %}" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">{{ _('طباعة التقرير') }}</a>
       {% if editing and can('tickets.delete') %}
-      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لحذف العطل')|tojson }});">
+      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف العطل') }}">
         <input type="hidden" name="delete_password" value="">
-        <button class="btn danger" type="submit">{{ _('حذف') }}</button>
+        <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
       </form>
       {% endif %}
     </div>
@@ -282,9 +282,9 @@
           <td><strong>{% if line.final_total is not none %}{{ line.final_total|money }}{% else %}—{% endif %}</strong></td>
           {% if editing and can('tickets.write') %}
           <td class="actions">
-            <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لحذف البند')|tojson }});">
+            <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف البند') }}">
               <input type="hidden" name="delete_password" value="">
-              <button class="btn ghost" type="submit">{{ _('حذف') }}</button>
+              <button class="btn ghost" type="button" data-delete-confirm>{{ _('حذف') }}</button>
             </form>
           </td>
           {% endif %}
