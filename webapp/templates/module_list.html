@@ -106,6 +106,7 @@
         {% for r in rows %}
         <tr>
           {% for key, label, ftype in module.fields if key in module.list_cols %}
+          {% if not (name == 'warehouse_tx' and source_filter and key == 'source_section') %}
           <td>
             {% if key == 'ticket_no' and r[key] %}
               <a href="{{ url_for('tickets_list', q=r[key]) }}">{{ r[key] }}</a>
@@ -132,6 +133,7 @@
               {{ r[key] if r[key] not in [None, ''] else '—' }}
             {% endif %}
           </td>
+          {% endif %}
           {% endfor %}
           {% if name == 'quantities' or name == 'external_purchases' %}<td>{{ r.total|money }}</td>{% endif %}
           {% if name == 'photos' %}<td>{{ r.complete }}</td>{% endif %}
