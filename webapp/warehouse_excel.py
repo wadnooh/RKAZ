@@ -24,6 +24,7 @@ TX_HEADERS = [
     "رقم السند",
     "تاريخ الحركة",
     "نوع الحركة",
+    "رقم أمر العمل",
     "رقم المادة",
     "اسم المادة",
     "الوحدة",
@@ -80,6 +81,9 @@ _TX_ALIASES = {
     "unit": "unit",
     "الكمية": "qty",
     "qty": "qty",
+    "رقم أمر العمل": "work_order",
+    "أمر العمل": "work_order",
+    "work_order": "work_order",
     "المستلم / المسلم": "recipient",
     "المستلم": "recipient",
     "recipient": "recipient",
@@ -380,6 +384,10 @@ def import_tx_from_excel(file_storage) -> dict:
         unit = _cell(row, inv.get("unit")) or (item["unit"] if item else "عدد")
         tx_type = _cell(row, inv.get("tx_type")) or "وارد من الكهرباء"
         ticket_no = _cell(row, inv.get("ticket_no"))
+        work_order = _cell(row, inv.get("work_order"))
+        # لا تضع رقم العطل في أمر العمل
+        if work_order and ticket_no and work_order == ticket_no:
+            work_order = ""
         voucher_no = _cell(row, inv.get("voucher_no")) or f"TX-{today}-{i}"
         tx_date = today
         if inv.get("tx_date") is not None:
@@ -393,8 +401,8 @@ def import_tx_from_excel(file_storage) -> dict:
             """
             INSERT INTO warehouse_tx(
                 voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
-                recipient, sender, ticket_no, region, notes
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+                recipient, sender, ticket_no, work_order, region, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 voucher_no,
@@ -407,6 +415,7 @@ def import_tx_from_excel(file_storage) -> dict:
                 _cell(row, inv.get("recipient")),
                 _cell(row, inv.get("sender")),
                 ticket_no,
+                work_order,
                 _cell(row, inv.get("region")),
                 _cell(row, inv.get("notes")),
             ),

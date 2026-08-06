@@ -66,7 +66,7 @@
         <input type="text" value="{{ source_label }}" readonly>
       </div>
       <div class="field">
-        <label>{{ _('أمر العمل') }}</label>
+        <label>{{ _('رقم أمر العمل') }}</label>
         <input type="text" name="work_order" value="{{ header.work_order or '' }}" {% if header.work_order %}readonly{% endif %}>
         <input type="hidden" name="source_ref" value="{{ header.source_ref or '' }}">
       </div>

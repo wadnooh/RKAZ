@@ -38,9 +38,9 @@
           <th>{{ _('السند') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('النوع') }}</th>
+          <th>{{ _('رقم أمر العمل') }}</th>
           <th>{{ _('المادة') }}</th>
           <th>{{ _('الكمية') }}</th>
-          <th>{{ _('أمر العمل') }}</th>
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('المستلم') }}</th>
           <th>{{ _('المسلم') }}</th>
@@ -57,9 +57,9 @@
           </td>
           <td>{{ w.tx_date or '—' }}</td>
           <td>{{ w.tx_type or '—' }}</td>
+          <td><strong>{{ w.work_order or '—' }}</strong></td>
           <td>{{ w.item_no or '—' }} — {{ w.item_name or '' }}</td>
           <td>{{ w.qty if w.qty is not none else '—' }}</td>
-          <td>{{ w.work_order or '—' }}</td>
           <td>{{ w.ticket_no or '—' }}</td>
           <td>{{ w.recipient or '—' }}</td>
           <td>{{ w.sender or '—' }}</td>
@@ -146,6 +146,7 @@
         <tr>
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('كود ER') }}</th>
+          <th>{{ _('رقم أمر العمل') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('الحي') }}</th>
           <th>{{ _('العطل') }}</th>
@@ -160,6 +161,7 @@
         <tr>
           <td><strong>{{ t.ticket_no }}</strong></td>
           <td>{{ t.rekaz_code or '—' }}</td>
+          <td><strong>{{ t.work_order or '—' }}</strong></td>
           <td>{{ t.receive_date or '—' }}</td>
           <td>{{ t.district or '—' }}</td>
           <td>{{ t.fault_type or '—' }}</td>
@@ -176,7 +178,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">{{ _('لا توجد أعطال') }}</td></tr>
+        <tr><td colspan="10" class="meta">{{ _('لا توجد أعطال') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

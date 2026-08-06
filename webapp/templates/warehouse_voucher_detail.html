@@ -31,7 +31,7 @@
         </tr>
         <tr>
           <th>{{ _('تاريخ المعاملة') }}</th><td>{{ head.tx_date or '—' }}</td>
-          <th>{{ _('أمر العمل') }}</th><td>{{ work_order or parent.work_order or '—' }}</td>
+          <th>{{ _('رقم أمر العمل') }}</th><td><strong>{{ work_order or parent.work_order or '—' }}</strong></td>
         </tr>
         <tr>
           <th>{{ _('موقع المعاملة') }}</th><td>{{ parent.site or parent.label or '—' }}</td>

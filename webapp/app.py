@@ -2425,6 +2425,7 @@ def module_list(name):
     source_filter = (request.args.get("source") or "").strip().lower()
     if name == "warehouse_tx":
         db.backfill_warehouse_tx_sources()
+        db.enrich_warehouse_txs_work_order(rows)
     if name == "warehouse_items":
         for r in rows:
             r["balance"] = db.warehouse_balance(r.get("item_no"))
