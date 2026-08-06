@@ -587,17 +587,58 @@ def safety_home():
 @app.route("/warehouses")
 @login_required
 def warehouses_home():
-    links = section_links("warehouses")
-    links.append({"label": _t("أرصدة المواد"), "href": url_for("warehouse_balances"), "count": _count("warehouse_items")})
+    db.backfill_warehouse_tx_sources()
+    links = [
+        {
+            "label": _t("حركات الإنشاءات"),
+            "href": url_for("module_list", name="warehouse_tx", source="constructions"),
+            "count": db.count_warehouse_tx_by_source("constructions"),
+        },
+        {
+            "label": _t("حركات العمليات والصيانة"),
+            "href": url_for("module_list", name="warehouse_tx", source="ops"),
+            "count": db.count_warehouse_tx_by_source("ops"),
+        },
+        {
+            "label": _t("حركات المشاريع"),
+            "href": url_for("module_list", name="warehouse_tx", source="projects"),
+            "count": db.count_warehouse_tx_by_source("projects"),
+        },
+        {
+            "label": _t("كل الحركات"),
+            "href": url_for("module_list", name="warehouse_tx"),
+            "count": db.count_warehouse_tx_by_source(),
+        },
+    ]
+    links.extend(section_links("warehouses"))
+    links.append(
+        {
+            "label": _t("أرصدة المواد"),
+            "href": url_for("warehouse_balances"),
+            "count": _count("warehouse_items"),
+        }
+    )
+    # إزالة تكرار «معاملات المستودع» العام إن وُجد من section_links
+    seen = set()
+    deduped = []
+    for item in links:
+        key = item.get("href")
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(item)
     return render_template(
         "section_hub.html",
         title=_t("المستودعات"),
-        subtitle=_t("الأصناف للمعاملات، والحركات والأرصدة لمتابعة الوارد والمنصرف."),
-        links=links,
+        subtitle=_t(
+            "تظهر حركات المواد تلقائياً حسب مصدرها: الإنشاءات، العمليات والصيانة، والمشاريع."
+        ),
+        links=deduped,
         section="warehouses",
         section_modules=modules_for_section("warehouses"),
         section_meta=_smeta(SECTION_META["warehouses"]),
         total_count=_count("warehouse_tx"),
+        warehouse_source=None,
     )
 
 
@@ -1368,6 +1409,9 @@ def _redirect_after_module(name, data, form_ctx=None):
             return redirect(url_for("module_list", name="construction_works"))
         if form_ctx == "projects":
             return redirect(url_for("module_list", name="projects"))
+        source = (request.values.get("source") or "").strip().lower()
+        if source in _warehouse_main_sections():
+            return redirect(url_for("module_list", name=name, source=source))
         if tno:
             return redirect(url_for("module_list", name=name, ticket_no=tno))
         return redirect(url_for("module_list", name=name))
@@ -1485,11 +1529,20 @@ def module_list(name):
             r["total"] = (float(r.get("qty") or 0) * float(r.get("unit_price") or 0))
     item_filter = (request.args.get("item_no") or "").strip()
     ticket_filter = (request.args.get("ticket_no") or "").strip()
+    source_filter = (request.args.get("source") or "").strip().lower()
+    if name == "warehouse_tx":
+        db.backfill_warehouse_tx_sources()
     if name == "warehouse_items":
         for r in rows:
             r["balance"] = db.warehouse_balance(r.get("item_no"))
     if name == "warehouse_tx" and item_filter:
         rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
+    if name == "warehouse_tx" and source_filter in ("ops", "constructions", "projects"):
+        rows = [
+            r
+            for r in rows
+            if (r.get("source_section") or "").strip().lower() == source_filter
+        ]
     if ticket_filter and any(f[0] == "ticket_no" for f in module.get("fields", [])):
         rows = [r for r in rows if (r.get("ticket_no") or "") == ticket_filter]
     section = module.get("section")
@@ -1501,9 +1554,11 @@ def module_list(name):
         tickets=tickets,
         item_filter=item_filter,
         ticket_filter=ticket_filter,
+        source_filter=source_filter if name == "warehouse_tx" else "",
         section=section,
         section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
+        warehouse_source=source_filter if name == "warehouse_tx" else None,
     )
 
 
@@ -1927,6 +1982,7 @@ def warehouse_balances():
         section="warehouses",
         section_meta=_smeta(SECTION_META["warehouses"]),
         section_modules=modules_for_section("warehouses"),
+        warehouse_source=None,
     )
 
 

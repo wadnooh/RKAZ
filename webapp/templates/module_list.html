@@ -10,12 +10,28 @@
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">{{ module.title }}</h2>
+      <h2 class="section-title">
+        {% if name == 'warehouse_tx' and source_filter == 'constructions' %}
+        {{ _('حركات مستودع الإنشاءات') }}
+        {% elif name == 'warehouse_tx' and source_filter == 'ops' %}
+        {{ _('حركات مستودع العمليات والصيانة') }}
+        {% elif name == 'warehouse_tx' and source_filter == 'projects' %}
+        {{ _('حركات مستودع المشاريع') }}
+        {% else %}
+        {{ module.title }}
+        {% endif %}
+      </h2>
       <div class="meta">
         {% if name == 'warehouse_items' %}
         {{ _('سجل المواد المستخدمة في المعاملات — الاستيراد والإضافة من هنا') }}
+        {% elif name == 'warehouse_tx' and source_filter == 'constructions' %}
+        {{ _('حركات أُدخلت من صفحة الإنشاءات وتظهر هنا تلقائياً') }}
+        {% elif name == 'warehouse_tx' and source_filter == 'ops' %}
+        {{ _('حركات أُدخلت من العمليات والصيانة (الأعطال) وتظهر هنا تلقائياً') }}
+        {% elif name == 'warehouse_tx' and source_filter == 'projects' %}
+        {{ _('حركات أُدخلت من صفحة المشاريع وتظهر هنا تلقائياً') }}
         {% elif name == 'warehouse_tx' %}
-        {{ _('نسخ الحركات من الصفحات الرئيسية (الإنشاءات / العمليات والصيانة / المشاريع) — بدون إدخال جديد من هنا') }}
+        {{ _('نسخ الحركات من الصفحات الرئيسية حسب التخصص — بدون إدخال جديد من هنا') }}
         {% elif ticket_filter %}
         {{ _('سجلات مرتبطة برقم العطل') }} <strong>{{ ticket_filter }}</strong>
         {% else %}
@@ -60,11 +76,12 @@
   </p>
   {% endif %}
 
-  {% if ticket_filter or (name == 'warehouse_tx' and item_filter) %}
+  {% if ticket_filter or (name == 'warehouse_tx' and (item_filter or source_filter)) %}
   <p class="meta" style="margin-bottom:10px;">
     {{ _('تصفية:') }}
-    {% if item_filter %}{{ _('المادة') }} <strong>{{ item_filter }}</strong>{% endif %}
-    {% if ticket_filter %}{% if item_filter %} | {% endif %}{{ _('رقم العطل') }} <strong>{{ ticket_filter }}</strong>{% endif %}
+    {% if source_filter == 'constructions' %}{{ _('الإنشاءات') }}{% elif source_filter == 'ops' %}{{ _('العمليات والصيانة') }}{% elif source_filter == 'projects' %}{{ _('المشاريع') }}{% endif %}
+    {% if item_filter %}{% if source_filter %} | {% endif %}{{ _('المادة') }} <strong>{{ item_filter }}</strong>{% endif %}
+    {% if ticket_filter %}{% if item_filter or source_filter %} | {% endif %}{{ _('رقم العطل') }} <strong>{{ ticket_filter }}</strong>{% endif %}
     — <a href="{{ url_for('module_list', name=name) }}">{{ _('إظهار الكل') }}</a>
   </p>
   {% endif %}
@@ -119,7 +136,7 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
-            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% endif %}">{{ _('تعديل') }}</a>{% endif %}
+            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
             {% if can_mod_write and name == 'construction_works' and r.work_no and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}

@@ -234,6 +234,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("warehouse_tx.source_section")
             if _ensure_column(conn, "warehouse_tx", "source_ref"):
                 created.append("warehouse_tx.source_ref")
+            n = backfill_warehouse_tx_sources(conn)
+            if n:
+                created.append(f"warehouse_tx.source_backfill:{n}")
         # أعمدة دليل بنود العقد الموسّع (قالب Excel ثنائي اللغة)
         for table in ("boq_items", "contract_boq_items"):
             if table in existing or table in created:
@@ -684,6 +687,7 @@ def init_db():
     _ensure_column(conn, "warehouse_tx", "rekaz_code")
     _ensure_column(conn, "warehouse_tx", "source_section")
     _ensure_column(conn, "warehouse_tx", "source_ref")
+    backfill_warehouse_tx_sources(conn)
     for _boq_table in ("boq_items", "contract_boq_items"):
         for _col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
             _ensure_column(conn, _boq_table, _col)
@@ -871,6 +875,46 @@ def next_series_code(series: str, conn=None) -> str:
     if own:
         conn.close()
     raise RuntimeError("تعذر توليد كود جديد")
+
+
+def count_warehouse_tx_by_source(source: str | None = None, conn=None) -> int:
+    """عدد حركات المستودع حسب القسم المصدر (ops/constructions/projects)."""
+    own = conn is None
+    conn = conn or connect()
+    source = (source or "").strip().lower()
+    if source in ("ops", "constructions", "projects"):
+        n = conn.execute(
+            "SELECT COUNT(*) FROM warehouse_tx WHERE lower(coalesce(source_section,''))=?",
+            (source,),
+        ).fetchone()[0]
+    else:
+        n = conn.execute("SELECT COUNT(*) FROM warehouse_tx").fetchone()[0]
+    if own:
+        conn.close()
+    return int(n or 0)
+
+
+def backfill_warehouse_tx_sources(conn=None) -> int:
+    """يملأ source_section للسجلات القديمة: عطل → ops."""
+    own = conn is None
+    conn = conn or connect()
+    cur = conn.execute(
+        """
+        UPDATE warehouse_tx
+        SET source_section='ops',
+            source_ref=CASE
+              WHEN coalesce(trim(source_ref),'')='' THEN coalesce(ticket_no,'')
+              ELSE source_ref
+            END
+        WHERE (source_section IS NULL OR trim(source_section)='')
+          AND ticket_no IS NOT NULL AND trim(ticket_no)<>''
+        """
+    )
+    n = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+    if own:
+        conn.commit()
+        conn.close()
+    return int(n or 0)
 
 
 def next_warehouse_voucher_no(conn=None) -> str:
