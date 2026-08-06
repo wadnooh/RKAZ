@@ -69,8 +69,9 @@
             {% endif %}
             {% if can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses&source={{ source }}">{{ _('تعديل') }}</a>
-            <form method="post" action="{{ url_for('warehouse_tx_delete', row_id=w.id) }}" style="display:inline" onsubmit="return confirm({{ _('حذف مادة الحركة؟')|tojson }});">
+            <form method="post" action="{{ url_for('warehouse_tx_delete', row_id=w.id) }}" style="display:inline" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لحذف مادة الحركة')|tojson }});">
               <input type="hidden" name="next" value="{{ url_for(list_endpoint, view='movements') }}">
+              <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
             {% endif %}

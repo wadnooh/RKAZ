@@ -76,7 +76,8 @@
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_items', row_id=r.id) }}">{{ _('تعديل') }}</a>
             {% endif %}
             {% if can('modules.delete') %}
-            <form method="post" action="{{ url_for('module_delete', name='warehouse_items', row_id=r.id) }}" onsubmit="return confirm({{ _('حذف؟')|tojson }});" style="display:inline">
+            <form method="post" action="{{ url_for('module_delete', name='warehouse_items', row_id=r.id) }}" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف')|tojson }});" style="display:inline">
+              <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
             {% endif %}
@@ -91,10 +92,11 @@
 
   {% else %}
   {% if can('modules.write') %}
-  <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="actions" style="margin-bottom:14px;flex-wrap:wrap;" onsubmit="return confirm({{ _('سيتم حذف كل حركات المستودع وتصفير الأرصدة. الأصناف لن تُحذف. هل تريد المتابعة؟')|tojson }});">
+  <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="actions" style="margin-bottom:14px;flex-wrap:wrap;" onsubmit="return requireDeletePassword(this, {{ _('أدخل كلمة سر الحذف لمسح الأرصدة')|tojson }});">
     <div style="flex:1;min-width:220px;">
       <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('مسح الأرصدة (حذف الحركات فقط)') }}</label>
       <input type="text" name="confirm" placeholder="{{ _('اكتب: مسح') }}" required autocomplete="off">
+      <input type="hidden" name="delete_password" value="">
     </div>
     <button class="btn ghost" type="submit" style="border-color:#c45c5c;color:#a33;">{{ _('مسح الأرصدة') }}</button>
   </form>

@@ -213,5 +213,21 @@
   })();
   </script>
   {% endif %}
+  <script>
+  window.requireDeletePassword = function (form, message) {
+    var msg = message || {{ _('أدخل كلمة سر الحذف')|tojson }};
+    var p = window.prompt(msg);
+    if (p === null) return false;
+    var input = form.querySelector('input[name="delete_password"]');
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "hidden";
+      input.name = "delete_password";
+      form.appendChild(input);
+    }
+    input.value = p;
+    return true;
+  };
+  </script>
 </body>
 </html>

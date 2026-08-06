@@ -1407,6 +1407,20 @@ def warehouse_tx_multi():
     )
 
 
+WAREHOUSE_DELETE_PASSWORD = "112233"
+
+
+def _delete_password_ok() -> bool:
+    """يتحقق من كلمة سر الحذف (112233)."""
+    return (request.form.get("delete_password") or "").strip() == WAREHOUSE_DELETE_PASSWORD
+
+
+def _reject_bad_delete_password(fallback_url: str):
+    flash(_t("كلمة سر الحذف غير صحيحة"), "danger")
+    nxt = (request.form.get("next") or "").strip()
+    return redirect(nxt or fallback_url)
+
+
 @app.route("/warehouses/tx/<int:row_id>/delete", methods=["POST"])
 @login_required
 def warehouse_tx_delete(row_id):
@@ -1414,6 +1428,8 @@ def warehouse_tx_delete(row_id):
     if not permissions.can("modules.write"):
         flash(_t("لا تملك صلاحية الحذف."), "danger")
         return redirect(request.form.get("next") or url_for("warehouses_home"))
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("warehouses_home"))
     conn = db.connect()
     row = conn.execute("SELECT * FROM warehouse_tx WHERE id=?", (row_id,)).fetchone()
     if not row:
@@ -2876,6 +2892,14 @@ def module_delete(name, row_id):
     module = MODULES.get(name)
     if not module:
         return redirect(url_for("ops_home"))
+    # حذف سجلات المستودع يتطلب كلمة سر
+    if name in ("warehouse_tx", "warehouse_items") and not _delete_password_ok():
+        fallback = (
+            url_for("warehouse_balances", view="items")
+            if name == "warehouse_items"
+            else url_for("module_list", name=name)
+        )
+        return _reject_bad_delete_password(fallback)
     conn = db.connect()
     conn.execute(f"DELETE FROM {module['table']} WHERE id=?", (row_id,))
     conn.commit()
@@ -3158,6 +3182,8 @@ def warehouse_balances_clear():
     """مسح كل حركات المستودع → أرصدة صفرية مع الإبقاء على أصناف المواد."""
     if not permissions.can("modules.write"):
         return permissions.deny_redirect()
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("warehouse_balances"))
     confirm = (request.form.get("confirm") or "").strip()
     if confirm != "مسح":
         flash(_t('للتأكيد اكتب كلمة «مسح» في خانة التأكيد ثم أعد المحاولة.'), "danger")
