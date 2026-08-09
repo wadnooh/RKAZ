@@ -51,6 +51,7 @@
   <nav class="tabs">
     {% if can('section.constructions') %}
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">{{ tr('nav_constructions') }}</a>
+    <a class="tab{% if p.startswith('/new-coordinations') or p.startswith('/module/new_coordinations') or p.startswith('/module/issued_licenses') %} active{% endif %}" href="{{ url_for('new_coords_home') }}">{{ tr('nav_new_coords') }}</a>
     {% endif %}
     {% if can('section.projects') %}
     <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>

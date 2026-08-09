@@ -50,6 +50,8 @@ SECTION_PERMS = {
     "projects": "section.projects",
     "ops": "section.ops",
     "contractors": "section.contractors",
+    # التنسيقات الجديدة مربوطة بصلاحية الإنشاءات
+    "new_coords": "section.constructions",
     "quality": "section.quality",
     "safety": "section.safety",
     "warehouses": "section.warehouses",
@@ -253,6 +255,16 @@ def required_perm_for_request() -> str | None:
         mod_name = args.get("name")
         section = _module_section(mod_name)
         section_perm = SECTION_PERMS.get(section or "")
+        # الرخص المصدرة: يُسمح بعرضها من القسم المرتبط (عمليات/مشاريع/إنشاءات)
+        if mod_name == "issued_licenses" and ep == "module_list":
+            linked = (request.args.get("linked_section") or "").strip().lower()
+            linked_perm = {
+                "ops": "section.ops",
+                "projects": "section.projects",
+                "constructions": "section.constructions",
+            }.get(linked)
+            if linked_perm and has_perm(linked_perm) and has_perm("modules.read"):
+                return None
         if section_perm and not has_perm(section_perm):
             return section_perm
         if ep == "module_list":
@@ -264,6 +276,11 @@ def required_perm_for_request() -> str | None:
             return None if has_perm("modules.write") else "modules.write"
         if ep == "module_delete":
             return None if has_perm("modules.delete") else "modules.delete"
+
+    if ep == "new_coordination_transfer":
+        if not has_perm("section.constructions"):
+            return "section.constructions"
+        return None if has_perm("modules.write") else "modules.write"
 
     if ep == "media_serve":
         # صور العمليات: يحتاج قراءة وحدات أو قراءة أعطال + قسم العمليات
@@ -296,6 +313,7 @@ def required_perm_for_request() -> str | None:
         "constructions_home": "section.constructions",
         "projects_home": "section.projects",
         "contractors_home": "section.contractors",
+        "new_coords_home": "section.constructions",
         "quality_home": "section.quality",
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
@@ -396,6 +414,7 @@ def _perm_for_path(path: str) -> str | None:
         ("/users", "users.manage"),
         ("/admin/audit", "audit.read"),
         ("/constructions", "section.constructions"),
+        ("/new-coordinations", "section.constructions"),
         ("/projects", "section.projects"),
         ("/contractors", "section.contractors"),
         ("/quality", "section.quality"),

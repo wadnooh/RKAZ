@@ -184,6 +184,14 @@ def _flash_excavation_link(result: dict | None):
         flash(" — ".join(parts), "ok")
 
 
+def _linked_section_label(section: str | None) -> str:
+    return {
+        "ops": _t("العمليات والصيانة"),
+        "projects": _t("المشاريع"),
+        "constructions": _t("الإنشاءات"),
+    }.get(db.normalize_linked_section(section), section or "—")
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -544,6 +552,10 @@ def ops_home():
     tools = [
         {"label": _t("الفرق الأولية"), "href": url_for("ops_primary_teams")},
         {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
+        {
+            "label": _t("الرخص المصدرة"),
+            "href": url_for("module_list", name="issued_licenses", linked_section="ops"),
+        },
     ]
 
     conn = db.connect()
@@ -568,6 +580,14 @@ def ops_home():
 @login_required
 def constructions_home():
     links = section_links("constructions")
+    links.append(
+        {
+            "label": _t("الرخص المصدرة"),
+            "href": url_for("module_list", name="issued_licenses", linked_section="constructions"),
+            "count": db.count_issued_licenses("constructions"),
+            "key": "issued_licenses_constructions",
+        }
+    )
     return render_template(
         "section_hub.html",
         title=_t("الإنشاءات - التنفيذ"),
@@ -580,10 +600,34 @@ def constructions_home():
     )
 
 
+@app.route("/new-coordinations")
+@login_required
+def new_coords_home():
+    links = section_links("new_coords")
+    return render_template(
+        "section_hub.html",
+        title=_t("التنسيقات الجديدة"),
+        subtitle=_t("تنسيقات مرتبطة بالإنشاءات — بعد إصدار الرخصة تُنقل إلى الرخص المصدرة وتُربط بالعمليات أو المشاريع أو الإنشاءات."),
+        links=links,
+        section="new_coords",
+        section_modules=modules_for_section("new_coords"),
+        section_meta=_smeta(SECTION_META["new_coords"]),
+        total_count=sum(i.get("count") or 0 for i in links),
+    )
+
+
 @app.route("/projects")
 @login_required
 def projects_home():
     links = section_links("projects")
+    links.append(
+        {
+            "label": _t("الرخص المصدرة"),
+            "href": url_for("module_list", name="issued_licenses", linked_section="projects"),
+            "count": db.count_issued_licenses("projects"),
+            "key": "issued_licenses_projects",
+        }
+    )
     return render_template(
         "section_hub.html",
         title=_t("المشاريع"),
@@ -2597,6 +2641,13 @@ def module_list(name):
     if excavation_filter and name in ("coordination", "quality_clearances"):
         excav_tickets = set(db.collect_excavation_ticket_nos())
         rows = [r for r in rows if (r.get("ticket_no") or "") in excav_tickets]
+    linked_section_filter = db.normalize_linked_section(request.args.get("linked_section") or "")
+    if linked_section_filter and name == "issued_licenses":
+        rows = [
+            r
+            for r in rows
+            if db.normalize_linked_section(r.get("linked_section")) == linked_section_filter
+        ]
     section = module.get("section")
     return render_template(
         "module_list.html",
@@ -2607,6 +2658,7 @@ def module_list(name):
         item_filter=item_filter,
         ticket_filter=ticket_filter,
         excavation_filter=excavation_filter,
+        linked_section_filter=linked_section_filter,
         source_filter=source_filter if name == "warehouse_tx" else "",
         section=section,
         section_meta=_smeta(SECTION_META.get(section)),
@@ -2780,6 +2832,24 @@ def module_new(name):
                 data["clearance_no"] = data["rekaz_code"]
         if name == "projects" and not (data.get("project_code") or "").strip():
             data["project_code"] = db.next_series_code("pr", conn)
+        if name == "new_coordinations":
+            if not (data.get("coord_no") or "").strip():
+                data["coord_no"] = db.next_series_code("nc", conn)
+            if not (data.get("request_date") or "").strip():
+                data["request_date"] = datetime.now().strftime("%Y-%m-%d")
+            if not (data.get("status") or "").strip():
+                data["status"] = "مسودة"
+            if not db.normalize_linked_section(data.get("linked_section")):
+                data["linked_section"] = "الإنشاءات"
+        if name == "issued_licenses":
+            if not (data.get("license_no") or "").strip():
+                data["license_no"] = db.next_series_code("rl", conn)
+            if not (data.get("issue_date") or "").strip():
+                data["issue_date"] = datetime.now().strftime("%Y-%m-%d")
+            if not (data.get("status") or "").strip():
+                data["status"] = "سارية"
+            if not db.normalize_linked_section(data.get("linked_section")):
+                data["linked_section"] = "الإنشاءات"
         if name == "primary_team_orders" and not (data.get("work_order") or "").strip():
             flash(_t("أمر العمل مطلوب"), "danger")
             section = module.get("section")
@@ -2799,9 +2869,10 @@ def module_new(name):
                 form_ctx=None,
             )
         keys = [f[0] for f in module["fields"]]
+        # transferred_license_id ليس في الحقول المعروضة — لا يُدرج من النموذج
         cur = conn.execute(
             f"INSERT INTO {module['table']}({', '.join(keys)}) VALUES ({', '.join(['?']*len(keys))})",
-            [data[k] for k in keys],
+            [data.get(k) for k in keys],
         )
         mirrored = 0
         if name == "warehouse_tx":
@@ -2820,6 +2891,9 @@ def module_new(name):
                 )
             else:
                 flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
+        transfer_res = None
+        if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
+            transfer_res = db.transfer_new_coordination_to_license(cur.lastrowid, conn=conn)
         conn.commit()
         new_id = cur.lastrowid
         conn.close()
@@ -2841,6 +2915,15 @@ def module_new(name):
         else:
             flash(_t("تمت الإضافة"), "ok")
         _flash_excavation_link(link_res)
+        if transfer_res and transfer_res.get("created"):
+            flash(
+                _t(
+                    "تم نقل الرخصة المصدرة {no} إلى قسم {sec}",
+                    no=transfer_res.get("license_no"),
+                    sec=_linked_section_label(transfer_res.get("linked_section")),
+                ),
+                "ok",
+            )
         _after_data_change()
         return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
@@ -2974,6 +3057,16 @@ def module_edit(name, row_id):
             data["rekaz_code"] = db.next_series_code("rr", conn)
         if name == "projects" and not (data.get("project_code") or "").strip():
             data["project_code"] = db.next_series_code("pr", conn)
+        if name == "new_coordinations":
+            if not (data.get("coord_no") or "").strip():
+                data["coord_no"] = dict(row).get("coord_no") or db.next_series_code("nc", conn)
+            if not db.normalize_linked_section(data.get("linked_section")):
+                data["linked_section"] = dict(row).get("linked_section") or "الإنشاءات"
+        if name == "issued_licenses":
+            if not (data.get("license_no") or "").strip():
+                data["license_no"] = dict(row).get("license_no") or db.next_series_code("rl", conn)
+            if not db.normalize_linked_section(data.get("linked_section")):
+                data["linked_section"] = dict(row).get("linked_section") or "الإنشاءات"
         if name == "primary_team_orders" and not (data.get("work_order") or "").strip():
             flash(_t("أمر العمل مطلوب"), "danger")
             section = module.get("section")
@@ -2996,7 +3089,7 @@ def module_edit(name, row_id):
         sets = ", ".join([f"{k}=?" for k in keys])
         conn.execute(
             f"UPDATE {module['table']} SET {sets} WHERE id=?",
-            [data[k] for k in keys] + [row_id],
+            [data.get(k) for k in keys] + [row_id],
         )
         link_res = None
         if name in ("contractor_works", "construction_works") and db.is_excavation_work_type(
@@ -3012,11 +3105,23 @@ def module_edit(name, row_id):
                 )
             else:
                 flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
+        transfer_res = None
+        if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
+            transfer_res = db.transfer_new_coordination_to_license(row_id, conn=conn)
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
         flash(_t("تم الحفظ"), "ok")
         _flash_excavation_link(link_res)
+        if transfer_res and transfer_res.get("created"):
+            flash(
+                _t(
+                    "تم نقل الرخصة المصدرة {no} إلى قسم {sec}",
+                    no=transfer_res.get("license_no"),
+                    sec=_linked_section_label(transfer_res.get("linked_section")),
+                ),
+                "ok",
+            )
         _after_data_change()
         # التعديل من المستودع يُبقي المستخدم داخل المستودع افتراضياً
         edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None
@@ -3085,6 +3190,57 @@ def module_delete(name, row_id):
     if name == "primary_team_orders":
         return redirect(url_for("ops_primary_teams"))
     return redirect(url_for("module_list", name=name))
+
+
+@app.route("/module/new_coordinations/<int:row_id>/transfer", methods=["POST"])
+@login_required
+def new_coordination_transfer(row_id):
+    """نقل تنسيق جديد إلى الرخص المصدرة وربطه بالقسم المستهدف."""
+    if not permissions.can("section.constructions") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM new_coordinations WHERE id=?", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("التنسيق غير موجود"), "danger")
+        return redirect(url_for("module_list", name="new_coordinations"))
+    try:
+        result = db.transfer_new_coordination_to_license(
+            row_id,
+            license_no=(request.form.get("license_no") or "").strip() or None,
+            issue_date=(request.form.get("issue_date") or "").strip() or None,
+            expiry_date=(request.form.get("expiry_date") or "").strip() or None,
+            linked_section=(request.form.get("linked_section") or "").strip() or None,
+            conn=conn,
+        )
+        conn.commit()
+    except Exception as exc:
+        conn.close()
+        flash(_t("تعذر نقل الرخصة: {exc}", exc=exc), "danger")
+        return redirect(url_for("module_edit", name="new_coordinations", row_id=row_id))
+    conn.close()
+    if result.get("created"):
+        flash(
+            _t(
+                "تم نقل الرخصة المصدرة {no} إلى قسم {sec}",
+                no=result.get("license_no"),
+                sec=_linked_section_label(result.get("linked_section")),
+            ),
+            "ok",
+        )
+        db.log_audit(
+            current_user_name(),
+            "نقل رخصة",
+            "التنسيقات الجديدة",
+            row_id,
+            result.get("license_no") or "",
+        )
+        _after_data_change()
+        return redirect(url_for("module_edit", name="issued_licenses", row_id=result.get("license_id")))
+    flash(_t("الرخصة منقولة مسبقاً"), "ok")
+    if result.get("license_id"):
+        return redirect(url_for("module_edit", name="issued_licenses", row_id=result.get("license_id")))
+    return redirect(url_for("module_list", name="new_coordinations"))
 
 
 # ---------- Cashflow (مخفي من الواجهة — يوجّه للمتابعات المالية) ----------

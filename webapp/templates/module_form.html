@@ -46,6 +46,17 @@
     {% endif %}
   </div>
 
+  {% if name == 'new_coordinations' and mode == 'edit' and row.get('id') and row.get('status') != 'تم الإصدار' and can('modules.write') %}
+  <form method="post" action="{{ url_for('new_coordination_transfer', row_id=row.id) }}" class="actions" style="margin-bottom:12px;">
+    <button class="btn primary" type="submit">{{ _('نقل إلى الرخص المصدرة') }}</button>
+    <span class="meta">{{ _('ينقل الرخصة بعد الإصدار إلى القسم المستهدف (عمليات / مشاريع / إنشاءات)') }}</span>
+  </form>
+  {% elif name == 'new_coordinations' and mode == 'edit' and row.get('transferred_license_id') %}
+  <div class="actions" style="margin-bottom:12px;">
+    <a class="btn primary" href="{{ url_for('module_edit', name='issued_licenses', row_id=row.transferred_license_id) }}">{{ _('فتح الرخصة المصدرة') }}</a>
+  </div>
+  {% endif %}
+
   <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}>
     {% if name == 'warehouse_tx' and form_ctx %}
     <input type="hidden" name="from" value="{{ form_ctx }}">

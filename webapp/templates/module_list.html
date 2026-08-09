@@ -36,6 +36,12 @@
         {{ _('سجلات مرتبطة برقم العطل') }} <strong>{{ ticket_filter }}</strong>
         {% elif excavation_filter %}
         {{ _('معاملات الحفر المرتبطة بالتنسيق / الإخلاء') }}
+        {% elif linked_section_filter == 'constructions' %}
+        {{ _('الرخص المصدرة المرتبطة بالإنشاءات') }}
+        {% elif linked_section_filter == 'ops' %}
+        {{ _('الرخص المصدرة المرتبطة بالعمليات والصيانة') }}
+        {% elif linked_section_filter == 'projects' %}
+        {{ _('الرخص المصدرة المرتبطة بالمشاريع') }}
         {% else %}
         {{ _('مرتبط بتبويب') }} {{ section_meta.title if section_meta else _('النظام') }} — {{ _('إضافة / تعديل / ربط بالأعطال') }}
         {% endif %}
@@ -47,6 +53,9 @@
       {% if name in ['coordination','quality_clearances'] %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name, excavation=1) }}">{{ _('حفر فقط') }}</a>
       {% if excavation_filter %}<a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('عرض الكل') }}</a>{% endif %}
+      {% endif %}
+      {% if name == 'issued_licenses' and linked_section_filter %}
+      <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
       {% if can_mod_write %}
         {% if name == 'warehouse_items' %}
@@ -147,6 +156,14 @@
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
             {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
+            {% if can_mod_write and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
+            <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">
+              <button class="btn primary" type="submit">{{ _('نقل إلى الرخص المصدرة') }}</button>
+            </form>
+            {% endif %}
+            {% if can_mod_write and name == 'new_coordinations' and r.transferred_license_id %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.transferred_license_id) }}">{{ _('الرخصة') }}</a>
+            {% endif %}
             {% if can_mod_write and name == 'construction_works' and r.work_no and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}

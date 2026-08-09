@@ -78,6 +78,10 @@ DEFAULT_LISTS = {
     "project_types": ["خاصة", "كهرباء"],
     "project_status": ["جديد", "قيد التنفيذ", "موقوف", "مكتمل", "مغلق"],
     "work_class": ["اعتيادي", "طوارئ"],
+    "new_coord_status": ["مسودة", "قيد التنسيق", "بانتظار الرخصة", "تم الإصدار", "مرفوض", "ملغي"],
+    "issued_license_status": ["سارية", "منتهية", "ملغاة"],
+    "license_types": ["بلدية", "أمانة", "كهرباء", "حفر", "أخرى"],
+    "linked_sections": ["الإنشاءات", "العمليات والصيانة", "المشاريع"],
 }
 
 def connect():
@@ -202,6 +206,48 @@ EXTRA_TABLE_DDL = {
             work_class TEXT,
             increase_ratio REAL,
             final_total REAL,
+            notes TEXT
+        )
+    """,
+    "new_coordinations": """
+        CREATE TABLE IF NOT EXISTS new_coordinations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            coord_no TEXT,
+            request_date TEXT,
+            authority TEXT,
+            work_desc TEXT,
+            location TEXT,
+            district TEXT,
+            linked_section TEXT,
+            ticket_no TEXT,
+            project_code TEXT,
+            construction_work_no TEXT,
+            status TEXT,
+            license_no TEXT,
+            issue_date TEXT,
+            expiry_date TEXT,
+            officer TEXT,
+            transferred_license_id INTEGER,
+            notes TEXT
+        )
+    """,
+    "issued_licenses": """
+        CREATE TABLE IF NOT EXISTS issued_licenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            license_no TEXT,
+            issue_date TEXT,
+            expiry_date TEXT,
+            authority TEXT,
+            license_type TEXT,
+            status TEXT,
+            new_coordination_id INTEGER,
+            transferred_at TEXT,
+            linked_section TEXT,
+            ticket_no TEXT,
+            project_code TEXT,
+            construction_work_no TEXT,
+            location TEXT,
+            work_desc TEXT,
             notes TEXT
         )
     """,
@@ -878,6 +924,8 @@ def next_series_code(series: str, conn=None) -> str:
         "er": ("ER", "er_next", "er_prefix"),
         "rr": ("RR", "rr_next", "rr_prefix"),
         "pr": ("PR", "pr_next", "pr_prefix"),
+        "nc": ("NC", "nc_next", "nc_prefix"),
+        "rl": ("RL", "rl_next", "rl_prefix"),
     }
     if series not in defaults:
         raise ValueError(f"سلسلة غير معروفة: {series}")
@@ -902,6 +950,14 @@ def next_series_code(series: str, conn=None) -> str:
         elif series == "pr":
             taken = conn.execute(
                 "SELECT 1 FROM projects WHERE lower(project_code)=lower(?) LIMIT 1", (code,)
+            ).fetchone()
+        elif series == "nc":
+            taken = conn.execute(
+                "SELECT 1 FROM new_coordinations WHERE lower(coord_no)=lower(?) LIMIT 1", (code,)
+            ).fetchone()
+        elif series == "rl":
+            taken = conn.execute(
+                "SELECT 1 FROM issued_licenses WHERE lower(license_no)=lower(?) LIMIT 1", (code,)
             ).fetchone()
         if not taken:
             conn.execute(
@@ -1838,6 +1894,147 @@ def log_audit(user_name, action, entity, entity_id="", details=""):
     )
     conn.commit()
     conn.close()
+
+
+def normalize_linked_section(value: str | None) -> str:
+    v = (value or "").strip()
+    key = v.lower()
+    aliases = {
+        "constructions": "constructions",
+        "الإنشاءات": "constructions",
+        "ops": "ops",
+        "operations": "ops",
+        "العمليات": "ops",
+        "العمليات والصيانة": "ops",
+        "projects": "projects",
+        "المشاريع": "projects",
+    }
+    return aliases.get(v) or aliases.get(key) or ""
+
+
+def transfer_new_coordination_to_license(
+    coord_id: int,
+    *,
+    license_no: str | None = None,
+    issue_date: str | None = None,
+    expiry_date: str | None = None,
+    linked_section: str | None = None,
+    license_type: str | None = None,
+    conn=None,
+) -> dict:
+    """ينقل تنسيقاً جديداً إلى الرخص المصدرة ويربطه بالقسم المستهدف."""
+    own = conn is None
+    conn = conn or connect()
+    row = conn.execute("SELECT * FROM new_coordinations WHERE id=?", (coord_id,)).fetchone()
+    if not row:
+        if own:
+            conn.close()
+        raise ValueError("التنسيق غير موجود")
+    coord = dict(row)
+    if coord.get("transferred_license_id"):
+        existing = conn.execute(
+            "SELECT * FROM issued_licenses WHERE id=?",
+            (coord["transferred_license_id"],),
+        ).fetchone()
+        if own:
+            conn.close()
+        return {
+            "created": False,
+            "license_id": coord.get("transferred_license_id"),
+            "license": dict(existing) if existing else None,
+            "coord": coord,
+        }
+
+    section = normalize_linked_section(linked_section or coord.get("linked_section"))
+    if not section:
+        # استنتج القسم من الروابط المتوفرة
+        if (coord.get("ticket_no") or "").strip():
+            section = "ops"
+        elif (coord.get("project_code") or "").strip():
+            section = "projects"
+        elif (coord.get("construction_work_no") or "").strip():
+            section = "constructions"
+        else:
+            section = "constructions"
+    section_label = {
+        "ops": "العمليات والصيانة",
+        "projects": "المشاريع",
+        "constructions": "الإنشاءات",
+    }.get(section, "الإنشاءات")
+
+    lic_no = (license_no or coord.get("license_no") or "").strip() or next_series_code("rl", conn)
+    issued = (issue_date or coord.get("issue_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+    expiry = (expiry_date or coord.get("expiry_date") or "").strip() or None
+    ltype = (license_type or "").strip() or ("حفر" if is_excavation_text(coord.get("work_desc"), coord.get("notes")) else "أخرى")
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    cur = conn.execute(
+        """
+        INSERT INTO issued_licenses(
+          license_no, issue_date, expiry_date, authority, license_type, status,
+          new_coordination_id, transferred_at, linked_section,
+          ticket_no, project_code, construction_work_no, location, work_desc, notes
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            lic_no,
+            issued,
+            expiry,
+            coord.get("authority") or "",
+            ltype,
+            "سارية",
+            coord_id,
+            now,
+            section_label,
+            coord.get("ticket_no") or "",
+            coord.get("project_code") or "",
+            coord.get("construction_work_no") or "",
+            coord.get("location") or "",
+            coord.get("work_desc") or "",
+            (coord.get("notes") or "")[:500],
+        ),
+    )
+    license_id = cur.lastrowid
+    conn.execute(
+        """
+        UPDATE new_coordinations
+        SET status=?, license_no=?, issue_date=?, expiry_date=?, linked_section=?, transferred_license_id=?
+        WHERE id=?
+        """,
+        ("تم الإصدار", lic_no, issued, expiry, section_label, license_id, coord_id),
+    )
+    if own:
+        conn.commit()
+        conn.close()
+    return {
+        "created": True,
+        "license_id": license_id,
+        "license_no": lic_no,
+        "linked_section": section,
+        "coord_id": coord_id,
+    }
+
+
+def count_issued_licenses(linked_section: str | None = None, conn=None) -> int:
+    own = conn is None
+    conn = conn or connect()
+    section = normalize_linked_section(linked_section) if linked_section else ""
+    if section:
+        labels = {
+            "ops": ("ops", "العمليات", "العمليات والصيانة"),
+            "projects": ("projects", "المشاريع"),
+            "constructions": ("constructions", "الإنشاءات"),
+        }.get(section, (section,))
+        placeholders = ",".join("?" * len(labels))
+        n = conn.execute(
+            f"SELECT COUNT(*) FROM issued_licenses WHERE lower(trim(linked_section)) IN ({placeholders})",
+            [x.lower() for x in labels],
+        ).fetchone()[0]
+    else:
+        n = conn.execute("SELECT COUNT(*) FROM issued_licenses").fetchone()[0]
+    if own:
+        conn.close()
+    return int(n or 0)
 
 
 def warehouse_tx_sign(tx_type: str) -> int:
