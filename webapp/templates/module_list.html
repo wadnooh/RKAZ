@@ -34,6 +34,8 @@
         {{ _('نسخ من الصفحات الرئيسية حسب التخصص') }}
         {% elif ticket_filter %}
         {{ _('سجلات مرتبطة برقم العطل') }} <strong>{{ ticket_filter }}</strong>
+        {% elif excavation_filter %}
+        {{ _('معاملات الحفر المرتبطة بالتنسيق / الإخلاء') }}
         {% else %}
         {{ _('مرتبط بتبويب') }} {{ section_meta.title if section_meta else _('النظام') }} — {{ _('إضافة / تعديل / ربط بالأعطال') }}
         {% endif %}
@@ -42,6 +44,10 @@
     <div class="actions">
       {% set can_mod_write = can('modules.write') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
       {% set can_mod_delete = can('modules.delete') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
+      {% if name in ['coordination','quality_clearances'] %}
+      <a class="btn ghost" href="{{ url_for('module_list', name=name, excavation=1) }}">{{ _('حفر فقط') }}</a>
+      {% if excavation_filter %}<a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('عرض الكل') }}</a>{% endif %}
+      {% endif %}
       {% if can_mod_write %}
         {% if name == 'warehouse_items' %}
         <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب المواد Excel') }}</a>

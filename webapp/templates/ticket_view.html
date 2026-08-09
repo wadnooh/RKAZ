@@ -55,6 +55,27 @@
     </div>
   </div>
 
+  {% if ticket.has_excavation %}
+  <div class="flash ok" style="margin:0 0 12px;">
+    <strong>{{ _('معاملة بها حفر') }}</strong> —
+    {{ _('تم ربطها بالتنسيقات لبدء إجراءات إخلاء الأسفلت.') }}
+    {% if can('section.quality') %}
+    <span class="actions" style="display:inline-flex;gap:8px;margin-inline-start:8px;">
+      {% if related.coordination %}
+      <a class="btn ghost" href="{{ url_for('module_edit', name='coordination', row_id=related.coordination[0].id) }}">{{ _('فتح التنسيق') }}</a>
+      {% else %}
+      <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">{{ _('+ تنسيق') }}</a>
+      {% endif %}
+      {% if related.clearances %}
+      <a class="btn primary" href="{{ url_for('module_edit', name='quality_clearances', row_id=related.clearances[0].id) }}">{{ _('متابعة الإخلاء') }}</a>
+      {% else %}
+      <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">{{ _('بدء الإخلاء') }}</a>
+      {% endif %}
+    </span>
+    {% endif %}
+  </div>
+  {% endif %}
+
   {% if editing and can('tickets.write') %}
   <form method="post" action="{{ url_for('ticket_edit', ticket_id=ticket.id) }}" class="form-grid">
     <div class="field"><label>{{ _('رقم العطل (SEC)') }}</label><input name="ticket_no" value="{{ ticket.ticket_no or '' }}" required></div>

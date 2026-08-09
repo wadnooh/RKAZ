@@ -239,6 +239,13 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "quality_clearances" in existing or "quality_clearances" in created:
             if _ensure_column(conn, "quality_clearances", "rekaz_code"):
                 created.append("quality_clearances.rekaz_code")
+        if "construction_works" in existing or "construction_works" in created:
+            if _ensure_column(conn, "construction_works", "ticket_no"):
+                created.append("construction_works.ticket_no")
+        # ربط معاملات الحفر بالتنسيقات لبدء إجراءات الإخلاء
+        n_exc = link_excavation_transactions_to_coordination(conn)
+        if n_exc:
+            created.append(f"excavation_coordination_link:{n_exc}")
         if "warehouse_tx" in existing or "warehouse_tx" in created:
             if _ensure_column(conn, "warehouse_tx", "rekaz_code"):
                 created.append("warehouse_tx.rekaz_code")
@@ -447,6 +454,7 @@ def init_db():
             status TEXT,
             supervisor TEXT,
             value REAL,
+            ticket_no TEXT,
             notes TEXT
         );
         CREATE TABLE IF NOT EXISTS quality_clearances (
@@ -1506,6 +1514,320 @@ def get_lists(conn=None):
 
 def rows_to_dicts(rows):
     return [dict(r) for r in rows]
+
+
+def is_excavation_text(*parts) -> bool:
+    """يكتشف ذكر الحفر في أي نص (نوع عمل / وصف بند / ملاحظات…)."""
+    blob = " ".join(str(p or "") for p in parts)
+    return "حفر" in blob
+
+
+def is_excavation_work_type(work_type: str | None) -> bool:
+    return is_excavation_text(work_type)
+
+
+def collect_excavation_ticket_nos(conn=None) -> list[str]:
+    """كل أرقام الأعطال/المعاملات المرتبطة بحفر وتحتاج تنسيق/إخلاء."""
+    own = conn is None
+    conn = conn or connect()
+    found: set[str] = set()
+
+    def _add(val):
+        t = str(val or "").strip()
+        if t:
+            found.add(t)
+
+    for row in conn.execute(
+        """
+        SELECT ticket_no FROM contractor_works
+        WHERE ticket_no IS NOT NULL AND trim(ticket_no) != ''
+          AND (IFNULL(work_type,'') LIKE '%حفر%' OR IFNULL(notes,'') LIKE '%حفر%' OR IFNULL(site,'') LIKE '%حفر%')
+        """
+    ).fetchall():
+        _add(row["ticket_no"])
+
+    for row in conn.execute(
+        """
+        SELECT ticket_no FROM construction_works
+        WHERE ticket_no IS NOT NULL AND trim(ticket_no) != ''
+          AND (IFNULL(work_type,'') LIKE '%حفر%' OR IFNULL(notes,'') LIKE '%حفر%' OR IFNULL(site,'') LIKE '%حفر%')
+        """
+    ).fetchall():
+        _add(row["ticket_no"])
+
+    for row in conn.execute(
+        """
+        SELECT ticket_no FROM tickets
+        WHERE ticket_no IS NOT NULL AND trim(ticket_no) != ''
+          AND (
+            IFNULL(asphalt_clearance,'') = 'نعم'
+            OR IFNULL(fault_type,'') LIKE '%حفر%'
+            OR IFNULL(notes,'') LIKE '%حفر%'
+            OR IFNULL(location,'') LIKE '%حفر%'
+          )
+        """
+    ).fetchall():
+        _add(row["ticket_no"])
+
+    for row in conn.execute(
+        """
+        SELECT DISTINCT ticket_no FROM ticket_boq_lines
+        WHERE ticket_no IS NOT NULL AND trim(ticket_no) != ''
+          AND (
+            IFNULL(description,'') LIKE '%حفر%'
+            OR IFNULL(item_no,'') LIKE '%حفر%'
+            OR IFNULL(notes,'') LIKE '%حفر%'
+          )
+        """
+    ).fetchall():
+        _add(row["ticket_no"])
+
+    for row in conn.execute(
+        """
+        SELECT DISTINCT ticket_no FROM quantities
+        WHERE ticket_no IS NOT NULL AND trim(ticket_no) != ''
+          AND (IFNULL(description,'') LIKE '%حفر%' OR IFNULL(notes,'') LIKE '%حفر%')
+        """
+    ).fetchall():
+        _add(row["ticket_no"])
+
+    if own:
+        conn.close()
+    return sorted(found)
+
+
+def ticket_has_excavation(ticket_no: str, conn=None) -> bool:
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return False
+    own = conn is None
+    conn = conn or connect()
+    hit = False
+    row = conn.execute(
+        """
+        SELECT asphalt_clearance, fault_type, notes, location
+        FROM tickets WHERE ticket_no=? LIMIT 1
+        """,
+        (tno,),
+    ).fetchone()
+    if row and (
+        (row["asphalt_clearance"] or "") == "نعم"
+        or is_excavation_text(row["fault_type"], row["notes"], row["location"])
+    ):
+        hit = True
+    if not hit:
+        hit = bool(
+            conn.execute(
+                """
+                SELECT 1 FROM ticket_boq_lines
+                WHERE ticket_no=? AND (
+                  IFNULL(description,'') LIKE '%حفر%'
+                  OR IFNULL(notes,'') LIKE '%حفر%'
+                ) LIMIT 1
+                """,
+                (tno,),
+            ).fetchone()
+        )
+    if not hit:
+        hit = bool(
+            conn.execute(
+                """
+                SELECT 1 FROM quantities
+                WHERE ticket_no=? AND (
+                  IFNULL(description,'') LIKE '%حفر%' OR IFNULL(notes,'') LIKE '%حفر%'
+                ) LIMIT 1
+                """,
+                (tno,),
+            ).fetchone()
+        )
+    if not hit:
+        hit = bool(
+            conn.execute(
+                """
+                SELECT 1 FROM contractor_works
+                WHERE ticket_no=? AND (
+                  IFNULL(work_type,'') LIKE '%حفر%' OR IFNULL(notes,'') LIKE '%حفر%'
+                ) LIMIT 1
+                """,
+                (tno,),
+            ).fetchone()
+        )
+    if not hit:
+        hit = bool(
+            conn.execute(
+                """
+                SELECT 1 FROM construction_works
+                WHERE ticket_no=? AND (
+                  IFNULL(work_type,'') LIKE '%حفر%' OR IFNULL(notes,'') LIKE '%حفر%'
+                ) LIMIT 1
+                """,
+                (tno,),
+            ).fetchone()
+        )
+    if own:
+        conn.close()
+    return hit
+
+
+def ensure_excavation_coordination(
+    ticket_no: str,
+    *,
+    reason: str = "",
+    conn=None,
+    create_clearance: bool = True,
+) -> dict:
+    """يربط معاملة الحفر بالتنسيق ويفتح إجراء إخلاء الأسفلت إن لزم."""
+    tno = str(ticket_no or "").strip()
+    result = {
+        "ticket_no": tno,
+        "created_coord": False,
+        "created_clearance": False,
+        "coord_id": None,
+        "clearance_id": None,
+    }
+    if not tno:
+        return result
+    own = conn is None
+    conn = conn or connect()
+    today = datetime.now().strftime("%Y-%m-%d")
+    note = (reason or "ربط تلقائي — معاملة بها حفر لبدء إجراءات الإخلاء").strip()
+
+    existing = conn.execute(
+        "SELECT id, needs_asphalt, status, notes FROM coordination WHERE ticket_no=? ORDER BY id LIMIT 1",
+        (tno,),
+    ).fetchone()
+    if existing:
+        result["coord_id"] = existing["id"]
+        updates = []
+        vals = []
+        if (existing["needs_asphalt"] or "").strip() != "نعم":
+            updates.append("needs_asphalt=?")
+            vals.append("نعم")
+        if (existing["status"] or "").strip() in ("", "غير مطلوب"):
+            updates.append("status=?")
+            vals.append("بانتظار المختبر")
+        if note and note not in (existing["notes"] or ""):
+            merged = ((existing["notes"] or "").strip() + (" | " if existing["notes"] else "") + note).strip()
+            updates.append("notes=?")
+            vals.append(merged[:500])
+        if updates:
+            vals.append(existing["id"])
+            conn.execute(
+                f"UPDATE coordination SET {', '.join(updates)} WHERE id=?",
+                vals,
+            )
+            result["created_coord"] = True  # updated to enable clearance flow
+    else:
+        cur = conn.execute(
+            """
+            INSERT INTO coordination(ticket_no, needs_asphalt, officer, request_date, status, notes)
+            VALUES (?,?,?,?,?,?)
+            """,
+            (tno, "نعم", "", today, "بانتظار المختبر", note[:500]),
+        )
+        result["coord_id"] = cur.lastrowid
+        result["created_coord"] = True
+
+    if create_clearance:
+        clr = conn.execute(
+            "SELECT id, status FROM quality_clearances WHERE ticket_no=? ORDER BY id LIMIT 1",
+            (tno,),
+        ).fetchone()
+        if clr:
+            result["clearance_id"] = clr["id"]
+            if (clr["status"] or "").strip() in ("",):
+                conn.execute(
+                    "UPDATE quality_clearances SET status=? WHERE id=?",
+                    ("مطلوب", clr["id"]),
+                )
+                result["created_clearance"] = True
+        else:
+            rr = next_series_code("rr", conn)
+            cur = conn.execute(
+                """
+                INSERT INTO quality_clearances(
+                  ticket_no, clearance_no, rekaz_code, request_date, status, notes
+                ) VALUES (?,?,?,?,?,?)
+                """,
+                (tno, rr, rr, today, "مطلوب", note[:500]),
+            )
+            result["clearance_id"] = cur.lastrowid
+            result["created_clearance"] = True
+
+    if own:
+        conn.commit()
+        conn.close()
+    return result
+
+
+def link_excavation_transactions_to_coordination(conn=None) -> int:
+    """يربط كل معاملات الحفر الحالية بالتنسيقات وإجراءات الإخلاء."""
+    own = conn is None
+    conn = conn or connect()
+    changed = 0
+    for tno in collect_excavation_ticket_nos(conn):
+        before_coord = conn.execute(
+            "SELECT id, needs_asphalt, status FROM coordination WHERE ticket_no=? LIMIT 1",
+            (tno,),
+        ).fetchone()
+        before_clr = conn.execute(
+            "SELECT id FROM quality_clearances WHERE ticket_no=? LIMIT 1",
+            (tno,),
+        ).fetchone()
+        res = ensure_excavation_coordination(
+            tno,
+            reason="ربط تلقائي من معاملات الحفر",
+            conn=conn,
+            create_clearance=True,
+        )
+        if res.get("created_coord") or res.get("created_clearance"):
+            changed += 1
+        elif not before_coord or not before_clr:
+            changed += 1
+    if own:
+        conn.commit()
+        conn.close()
+    return changed
+
+
+def list_excavation_coordination_queue(conn=None, limit: int = 50) -> list[dict]:
+    """قائمة معاملات الحفر المرتبطة بالتنسيق/الإخلاء للمتابعة."""
+    own = conn is None
+    conn = conn or connect()
+    tickets = collect_excavation_ticket_nos(conn)
+    out = []
+    for tno in tickets[: max(int(limit or 50), 1)]:
+        coord = conn.execute(
+            "SELECT id, status, needs_asphalt, request_date FROM coordination WHERE ticket_no=? ORDER BY id LIMIT 1",
+            (tno,),
+        ).fetchone()
+        clearance = conn.execute(
+            "SELECT id, status, rekaz_code, clearance_no FROM quality_clearances WHERE ticket_no=? ORDER BY id LIMIT 1",
+            (tno,),
+        ).fetchone()
+        ticket = conn.execute(
+            "SELECT id, district, status, asphalt_clearance FROM tickets WHERE ticket_no=? LIMIT 1",
+            (tno,),
+        ).fetchone()
+        out.append(
+            {
+                "ticket_no": tno,
+                "ticket_id": ticket["id"] if ticket else None,
+                "district": (ticket["district"] if ticket else None) or "—",
+                "ticket_status": (ticket["status"] if ticket else None) or "—",
+                "coord_id": coord["id"] if coord else None,
+                "coord_status": (coord["status"] if coord else None) or "—",
+                "needs_asphalt": (coord["needs_asphalt"] if coord else None) or "—",
+                "clearance_id": clearance["id"] if clearance else None,
+                "clearance_status": (clearance["status"] if clearance else None) or "غير مُنشأ",
+                "rekaz_code": (clearance["rekaz_code"] if clearance else None)
+                or (clearance["clearance_no"] if clearance else None)
+                or "—",
+            }
+        )
+    if own:
+        conn.close()
+    return out
 
 
 def log_audit(user_name, action, entity, entity_id="", details=""):

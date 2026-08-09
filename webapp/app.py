@@ -150,6 +150,40 @@ def _after_data_change():
         pass
 
 
+def _link_excavation_if_needed(ticket_no: str, reason: str = "", conn=None) -> dict | None:
+    """يربط معاملة الحفر بالتنسيق/الإخلاء عند الحاجة."""
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return None
+    own = conn is None
+    conn = conn or db.connect()
+    try:
+        if not db.ticket_has_excavation(tno, conn):
+            return None
+        return db.ensure_excavation_coordination(
+            tno,
+            reason=reason or "ربط تلقائي — معاملة بها حفر",
+            conn=conn,
+            create_clearance=True,
+        )
+    finally:
+        if own:
+            conn.commit()
+            conn.close()
+
+
+def _flash_excavation_link(result: dict | None):
+    if not result:
+        return
+    parts = []
+    if result.get("created_coord"):
+        parts.append(_t("تم ربط المعاملة بالتنسيقات"))
+    if result.get("created_clearance"):
+        parts.append(_t("تم فتح إجراء إخلاء الأسفلت"))
+    if parts:
+        flash(" — ".join(parts), "ok")
+
+
 def login_required(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
@@ -582,15 +616,27 @@ def contractors_home():
 @login_required
 def quality_home():
     links = section_links("quality")
+    conn = db.connect()
+    db.link_excavation_transactions_to_coordination(conn)
+    excavation_queue = db.list_excavation_coordination_queue(conn, limit=40)
+    conn.commit()
+    conn.close()
+    pending_clearance = sum(
+        1
+        for r in excavation_queue
+        if (r.get("clearance_status") or "") in ("مطلوب", "قيد الإصدار", "غير مُنشأ")
+    )
     return render_template(
         "section_hub.html",
         title=_t("التنسيقات والجودة"),
-        subtitle=_t("التنسيقات الفنية وإخلاءات الأسفلت وفحوصات الجودة."),
+        subtitle=_t("التنسيقات الفنية وإخلاءات الأسفلت وفحوصات الجودة — معاملات الحفر تُربط تلقائياً لبدء الإخلاء."),
         links=links,
         section="quality",
         section_modules=modules_for_section("quality"),
         section_meta=_smeta(SECTION_META["quality"]),
         total_count=sum(i.get("count") or 0 for i in links),
+        excavation_queue=excavation_queue,
+        excavation_pending=pending_clearance,
     )
 
 
@@ -1887,6 +1933,27 @@ def ticket_view(ticket_id):
     }
     boq_file = db.active_contract_boq_file(conn)
     has_boq = db.has_boq_catalog(conn)
+    has_excavation = db.ticket_has_excavation(tno, conn)
+    excavation_link = None
+    if has_excavation:
+        excavation_link = db.ensure_excavation_coordination(
+            tno,
+            reason="ربط تلقائي من عرض العطل — حفر",
+            conn=conn,
+            create_clearance=True,
+        )
+        # أعد تحميل التنسيقات/الإخلاء بعد الربط
+        related["coordination"] = db.rows_to_dicts(
+            conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall()
+        )
+        related["clearances"] = db.rows_to_dicts(
+            conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall()
+        )
+    else:
+        related["clearances"] = db.rows_to_dicts(
+            conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall()
+        )
+    conn.commit()
     conn.close()
     for q in related["quantities"]:
         q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
@@ -1906,6 +1973,7 @@ def ticket_view(ticket_id):
     ticket["emergency_ratio_applied"] = emergency_applied
     ticket["final_value"] = final_value(base_for_final, ratio=emergency_applied)
     ticket["boq_final_total"] = ticket["final_value"]
+    ticket["has_excavation"] = has_excavation
     # تعديل العطل/البنود يتطلب tickets.write فقط (ليس modules.write)
     can_mutate = permissions.can("tickets.write")
     wants_edit = request.args.get("edit") == "1"
@@ -1962,9 +2030,17 @@ def ticket_edit(ticket_id):
             conn,
         )
         conn.commit()
+        link_res = _link_excavation_if_needed(
+            data.get("ticket_no") or dict(row).get("ticket_no") or "",
+            reason="ربط تلقائي بعد حفظ العطل — حفر/إخلاء أسفلت",
+            conn=conn,
+        )
+        if link_res and (link_res.get("created_coord") or link_res.get("created_clearance")):
+            conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
         flash(_t("تم حفظ المعاملة — انتقل لإضافة الكمية"), "ok")
+        _flash_excavation_link(link_res)
         _after_data_change()
         return _ticket_edit_redirect(ticket_id, "boq")
     conn.close()
@@ -2072,10 +2148,19 @@ def ticket_boq_add(ticket_id):
         ),
     )
     db.sync_ticket_items_value(ticket_id, conn)
+    link_res = None
+    if db.is_excavation_text(desc, notes, item_no):
+        link_res = db.ensure_excavation_coordination(
+            ticket["ticket_no"],
+            reason=f"ربط تلقائي — بند حفر {item_no}",
+            conn=conn,
+            create_clearance=True,
+        )
     conn.commit()
     conn.close()
     db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
     flash(_t("تمت إضافة البند وحساب التكلفة — أضف بنداً آخر أو انتقل للخطوة التالية"), "ok")
+    _flash_excavation_link(link_res)
     _after_data_change()
     return _ticket_edit_redirect(ticket_id, "boq")
 
@@ -2508,6 +2593,10 @@ def module_list(name):
         ]
     if ticket_filter and any(f[0] == "ticket_no" for f in module.get("fields", [])):
         rows = [r for r in rows if (r.get("ticket_no") or "") == ticket_filter]
+    excavation_filter = (request.args.get("excavation") or "").strip() in {"1", "yes", "true"}
+    if excavation_filter and name in ("coordination", "quality_clearances"):
+        excav_tickets = set(db.collect_excavation_ticket_nos())
+        rows = [r for r in rows if (r.get("ticket_no") or "") in excav_tickets]
     section = module.get("section")
     return render_template(
         "module_list.html",
@@ -2517,6 +2606,7 @@ def module_list(name):
         tickets=tickets,
         item_filter=item_filter,
         ticket_filter=ticket_filter,
+        excavation_filter=excavation_filter,
         source_filter=source_filter if name == "warehouse_tx" else "",
         section=section,
         section_meta=_smeta(SECTION_META.get(section)),
@@ -2716,6 +2806,20 @@ def module_new(name):
         mirrored = 0
         if name == "warehouse_tx":
             mirrored = _insert_warehouse_mirror_zeros(conn, [data], form_ctx)
+        link_res = None
+        if name in ("contractor_works", "construction_works") and db.is_excavation_work_type(
+            data.get("work_type")
+        ):
+            tno = (data.get("ticket_no") or "").strip()
+            if tno:
+                link_res = db.ensure_excavation_coordination(
+                    tno,
+                    reason=f"ربط تلقائي — معاملة حفر {data.get('work_no') or ''}".strip(),
+                    conn=conn,
+                    create_clearance=True,
+                )
+            else:
+                flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
         conn.commit()
         new_id = cur.lastrowid
         conn.close()
@@ -2736,6 +2840,7 @@ def module_new(name):
             )
         else:
             flash(_t("تمت الإضافة"), "ok")
+        _flash_excavation_link(link_res)
         _after_data_change()
         return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
@@ -2893,10 +2998,25 @@ def module_edit(name, row_id):
             f"UPDATE {module['table']} SET {sets} WHERE id=?",
             [data[k] for k in keys] + [row_id],
         )
+        link_res = None
+        if name in ("contractor_works", "construction_works") and db.is_excavation_work_type(
+            data.get("work_type")
+        ):
+            tno = (data.get("ticket_no") or "").strip()
+            if tno:
+                link_res = db.ensure_excavation_coordination(
+                    tno,
+                    reason=f"ربط تلقائي — معاملة حفر {data.get('work_no') or ''}".strip(),
+                    conn=conn,
+                    create_clearance=True,
+                )
+            else:
+                flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
         flash(_t("تم الحفظ"), "ok")
+        _flash_excavation_link(link_res)
         _after_data_change()
         # التعديل من المستودع يُبقي المستخدم داخل المستودع افتراضياً
         edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None

@@ -106,12 +106,13 @@ MODULES = {
             ("district", "الحي", "text"),
             ("work_type", "نوع العمل", "list:construction_types"),
             ("station_no", "رقم المحطة", "text"),
+            ("ticket_no", "رقم العطل المرتبط", "ticket"),
             ("status", "الحالة", "list:execution_status"),
             ("supervisor", "المشرف", "text"),
             ("value", "القيمة التقديرية", "number"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["work_no", "work_date", "site", "work_type", "status", "value"],
+        "list_cols": ["work_no", "work_date", "site", "work_type", "ticket_no", "status", "value"],
     },
     # أوامر عمل الكهرباء (الفرق الأولية) — منفصلة عن الأعطال
     "primary_team_orders": {
