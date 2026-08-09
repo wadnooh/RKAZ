@@ -217,10 +217,32 @@ def response_minutes(dispatch, arrival):
 
 
 def final_value(items_value, ratio=None):
+    """القيمة النهائية = إجمالي البنود × (1 + نسبة الطوارئ) مرة واحدة."""
     if items_value is None or items_value == "":
         return None
     ratio = ratio if ratio is not None else float(g.settings.get("emergency_ratio") or 0)
-    return float(items_value) * (1 + ratio)
+    return round(float(items_value) * (1 + float(ratio or 0)), 2)
+
+
+def _attach_ticket_final_values(rows, conn=None):
+    """يحسب القيمة النهائية مرة واحدة: أساس البنود ثم نسبة الطوارئ إن وُجدت."""
+    if not rows:
+        return rows
+    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
+    ids = [r.get("id") for r in rows if r.get("id") is not None]
+    ratio_map = db.map_ticket_emergency_ratios(ids, settings_ratio, conn=conn)
+    has_boq = set(ratio_map.keys())
+    for r in rows:
+        tid = r.get("id")
+        base = r.get("items_value")
+        if tid in has_boq:
+            ratio = ratio_map.get(tid, 0.0)
+        else:
+            # أعطال بلا بنود: إن وُجدت قيمة يدوية تُطبَّق نسبة الإعدادات للتوافق
+            ratio = settings_ratio if base not in (None, "") else 0.0
+        r["emergency_ratio_applied"] = ratio
+        r["final_value"] = final_value(base, ratio=ratio)
+    return rows
 
 
 app.jinja_env.filters["money"] = money
@@ -286,7 +308,9 @@ def dashboard_stats():
         mins = response_minutes(t.get("dispatch_time"), t.get("arrival_time"))
         if mins is not None and mins > target:
             delayed += 1
-        fv = final_value(t.get("items_value"))
+    _attach_ticket_final_values(tickets)
+    for t in tickets:
+        fv = t.get("final_value")
         if fv is not None:
             tickets_value += fv
 
@@ -492,10 +516,10 @@ def ops_home():
     recent = db.rows_to_dicts(
         conn.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 12").fetchall()
     )
-    conn.close()
     for r in recent:
         r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
-        r["final_value"] = final_value(r.get("items_value"))
+    _attach_ticket_final_values(recent, conn)
+    conn.close()
 
     return render_template(
         "ops_home.html",
@@ -1723,10 +1747,10 @@ def tickets_list():
         params.append(status)
     sql += " ORDER BY id DESC"
     rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
-    conn.close()
     for r in rows:
         r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
-        r["final_value"] = final_value(r.get("items_value"))
+    _attach_ticket_final_values(rows, conn)
+    conn.close()
     return render_template("tickets_list.html", rows=rows, q=q, status=status)
 
 
@@ -1869,11 +1893,19 @@ def ticket_view(ticket_id):
     for p in related["photos"]:
         p["complete"] = _t("مكتمل") if media_svc.photos_complete(p) else _t("ناقص")
     boq_base = sum(float(x.get("line_total") or 0) for x in related["boq_lines"])
-    boq_final = sum(float(x.get("final_total") or 0) for x in related["boq_lines"])
+    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
+    emergency_applied = db.ticket_emergency_ratio(related["boq_lines"], settings_ratio)
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
-    ticket["final_value"] = final_value(ticket.get("items_value"))
-    ticket["boq_base_total"] = boq_base
-    ticket["boq_final_total"] = boq_final
+    if related["boq_lines"]:
+        # إجمالي البنود دائماً من الأسطر (كمية×سعر) وليس من قيمة قديمة مضاعَفة
+        ticket["items_value"] = boq_base
+        base_for_final = boq_base
+    else:
+        base_for_final = ticket.get("items_value")
+    ticket["boq_base_total"] = boq_base if related["boq_lines"] else None
+    ticket["emergency_ratio_applied"] = emergency_applied
+    ticket["final_value"] = final_value(base_for_final, ratio=emergency_applied)
+    ticket["boq_final_total"] = ticket["final_value"]
     # تعديل العطل/البنود يتطلب tickets.write فقط (ليس modules.write)
     can_mutate = permissions.can("tickets.write")
     wants_edit = request.args.get("edit") == "1"
@@ -2122,7 +2154,17 @@ def ticket_print(ticket_id):
     metering = db.rows_to_dicts(conn.execute("SELECT * FROM metering WHERE ticket_no=?", (tno,)).fetchall())
     conn.close()
     ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
-    ticket["final_value"] = final_value(ticket.get("items_value"))
+    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
+    emergency_applied = db.ticket_emergency_ratio(boq_lines, settings_ratio)
+    boq_base = sum(float(x.get("line_total") or 0) for x in boq_lines) if boq_lines else None
+    if boq_base is not None:
+        ticket["items_value"] = boq_base
+    ticket["boq_base_total"] = boq_base
+    ticket["emergency_ratio_applied"] = emergency_applied
+    ticket["final_value"] = final_value(
+        ticket.get("items_value"),
+        ratio=emergency_applied if boq_lines else settings_ratio,
+    )
     if boq_lines:
         quantities = [
             {
@@ -2131,8 +2173,9 @@ def ticket_print(ticket_id):
                 "unit": x.get("unit"),
                 "qty": x.get("qty"),
                 "unit_price": x.get("unit_price"),
-                "total": x.get("final_total") if x.get("final_total") is not None else x.get("line_total"),
+                "total": x.get("line_total"),
                 "work_class": x.get("work_class"),
+                "increase_ratio": x.get("increase_ratio"),
             }
             for x in boq_lines
         ]
@@ -2148,6 +2191,8 @@ def ticket_print(ticket_id):
         coordination=coordination,
         metering=metering,
         printed_at=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
+        emergency_ratio_applied=emergency_applied if boq_lines else settings_ratio,
+        boq_base_total=boq_base,
     )
 
 

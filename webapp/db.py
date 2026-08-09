@@ -259,6 +259,11 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             n_scrub = scrub_ticket_numbers_from_warehouse_work_orders(conn)
             if n_scrub:
                 created.append(f"warehouse_tx.work_order_scrub:{n_scrub}")
+        # إصلاح مضاعفة نسبة الطوارئ على بنود العقد (مرة واحدة في القيمة النهائية فقط)
+        if "ticket_boq_lines" in existing or "ticket_boq_lines" in created:
+            n_boq = repair_boq_emergency_double_count(conn)
+            if n_boq:
+                created.append(f"ticket_boq_lines.emergency_once:{n_boq}")
         # أعمدة دليل بنود العقد الموسّع (قالب Excel ثنائي اللغة)
         for table in ("boq_items", "contract_boq_items"):
             if table in existing or table in created:
@@ -1244,6 +1249,11 @@ def enrich_quantity_from_boq(data: dict, conn=None) -> dict:
 
 
 def calc_boq_line_totals(qty, unit_price, work_class: str, increase_ratio) -> dict:
+    """إجمالي البند = كمية × سعر فقط.
+
+    نسبة الطوارئ تُحفظ على السطر للعرض، وتُطبَّق مرة واحدة لاحقاً على
+    القيمة النهائية للعطل (وليس على إجمالي كل بند).
+    """
     q = float(qty or 0)
     p = float(unit_price or 0)
     line_total = q * p
@@ -1253,15 +1263,16 @@ def calc_boq_line_totals(qty, unit_price, work_class: str, increase_ratio) -> di
         if ratio <= 0:
             settings = get_settings()
             ratio = float(settings.get("emergency_ratio") or 0)
-        final_total = line_total * (1 + ratio)
     else:
         ratio = 0.0
-        final_total = line_total
+    if cls not in ("اعتيادي", "طوارئ"):
+        cls = "اعتيادي"
     return {
         "line_total": round(line_total, 2),
         "increase_ratio": ratio,
-        "final_total": round(final_total, 2),
-        "work_class": cls if cls in ("اعتيادي", "طوارئ") else "اعتيادي",
+        # النهائي على مستوى البند = الأساس (بدون نسبة) لمنع الحساب المزدوج
+        "final_total": round(line_total, 2),
+        "work_class": cls,
     }
 
 
@@ -1289,21 +1300,42 @@ def list_ticket_boq_lines(ticket_id: int | None = None, ticket_no: str | None = 
     return rows
 
 
-def ticket_boq_final_total(
+def ticket_emergency_ratio(lines, settings_ratio=None) -> float:
+    """نسبة الطوارئ الموحّدة للعطل: تُؤخذ من أي بند طوارئ، وإلا 0."""
+    best = None
+    fallback = float(settings_ratio or 0)
+    for line in lines or []:
+        if (line.get("work_class") or "").strip() != "طوارئ":
+            continue
+        r = float(line.get("increase_ratio") or 0)
+        if r <= 0:
+            r = fallback
+        if best is None or r > best:
+            best = r
+    return float(best or 0)
+
+
+def apply_final_value(base, ratio) -> float | None:
+    if base is None or base == "":
+        return None
+    return round(float(base) * (1 + float(ratio or 0)), 2)
+
+
+def ticket_boq_base_total(
     ticket_id: int | None = None, ticket_no: str | None = None, conn=None
 ) -> float | None:
-    """مجموع final_total لبنود العقد (القيمة المعتمدة / مبلغ الكميات). None إن لم تُوجد بنود."""
+    """مجموع إجمالي البنود (كمية × سعر) بدون نسبة الطوارئ."""
     own = conn is None
     conn = conn or connect()
     if ticket_id:
         row = conn.execute(
-            "SELECT COUNT(*) AS n, COALESCE(SUM(final_total),0) AS total "
+            "SELECT COUNT(*) AS n, COALESCE(SUM(line_total),0) AS total "
             "FROM ticket_boq_lines WHERE ticket_id=?",
             (ticket_id,),
         ).fetchone()
     elif ticket_no:
         row = conn.execute(
-            "SELECT COUNT(*) AS n, COALESCE(SUM(final_total),0) AS total "
+            "SELECT COUNT(*) AS n, COALESCE(SUM(line_total),0) AS total "
             "FROM ticket_boq_lines WHERE ticket_no=?",
             (str(ticket_no).strip(),),
         ).fetchone()
@@ -1316,12 +1348,70 @@ def ticket_boq_final_total(
     return round(float(row["total"] or 0), 2)
 
 
-def sync_ticket_items_value(ticket_id: int, conn=None) -> float:
-    """يحدّث قيمة البنود على العطل من مجموع final_total لبنود العقد."""
+def ticket_boq_final_total(
+    ticket_id: int | None = None, ticket_no: str | None = None, conn=None
+) -> float | None:
+    """القيمة النهائية للعطل: إجمالي البنود ثم نسبة الطوارئ مرة واحدة إن وُجدت."""
     own = conn is None
     conn = conn or connect()
+    lines = list_ticket_boq_lines(ticket_id=ticket_id, ticket_no=ticket_no, conn=conn)
+    if own:
+        pass  # list_ticket_boq_lines won't close if we passed conn
+    if not lines:
+        if own:
+            conn.close()
+        return None
+    base = round(sum(float(x.get("line_total") or 0) for x in lines), 2)
+    settings = get_settings(conn)
+    ratio = ticket_emergency_ratio(lines, settings.get("emergency_ratio"))
+    if own:
+        conn.close()
+    return apply_final_value(base, ratio)
+
+
+def map_ticket_emergency_ratios(ticket_ids, settings_ratio=0.0, conn=None) -> dict:
+    """خريطة ticket_id → نسبة الطوارئ (0 إن لم يوجد بند طوارئ)."""
+    if not ticket_ids:
+        return {}
+    own = conn is None
+    conn = conn or connect()
+    placeholders = ",".join("?" * len(ticket_ids))
+    rows = conn.execute(
+        f"""
+        SELECT ticket_id,
+               MAX(CASE WHEN work_class='طوارئ' THEN 1 ELSE 0 END) AS has_em,
+               MAX(CASE WHEN work_class='طوارئ' THEN COALESCE(increase_ratio,0) ELSE 0 END) AS em_ratio
+        FROM ticket_boq_lines
+        WHERE ticket_id IN ({placeholders})
+        GROUP BY ticket_id
+        """,
+        list(ticket_ids),
+    ).fetchall()
+    if own:
+        conn.close()
+    fallback = float(settings_ratio or 0)
+    out = {}
+    for row in rows:
+        tid = row["ticket_id"]
+        if int(row["has_em"] or 0):
+            r = float(row["em_ratio"] or 0)
+            out[tid] = r if r > 0 else fallback
+        else:
+            out[tid] = 0.0
+    return out
+
+
+def sync_ticket_items_value(ticket_id: int, conn=None) -> float:
+    """يحدّث قيمة البنود على العطل من مجموع line_total (بدون نسبة الطوارئ)."""
+    own = conn is None
+    conn = conn or connect()
+    # إصلاح أي أسطر حُسبت عليها النسبة سابقاً على مستوى البند
+    conn.execute(
+        "UPDATE ticket_boq_lines SET final_total=line_total WHERE ticket_id=?",
+        (ticket_id,),
+    )
     row = conn.execute(
-        "SELECT COALESCE(SUM(final_total),0) AS total FROM ticket_boq_lines WHERE ticket_id=?",
+        "SELECT COALESCE(SUM(line_total),0) AS total FROM ticket_boq_lines WHERE ticket_id=?",
         (ticket_id,),
     ).fetchone()
     total = float(row["total"] or 0) if row else 0.0
@@ -1333,6 +1423,60 @@ def sync_ticket_items_value(ticket_id: int, conn=None) -> float:
         conn.commit()
         conn.close()
     return total
+
+
+def repair_boq_emergency_double_count(conn=None) -> int:
+    """إصلاح مضاعفة نسبة الطوارئ: إجمالي البند = كمية×سعر، والنسبة مرة واحدة في القيمة النهائية."""
+    own = conn is None
+    conn = conn or connect()
+    fixed = 0
+    rows = conn.execute(
+        """
+        SELECT id, ticket_id, qty, unit_price, line_total, final_total
+        FROM ticket_boq_lines
+        """
+    ).fetchall()
+    touched_tickets = set()
+    for row in rows:
+        base = round(float(row["qty"] or 0) * float(row["unit_price"] or 0), 2)
+        line_total = float(row["line_total"] or 0) if row["line_total"] is not None else None
+        final_total = row["final_total"]
+        needs = (
+            line_total is None
+            or abs(line_total - base) > 0.0001
+            or final_total is None
+            or abs(float(final_total or 0) - base) > 0.0001
+        )
+        if needs:
+            conn.execute(
+                "UPDATE ticket_boq_lines SET line_total=?, final_total=? WHERE id=?",
+                (base, base, row["id"]),
+            )
+            fixed += 1
+            if row["ticket_id"] is not None:
+                touched_tickets.add(row["ticket_id"])
+
+    mismatched = conn.execute(
+        """
+        SELECT t.id
+        FROM tickets t
+        JOIN (
+          SELECT ticket_id, SUM(line_total) AS base
+          FROM ticket_boq_lines
+          GROUP BY ticket_id
+        ) b ON b.ticket_id = t.id
+        WHERE ABS(COALESCE(t.items_value, 0) - COALESCE(b.base, 0)) > 0.0001
+        """
+    ).fetchall()
+    for row in mismatched:
+        touched_tickets.add(row["id"])
+    for tid in touched_tickets:
+        sync_ticket_items_value(tid, conn)
+        fixed += 1
+    if own:
+        conn.commit()
+        conn.close()
+    return fixed
 
 
 def get_lists(conn=None):

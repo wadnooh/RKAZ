@@ -154,7 +154,9 @@
     <div class="meta-item"><div class="k">{{ _('الفرقة') }}</div><div class="v">{{ ticket.team or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('التوجيه / الوصول') }}</div><div class="v">{{ ticket.dispatch_time or '—' }} / {{ ticket.arrival_time or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('زمن الاستجابة') }}</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} {{ _('دقيقة') }}{% else %}—{% endif %}</div></div>
-    <div class="meta-item"><div class="k">{{ _('تكلفة المعاملة (بنود العقد)') }}</div><div class="v">{% if ticket.boq_final_total %}{{ ticket.boq_final_total|money }}{% elif ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('إجمالي البنود') }}</div><div class="v">{% if ticket.boq_base_total is not none %}{{ ticket.boq_base_total|money }}{% elif ticket.items_value is not none %}{{ ticket.items_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('نسبة الطوارئ') }}</div><div class="v">{% if ticket.emergency_ratio_applied %}{{ (ticket.emergency_ratio_applied * 100)|round(1) }}٪{% else %}{{ _('بدون زيادة') }}{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القيمة النهائية') }}</div><div class="v"><strong>{% if ticket.final_value is not none %}{{ ticket.final_value|money }}{% else %}—{% endif %}</strong></div></div>
     <div class="meta-item"><div class="k">{{ _('تم التصوير') }}</div><div class="v">{{ tv(ticket.photographed) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الكميات مكتملة') }}</div><div class="v">{{ tv(ticket.quantities_done) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('حالة التمتير') }}</div><div class="v">{{ tv(ticket.metering_status) or '—' }}</div></div>
@@ -173,8 +175,11 @@
         {% if editing and step=='boq' %}<strong>{{ _('الخطوة الحالية: إضافة الكمية') }}</strong> — {% endif %}
         {% if boq_file %}{{ _('مرتبط بالدليل:') }} {{ boq_file.filename }} — {% endif %}
         {{ related.boq_lines|length }} {{ _('بند') }} |
-        {{ _('أساس') }} {{ (ticket.boq_base_total or 0)|money }} |
-        {{ _('نهائي') }} {{ (ticket.boq_final_total or 0)|money }}
+        {{ _('إجمالي البنود') }} {{ (ticket.boq_base_total or 0)|money }}
+        {% if ticket.emergency_ratio_applied %}
+        | {{ _('طوارئ') }} {{ (ticket.emergency_ratio_applied * 100)|round(1) }}٪
+        {% endif %}
+        | {{ _('القيمة النهائية') }} {{ (ticket.final_value or ticket.boq_final_total or 0)|money }}
       </div>
     </div>
   </div>
@@ -198,7 +203,7 @@
     <div class="field">
       <label>{{ _('نسبة الزيادة (طوارئ)') }}</label>
       <input type="number" step="0.01" min="0" name="increase_ratio" id="ticketBoqRatio" value="{{ emergency_ratio }}" placeholder="{{ emergency_ratio }}">
-      <div class="meta">{{ _('اعتيادي = 0٪ — طوارئ = من الإعدادات أو عدّل يدوياً (مثال 0.45 = 45٪)') }}</div>
+      <div class="meta">{{ _('اعتيادي = بدون زيادة على القيمة النهائية — طوارئ = تُطبَّق النسبة مرة واحدة على إجمالي البنود في القيمة النهائية') }}</div>
     </div>
     <div class="field full"><label>{{ _('ملاحظات البند') }}</label><input name="notes" value=""></div>
     <div class="actions" style="grid-column:1/-1">
@@ -264,7 +269,7 @@
       <thead>
         <tr>
           <th>{{ _('رقم البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الوحدة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('سعر الوحدة') }}</th>
-          <th>{{ _('الإجمالي') }}</th><th>{{ _('التصنيف') }}</th><th>{{ _('نسبة الزيادة') }}</th><th>{{ _('النهائي') }}</th>
+          <th>{{ _('الإجمالي') }}</th><th>{{ _('التصنيف') }}</th><th>{{ _('نسبة الزيادة') }}</th>
           {% if editing and can('tickets.write') %}<th></th>{% endif %}
         </tr>
       </thead>
@@ -276,10 +281,9 @@
           <td>{{ line.unit or '—' }}</td>
           <td>{{ line.qty if line.qty is not none else '—' }}</td>
           <td>{% if line.unit_price is not none %}{{ line.unit_price|money }}{% else %}—{% endif %}</td>
-          <td>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</td>
+          <td><strong>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</strong></td>
           <td>{{ tv(line.work_class) or '—' }}</td>
           <td>{% if line.work_class == 'طوارئ' %}{{ ((line.increase_ratio or 0) * 100)|round(1) }}٪{% else %}—{% endif %}</td>
-          <td><strong>{% if line.final_total is not none %}{{ line.final_total|money }}{% else %}—{% endif %}</strong></td>
           {% if editing and can('tickets.write') %}
           <td class="actions">
             <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف البند') }}">
@@ -290,11 +294,20 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="10" class="meta">{% if editing and can('tickets.write') %}{{ _('لا توجد بنود لهذا العطل بعد — أدخل رقم البند أعلاه.') }}{% else %}{{ _('لا توجد بنود لهذا العطل بعد.') }}{% endif %}</td></tr>
+        <tr><td colspan="{% if editing and can('tickets.write') %}9{% else %}8{% endif %}" class="meta">{% if editing and can('tickets.write') %}{{ _('لا توجد بنود لهذا العطل بعد — أدخل رقم البند أعلاه.') }}{% else %}{{ _('لا توجد بنود لهذا العطل بعد.') }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if related.boq_lines %}
+  <div class="meta" style="margin-top:10px;">
+    {{ _('إجمالي البنود') }}: <strong>{{ (ticket.boq_base_total or 0)|money }}</strong>
+    {% if ticket.emergency_ratio_applied %}
+    — {{ _('نسبة الطوارئ') }}: <strong>{{ (ticket.emergency_ratio_applied * 100)|round(1) }}٪</strong>
+    {% endif %}
+    — {{ _('القيمة النهائية') }}: <strong>{{ (ticket.final_value or 0)|money }}</strong>
+  </div>
+  {% endif %}
   {% if editing and step=='boq' and next_step %}
   <div class="actions" style="margin-top:12px;">
     <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>

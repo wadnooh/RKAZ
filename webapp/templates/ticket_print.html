@@ -98,6 +98,8 @@
           <div class="meta-item"><div class="k">{{ _('زمن الاستجابة') }}</div><div class="v">{% if ticket.response_min is not none %}{{ ticket.response_min }} دقيقة{% else %}—{% endif %}</div></div>
           <div class="meta-item"><div class="k">{{ _('وقت التوجيه') }}</div><div class="v">{{ ticket.dispatch_time or '—' }}</div></div>
           <div class="meta-item"><div class="k">{{ _('وقت الوصول') }}</div><div class="v">{{ ticket.arrival_time or '—' }}</div></div>
+          <div class="meta-item"><div class="k">{{ _('إجمالي البنود') }}</div><div class="v">{% if boq_base_total is not none %}{{ '%.2f'|format(boq_base_total) }} ر.س{% elif ticket.items_value is not none %}{{ '%.2f'|format(ticket.items_value) }} ر.س{% else %}—{% endif %}</div></div>
+          <div class="meta-item"><div class="k">{{ _('نسبة الطوارئ') }}</div><div class="v">{% if emergency_ratio_applied %}{{ '%.1f'|format(emergency_ratio_applied * 100) }}٪{% else %}{{ _('بدون زيادة') }}{% endif %}</div></div>
           <div class="meta-item"><div class="k">{{ _('القيمة النهائية') }}</div><div class="v">{% if ticket.final_value is not none %}{{ '%.2f'|format(ticket.final_value) }} ر.س{% else %}—{% endif %}</div></div>
           <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{{ ticket.location or '—' }}</div></div>
           <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ ticket.notes or '—' }}</div></div>
@@ -125,6 +127,24 @@
             <tr><td colspan="7">{{ _('لا توجد بنود') }}</td></tr>
             {% endfor %}
           </tbody>
+          {% if boq_base_total is not none %}
+          <tfoot>
+            <tr>
+              <th colspan="6">{{ _('إجمالي البنود') }}</th>
+              <th>{{ '%.2f'|format(boq_base_total) }}</th>
+            </tr>
+            {% if emergency_ratio_applied %}
+            <tr>
+              <th colspan="6">{{ _('نسبة الطوارئ') }} ({{ '%.1f'|format(emergency_ratio_applied * 100) }}٪)</th>
+              <th>{{ '%.2f'|format((ticket.final_value or 0) - (boq_base_total or 0)) }}</th>
+            </tr>
+            {% endif %}
+            <tr>
+              <th colspan="6">{{ _('القيمة النهائية') }}</th>
+              <th>{% if ticket.final_value is not none %}{{ '%.2f'|format(ticket.final_value) }}{% else %}—{% endif %}</th>
+            </tr>
+          </tfoot>
+          {% endif %}
         </table>
       </div>
 
