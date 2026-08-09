@@ -158,7 +158,7 @@
             {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
             {% if can_mod_write and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
             <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">
-              <button class="btn primary" type="submit">{{ _('نقل إلى الرخص المصدرة') }}</button>
+              <button class="btn primary" type="submit">{{ _('نقل إلى متابعة التصاريح') }}</button>
             </form>
             {% endif %}
             {% if can_mod_write and name == 'new_coordinations' and r.transferred_license_id %}

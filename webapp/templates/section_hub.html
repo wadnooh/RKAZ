@@ -75,8 +75,7 @@
         <div class="meta">{{ _('كل المعاملات التي بها حفر تُربط تلقائياً بالتنسيقات لبدء إخلاء الأسفلت') }}{% if excavation_pending is defined %} — {{ _('بانتظار الإخلاء:') }} {{ excavation_pending }}{% endif %}</div>
       </div>
       <div class="actions">
-        <a class="btn ghost" href="{{ url_for('module_list', name='coordination', excavation=1) }}">{{ _('تنسيقات الحفر') }}</a>
-        <a class="btn primary" href="{{ url_for('module_list', name='quality_clearances', excavation=1) }}">{{ _('إخلاءات الحفر') }}</a>
+        <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='initial') }}">{{ _('فتح الإخلاءات') }}</a>
       </div>
     </div>
     <div class="table-wrap">
@@ -103,14 +102,9 @@
               {% if r.ticket_id %}
               <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=r.ticket_id) }}">{{ _('العطل') }}</a>
               {% endif %}
-              {% if r.coord_id %}
-              <a class="btn ghost" href="{{ url_for('module_edit', name='coordination', row_id=r.coord_id) }}">{{ _('تنسيق') }}</a>
-              {% else %}
-              <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=r.ticket_no) }}">{{ _('+ تنسيق') }}</a>
-              {% endif %}
               {% if r.clearance_id %}
-              <a class="btn primary" href="{{ url_for('module_edit', name='quality_clearances', row_id=r.clearance_id) }}">{{ _('إخلاء') }}</a>
-              {% else %}
+              <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='initial') }}">{{ _('إخلاء') }}</a>
+              {% elif can('modules.write') %}
               <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', ticket_no=r.ticket_no) }}">{{ _('+ إخلاء') }}</a>
               {% endif %}
             </td>

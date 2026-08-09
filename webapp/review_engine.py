@@ -21,7 +21,6 @@ def jump_destinations():
         {"title": "موردي الأسفلت", "path": "/quality?tab=permits&sub=asphalt", "group": "التنسيقات والجودة", "keywords": "أسفلت"},
         {"title": "الإخلاءات", "path": "/quality?tab=evacuations&sub=initial", "group": "التنسيقات والجودة", "keywords": "إخلاء أسفلت"},
         {"title": "الإخلاء المبدئي", "path": "/quality?tab=evacuations&sub=initial", "group": "التنسيقات والجودة", "keywords": "إخلاء مبدئي"},
-        {"title": "الرخص المصدرة", "path": "/module/issued_licenses", "group": "التنسيقات والجودة", "keywords": "رخص مصدرة"},
         {"title": "لوحة العمليات", "path": "/ops", "group": "عمليات", "keywords": "لوحة dashboard ops"},
         {"title": "الأعطال", "path": "/tickets", "group": "عمليات", "keywords": "عطل أعطال ticket fault طوارئ"},
         {"title": "عطل جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة عطل جديد"},

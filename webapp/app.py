@@ -552,10 +552,6 @@ def ops_home():
     tools = [
         {"label": _t("الفرق الأولية"), "href": url_for("ops_primary_teams")},
         {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
-        {
-            "label": _t("الرخص المصدرة"),
-            "href": url_for("module_list", name="issued_licenses", linked_section="ops"),
-        },
     ]
 
     conn = db.connect()
@@ -580,14 +576,6 @@ def ops_home():
 @login_required
 def constructions_home():
     links = section_links("constructions")
-    links.append(
-        {
-            "label": _t("الرخص المصدرة"),
-            "href": url_for("module_list", name="issued_licenses", linked_section="constructions"),
-            "count": db.count_issued_licenses("constructions"),
-            "key": "issued_licenses_constructions",
-        }
-    )
     return render_template(
         "section_hub.html",
         title=_t("الإنشاءات - التنفيذ"),
@@ -611,14 +599,6 @@ def new_coords_home():
 @login_required
 def projects_home():
     links = section_links("projects")
-    links.append(
-        {
-            "label": _t("الرخص المصدرة"),
-            "href": url_for("module_list", name="issued_licenses", linked_section="projects"),
-            "count": db.count_issued_licenses("projects"),
-            "key": "issued_licenses_projects",
-        }
-    )
     return render_template(
         "section_hub.html",
         title=_t("المشاريع"),
@@ -3366,11 +3346,9 @@ def new_coordination_transfer(row_id):
             result.get("license_no") or "",
         )
         _after_data_change()
-        return redirect(url_for("module_edit", name="issued_licenses", row_id=result.get("license_id")))
+        return redirect(url_for("quality_home", tab="permits", sub="active"))
     flash(_t("الرخصة منقولة مسبقاً"), "ok")
-    if result.get("license_id"):
-        return redirect(url_for("module_edit", name="issued_licenses", row_id=result.get("license_id")))
-    return redirect(url_for("module_list", name="new_coordinations"))
+    return redirect(url_for("quality_home", tab="permits", sub="active"))
 
 
 # ---------- Cashflow (مخفي من الواجهة — يوجّه للمتابعات المالية) ----------

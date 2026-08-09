@@ -172,6 +172,7 @@ MODULES = {
         "title": "التنسيقات الفنية",
         "table": "coordination",
         "section": "quality",
+        "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("needs_asphalt", "هل يحتاج إخلاء أسفلت؟", "yesno"),
@@ -189,6 +190,7 @@ MODULES = {
         "title": "إخلاءات الأسفلت (فسوحات)",
         "table": "quality_clearances",
         "section": "quality",
+        "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("clearance_no", "رقم الإخلاء", "text"),
@@ -206,6 +208,7 @@ MODULES = {
         "title": "فحوصات الجودة",
         "table": "quality_inspections",
         "section": "quality",
+        "hub_hidden": True,
         "fields": [
             ("ticket_no", "رقم العطل", "ticket"),
             ("inspect_date", "تاريخ الفحص", "date"),
@@ -256,6 +259,7 @@ MODULES = {
         "title": "الرخص المصدرة",
         "table": "issued_licenses",
         "section": "quality",
+        "hub_hidden": True,
         "fields": [
             ("license_no", "رقم الرخصة", "text"),
             ("rtc_no", "رقم رسملة / RTC", "text"),
@@ -496,5 +500,9 @@ SECTION_META = {
 }
 
 
-def modules_for_section(section):
-    return [(k, m) for k, m in MODULES.items() if m.get("section") == section]
+def modules_for_section(section, *, include_hidden: bool = False):
+    return [
+        (k, m)
+        for k, m in MODULES.items()
+        if m.get("section") == section and (include_hidden or not m.get("hub_hidden"))
+    ]
