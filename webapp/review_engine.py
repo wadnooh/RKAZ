@@ -7,6 +7,8 @@ def jump_destinations():
     """قائمة وجهات نافذة القفز السريع."""
     return [
         {"title": "الإنشاءات - التنفيذ", "path": "/constructions", "group": "أقسام", "keywords": "إنشاءات"},
+        {"title": "التنسيقات الجديدة", "path": "/new-coordinations", "group": "أقسام", "keywords": "تنسيق رخصة إصدار"},
+        {"title": "الرخص المصدرة", "path": "/module/issued_licenses", "group": "أقسام", "keywords": "رخص مصدرة"},
         {"title": "لوحة العمليات", "path": "/ops", "group": "عمليات", "keywords": "لوحة dashboard ops"},
         {"title": "الأعطال", "path": "/tickets", "group": "عمليات", "keywords": "عطل أعطال ticket fault طوارئ"},
         {"title": "عطل جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة عطل جديد"},
