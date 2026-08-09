@@ -741,6 +741,20 @@ td.col-item-name[title]:hover {
 .quality-metric-row.compact {
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
+.quality-count-cards {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  margin: 0 0 14px;
+}
+.quality-count-cards-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.quality-count-cards .quality-metric {
+  min-height: 96px;
+  text-align: center;
+}
+.quality-count-cards .quality-metric strong {
+  font-size: 1.85rem;
+}
 .quality-metric {
   display: block;
   text-decoration: none;
@@ -749,11 +763,16 @@ td.col-item-name[title]:hover {
   border: 1px solid #ddd5ef;
   border-radius: 14px;
   padding: 14px 12px;
-  transition: border-color 0.15s ease, transform 0.15s ease;
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 }
 a.quality-metric:hover {
   border-color: #8a7349;
   transform: translateY(-1px);
+}
+a.quality-metric.active {
+  border-color: #8a7349;
+  background: linear-gradient(180deg, #fff8e8, #fff);
+  box-shadow: 0 6px 16px rgba(138, 115, 73, 0.14);
 }
 .quality-metric div {
   color: var(--muted);
@@ -804,12 +823,18 @@ a.quality-metric:hover {
   .quality-summary,
   .quality-evac-cards,
   .quality-metric-row,
-  .quality-metric-row.compact {
+  .quality-metric-row.compact,
+  .quality-count-cards,
+  .quality-count-cards-3 {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 @media (max-width: 720px) {
   .stats-grid, .form-grid, .meta-grid { grid-template-columns: 1fr; }
+  .quality-count-cards,
+  .quality-count-cards-3 {
+    grid-template-columns: 1fr;
+  }
   .edge-logo { display: none; }
   .tabs {
     padding: 10px 14px 0;

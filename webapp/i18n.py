@@ -478,6 +478,7 @@ PHRASE_EN = {
     'نقل إلى متابعة التصاريح': 'Transfer to permit follow-up',
     'متابعة التصاريح': 'Permit follow-up',
     'فتح الإخلاءات': 'Open evacuations',
+    'عدد السجلات المعروضة:': 'Displayed records:',
     'تم نقل الرخصة المصدرة {no} إلى قسم {sec}': 'Issued license {no} transferred to {sec}',
     'الرخصة منقولة مسبقاً': 'License already transferred',
     'التنسيق غير موجود': 'Coordination not found',

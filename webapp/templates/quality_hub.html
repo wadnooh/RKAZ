@@ -11,6 +11,81 @@
 } %}
 {% include "_quality_subnav.html" %}
 
+{% set nc = new_coords_counts or {} %}
+{% set lc = counts or {} %}
+{% set cc = clearance_counts or {} %}
+
+{% if qtab == 'new_coords' %}
+<div class="quality-metric-row quality-count-cards">
+  <a class="quality-metric{% if qsub=='coords' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='coords', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('التنسيقات الجديدة') }}</div>
+    <strong>{{ nc.coords or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='reports' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='reports', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('البلاغات') }}</div>
+    <strong>{{ nc.reports or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='master_plan' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='master_plan', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('المخطط الشامل') }}</div>
+    <strong>{{ nc.master_plan or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='violations' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='violations', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('المخالفات') }}</div>
+    <strong>{{ nc.violations or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='expired' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='expired', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الرخص المنتهية') }}</div>
+    <strong>{{ lc.expired or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='cancelled' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='cancelled', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الرخص الملغاة') }}</div>
+    <strong>{{ (lc.cancelled or 0) + (cc.cancelled or 0) }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='final' %} active{% endif %}" href="{{ url_for('quality_home', tab='new_coords', sub='final', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الإخلاء النهائي') }}</div>
+    <strong>{{ cc.final or 0 }}</strong>
+  </a>
+</div>
+{% elif qtab == 'permits' %}
+<div class="quality-metric-row quality-count-cards">
+  <a class="quality-metric{% if qsub=='active' %} active{% endif %}" href="{{ url_for('quality_home', tab='permits', sub='active', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الرخص السارية') }}</div>
+    <strong>{{ lc.active or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='checks' %} active{% endif %}" href="{{ url_for('quality_home', tab='permits', sub='checks', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('تحت التشييكات') }}</div>
+    <strong>{{ lc.checks or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='closing' %} active{% endif %}" href="{{ url_for('quality_home', tab='permits', sub='closing', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('تحت إجراءات الإغلاق') }}</div>
+    <strong>{{ lc.closing or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='asphalt' %} active{% endif %}" href="{{ url_for('quality_home', tab='permits', sub='asphalt', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('موردي الأسفلت') }}</div>
+    <strong>{{ lc.asphalt or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='expired' %} active{% endif %}" href="{{ url_for('quality_home', tab='permits', sub='expired', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الرخص المنتهية') }}</div>
+    <strong>{{ lc.expired or 0 }}</strong>
+  </a>
+</div>
+{% elif qtab == 'evacuations' %}
+<div class="quality-metric-row quality-count-cards quality-count-cards-3">
+  <a class="quality-metric{% if qsub=='initial' %} active{% endif %}" href="{{ url_for('quality_home', tab='evacuations', sub='initial', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الإخلاء المبدئي') }}</div>
+    <strong>{{ cc.initial or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='final' %} active{% endif %}" href="{{ url_for('quality_home', tab='evacuations', sub='final', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الإخلاء النهائي') }}</div>
+    <strong>{{ cc.final or 0 }}</strong>
+  </a>
+  <a class="quality-metric{% if qsub=='cancelled' %} active{% endif %}" href="{{ url_for('quality_home', tab='evacuations', sub='cancelled', year=year or '', month=month or '', q=q or '') }}">
+    <div>{{ _('الرخص الملغاة') }}</div>
+    <strong>{{ (cc.cancelled or 0) + (lc.cancelled or 0) }}</strong>
+  </a>
+</div>
+{% endif %}
+
 <div class="card quality-hub">
   <div class="toolbar">
     <div>
@@ -39,8 +114,8 @@
           {% endif %}
         {% endif %}
       </div>
-      <h2 class="section-title">{{ page_title }}</h2>
-      <div class="meta">{{ page_subtitle }}</div>
+      <h2 class="section-title">{{ current_tab_label }}</h2>
+      <div class="meta">{{ _('عدد السجلات المعروضة:') }} {{ rows|length if rows is defined else 0 }}</div>
     </div>
     <div class="actions">
       {% if qtab == 'new_coords' and can('modules.write') %}
@@ -93,31 +168,7 @@
     </div>
   </form>
 
-  <div class="quality-summary">
-    <div class="quality-summary-card">
-      <div class="meta">{{ _('التبويبة الحالية') }}</div>
-      <strong>{{ current_tab_label }}</strong>
-      <div class="meta">{{ _('عدد المعاملات:') }} {{ rows|length if rows is defined else 0 }}</div>
-    </div>
-    <div class="quality-summary-card">
-      <div class="meta">{{ _('الفترة الحالية') }}</div>
-      <strong>
-        {% if year or month %}
-          {{ year or _('كل السنوات') }}{% if month %} / {{ month }}{% endif %}
-        {% else %}
-          {{ _('كل الفترات') }}
-        {% endif %}
-      </strong>
-    </div>
-    <div class="quality-summary-card">
-      <div class="meta">{{ _('التقرير المتاح في هذه الصفحة') }}</div>
-      <strong>{{ _('التقرير الموحد') }}</strong>
-      <div class="meta">{{ _('عدد المعاملات:') }} {{ rows|length if rows is defined else 0 }}</div>
-    </div>
-  </div>
-
-  {% if mode == 'licenses' %}
-  {% if buckets %}
+  {% if mode == 'licenses' and buckets and (buckets.total or 0) > 0 %}
   <div class="quality-metric-row compact">
     <div class="quality-metric"><div>{{ _('إجمالي المعاملات') }}</div><strong>{{ buckets.total or 0 }}</strong></div>
     <div class="quality-metric"><div>{{ _('أقل من 7 أيام') }}</div><strong>{{ buckets.lt7 or 0 }}</strong></div>
@@ -128,6 +179,8 @@
     <div class="quality-metric"><div>{{ _('بانتظار الاستشاري') }}</div><strong>{{ buckets.waiting or 0 }}</strong></div>
   </div>
   {% endif %}
+
+  {% if mode == 'licenses' %}
   <div class="table-wrap">
     <table class="table quality-table">
       <thead>
