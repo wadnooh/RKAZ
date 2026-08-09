@@ -773,7 +773,7 @@ def quality_home():
         content_mode=content_mode,
         current_tab_label=current_tab_label,
         section="quality",
-        section_modules=modules_for_section("quality"),
+        section_modules=[],
         section_meta=_smeta(SECTION_META["quality"]),
         excavation_queue=excavation_queue,
         excavation_pending=pending_clearance,

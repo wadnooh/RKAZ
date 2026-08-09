@@ -1,6 +1,8 @@
 {% set qtab = quality_tab or 'new_coords' %}
 {% set qsub = quality_sub or '' %}
-{% set nc_counts = new_coords_counts or {} %}
+{% set nc_counts = new_coords_counts if new_coords_counts is defined and new_coords_counts else {} %}
+{% set counts = counts if counts is defined and counts else {} %}
+{% set clearance_counts = clearance_counts if clearance_counts is defined and clearance_counts else {} %}
 <div class="quality-subnav">
   <div class="actions" data-tab-strip="1">
     <a class="btn ghost{% if qtab=='new_coords' %} primary{% endif %}"

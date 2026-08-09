@@ -3,15 +3,12 @@
 {% set qtab = quality_tab or 'new_coords' %}
 {% set qsub = quality_sub or '' %}
 {% set mode = content_mode or '' %}
-{% set section = 'quality' %}
-{% set section_modules = section_modules if section_modules is defined else [] %}
 {% set kind_by_sub = {
   'coords': 'تنسيق جديد',
   'reports': 'بلاغ',
   'master_plan': 'مخطط شامل',
   'violations': 'مخالفة'
 } %}
-{% include "_section_subnav.html" %}
 {% include "_quality_subnav.html" %}
 
 <div class="card quality-hub">

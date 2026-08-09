@@ -223,6 +223,7 @@ MODULES = {
         "title": "التنسيقات الجديدة",
         "table": "new_coordinations",
         "section": "quality",
+        "hub_hidden": True,
         "fields": [
             ("coord_no", "رقم التنسيق", "text"),
             ("coord_kind", "نوع التبويب", "list:new_coord_kind"),
