@@ -222,6 +222,7 @@ MODULES = {
         "section": "quality",
         "fields": [
             ("coord_no", "رقم التنسيق", "text"),
+            ("coord_kind", "نوع التبويب", "list:new_coord_kind"),
             ("request_date", "تاريخ الطلب", "date"),
             ("authority", "الجهة", "text"),
             ("work_desc", "وصف العمل", "text"),
@@ -240,6 +241,7 @@ MODULES = {
         ],
         "list_cols": [
             "coord_no",
+            "coord_kind",
             "request_date",
             "authority",
             "linked_section",

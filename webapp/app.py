@@ -604,7 +604,7 @@ def constructions_home():
 @login_required
 def new_coords_home():
     """تحويل قديم: التنسيقات الجديدة داخل قسم التنسيقات والجودة فقط."""
-    return redirect(url_for("quality_home", tab="new_coords"))
+    return redirect(url_for("quality_home", tab="new_coords", sub="coords"))
 
 
 @app.route("/projects")
@@ -651,9 +651,9 @@ def contractors_home():
 @login_required
 def quality_home():
     """مركز التنسيقات والجودة — واجهة بأسلوب رسملة (تبويبات / فلاتر / تقارير)."""
-    tab = (request.args.get("tab") or "permits").strip().lower()
+    tab = (request.args.get("tab") or "new_coords").strip().lower()
     if tab not in ("permits", "new_coords", "evacuations"):
-        tab = "permits"
+        tab = "new_coords"
     sub = (request.args.get("sub") or "").strip().lower()
     year = (request.args.get("year") or "").strip()
     month = (request.args.get("month") or "").strip()
@@ -661,12 +661,24 @@ def quality_home():
 
     permit_subs = {"active", "checks", "closing", "asphalt", "expired"}
     evac_subs = {"initial", "final", "cancelled"}
-    if tab == "permits" and sub and sub not in permit_subs:
-        sub = ""
-    if tab == "evacuations" and sub and sub not in evac_subs:
-        sub = ""
+    new_coords_subs = {
+        "coords",
+        "reports",
+        "master_plan",
+        "violations",
+        "expired",
+        "cancelled",
+        "final",
+    }
+    if tab == "permits":
+        if not sub or sub not in permit_subs:
+            sub = "active"
+    if tab == "evacuations":
+        if not sub or sub not in evac_subs:
+            sub = "initial"
     if tab == "new_coords":
-        sub = ""
+        if not sub or sub not in new_coords_subs:
+            sub = "coords"
 
     conn = db.connect()
     db.link_excavation_transactions_to_coordination(conn)
@@ -674,22 +686,55 @@ def quality_home():
     excavation_queue = db.list_excavation_coordination_queue(conn, limit=40)
     counts = db.count_issued_licenses_by_hub_sub(conn)
     clearance_counts = db.count_clearances_by_stage(conn)
+    new_coords_counts = db.count_new_coordinations_by_kind(conn)
     years = db.quality_hub_year_options(conn)
 
     rows = []
     buckets = {}
     cancelled_licenses = []
+    content_mode = ""
     if tab == "permits" and sub:
         rows = db.list_issued_licenses_for_hub(conn, sub=sub, year=year, month=month, q=q)
         buckets = db.license_days_buckets(rows)
+        content_mode = "licenses"
     elif tab == "new_coords":
-        rows = db.list_new_coordinations_for_hub(conn, year=year, month=month, q=q)
+        if sub in {"coords", "reports", "master_plan", "violations"}:
+            kind = db.coord_kind_for_sub(sub)
+            rows = db.list_new_coordinations_for_hub(
+                conn, kind=kind, year=year, month=month, q=q
+            )
+            content_mode = "new_coords"
+        elif sub == "expired":
+            rows = db.list_issued_licenses_for_hub(
+                conn, sub="expired", year=year, month=month, q=q
+            )
+            buckets = db.license_days_buckets(rows)
+            content_mode = "licenses"
+        elif sub == "cancelled":
+            cancelled_licenses = db.list_issued_licenses_for_hub(
+                conn, sub="cancelled", year=year, month=month, q=q
+            )
+            rows = db.list_clearances_for_hub(
+                conn, stage="cancelled", year=year, month=month, q=q
+            )
+            content_mode = "cancelled"
+        elif sub == "final":
+            rows = db.list_clearances_for_hub(
+                conn, stage="final", year=year, month=month, q=q
+            )
+            content_mode = "clearances"
     elif tab == "evacuations" and sub:
-        rows = db.list_clearances_for_hub(conn, stage=sub, year=year, month=month, q=q)
         if sub == "cancelled":
             cancelled_licenses = db.list_issued_licenses_for_hub(
                 conn, sub="cancelled", year=year, month=month, q=q
             )
+            rows = db.list_clearances_for_hub(
+                conn, stage="cancelled", year=year, month=month, q=q
+            )
+            content_mode = "cancelled"
+        else:
+            rows = db.list_clearances_for_hub(conn, stage=sub, year=year, month=month, q=q)
+            content_mode = "clearances"
 
     conn.commit()
     conn.close()
@@ -706,6 +751,10 @@ def quality_home():
         "evacuations": _t("الإخلاءات"),
     }
     sub_labels = {
+        "coords": _t("التنسيقات الجديدة"),
+        "reports": _t("البلاغات"),
+        "master_plan": _t("المخطط الشامل"),
+        "violations": _t("المخالفات"),
         "active": _t("الرخص السارية"),
         "checks": _t("تحت التشييكات"),
         "closing": _t("تحت إجراءات الإغلاق"),
@@ -737,9 +786,11 @@ def quality_home():
         years=years,
         counts=counts,
         clearance_counts=clearance_counts,
+        new_coords_counts=new_coords_counts,
         rows=rows,
         buckets=buckets,
         cancelled_licenses=cancelled_licenses,
+        content_mode=content_mode,
         current_tab_label=current_tab_label,
         section="quality",
         section_modules=modules_for_section("quality"),
@@ -2764,6 +2815,12 @@ def module_new(name):
                 prefill["approved_value"] = boq_approved_total
     if name == "quality_clearances" and request.args.get("clearance_stage") and "clearance_stage" in prefill:
         prefill["clearance_stage"] = (request.args.get("clearance_stage") or "").strip()
+    if name == "new_coordinations" and "coord_kind" in prefill:
+        kind_arg = (request.args.get("coord_kind") or "").strip()
+        if kind_arg:
+            prefill["coord_kind"] = kind_arg
+        elif not (prefill.get("coord_kind") or "").strip():
+            prefill["coord_kind"] = "تنسيق جديد"
     if name == "issued_licenses" and request.args.get("workflow_status") and "workflow_status" in prefill:
         prefill["workflow_status"] = (request.args.get("workflow_status") or "").strip()
     if name == "warehouse_tx" and request.args.get("ticket_no"):
@@ -2908,6 +2965,8 @@ def module_new(name):
                 data["request_date"] = datetime.now().strftime("%Y-%m-%d")
             if not (data.get("status") or "").strip():
                 data["status"] = "مسودة"
+            if not (data.get("coord_kind") or "").strip():
+                data["coord_kind"] = "تنسيق جديد"
             if not db.normalize_linked_section(data.get("linked_section")):
                 data["linked_section"] = "الإنشاءات"
         if name == "issued_licenses":
@@ -3129,6 +3188,8 @@ def module_edit(name, row_id):
         if name == "new_coordinations":
             if not (data.get("coord_no") or "").strip():
                 data["coord_no"] = dict(row).get("coord_no") or db.next_series_code("nc", conn)
+            if not (data.get("coord_kind") or "").strip():
+                data["coord_kind"] = dict(row).get("coord_kind") or "تنسيق جديد"
             if not db.normalize_linked_section(data.get("linked_section")):
                 data["linked_section"] = dict(row).get("linked_section") or "الإنشاءات"
         if name == "issued_licenses":

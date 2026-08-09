@@ -1,9 +1,16 @@
 {% extends "base.html" %}
 {% block content %}
-{% set qtab = quality_tab or 'permits' %}
+{% set qtab = quality_tab or 'new_coords' %}
 {% set qsub = quality_sub or '' %}
+{% set mode = content_mode or '' %}
 {% set section = 'quality' %}
 {% set section_modules = section_modules if section_modules is defined else [] %}
+{% set kind_by_sub = {
+  'coords': 'تنسيق جديد',
+  'reports': 'بلاغ',
+  'master_plan': 'مخطط شامل',
+  'violations': 'مخالفة'
+} %}
 {% include "_section_subnav.html" %}
 {% include "_quality_subnav.html" %}
 
@@ -12,14 +19,22 @@
     <div>
       <div class="meta quality-breadcrumb">
         {{ _('التنسيقات والجودة') }}
-        {% if qtab == 'permits' %} / {{ _('متابعة تصاريح العمل بعد الاصدار') }}
+        {% if qtab == 'new_coords' %} / {{ _('التنسيقات الجديدة') }}
+          {% if qsub == 'coords' %} / {{ _('التنسيقات الجديدة') }}
+          {% elif qsub == 'reports' %} / {{ _('البلاغات') }}
+          {% elif qsub == 'master_plan' %} / {{ _('المخطط الشامل') }}
+          {% elif qsub == 'violations' %} / {{ _('المخالفات') }}
+          {% elif qsub == 'expired' %} / {{ _('الرخص المنتهية') }}
+          {% elif qsub == 'cancelled' %} / {{ _('الرخص الملغاة') }}
+          {% elif qsub == 'final' %} / {{ _('الإخلاء النهائي') }}
+          {% endif %}
+        {% elif qtab == 'permits' %} / {{ _('متابعة تصاريح العمل بعد الاصدار') }}
           {% if qsub == 'active' %} / {{ _('الرخص السارية') }}
           {% elif qsub == 'checks' %} / {{ _('تحت التشييكات') }}
           {% elif qsub == 'closing' %} / {{ _('تحت إجراءات الإغلاق') }}
           {% elif qsub == 'asphalt' %} / {{ _('موردي الأسفلت') }}
           {% elif qsub == 'expired' %} / {{ _('الرخص المنتهية') }}
           {% endif %}
-        {% elif qtab == 'new_coords' %} / {{ _('التنسيقات الجديدة') }}
         {% elif qtab == 'evacuations' %} / {{ _('الإخلاءات') }}
           {% if qsub == 'initial' %} / {{ _('الإخلاء المبدئي') }}
           {% elif qsub == 'final' %} / {{ _('الإخلاء النهائي') }}
@@ -32,7 +47,15 @@
     </div>
     <div class="actions">
       {% if qtab == 'new_coords' and can('modules.write') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='new_coordinations') }}">+ {{ _('تنسيق جديد') }}</a>
+        {% if qsub in ['coords', 'reports', 'master_plan', 'violations'] %}
+        <a class="btn primary" href="{{ url_for('module_new', name='new_coordinations', coord_kind=kind_by_sub.get(qsub, 'تنسيق جديد')) }}">+ {{ _('إضافة') }}</a>
+        {% elif qsub == 'expired' %}
+        <a class="btn primary" href="{{ url_for('module_new', name='issued_licenses') }}">+ {{ _('رخصة') }}</a>
+        {% elif qsub == 'cancelled' %}
+        <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', clearance_stage='رخصة ملغاة') }}">+ {{ _('رخصة ملغاة') }}</a>
+        {% elif qsub == 'final' %}
+        <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', clearance_stage='إخلاء نهائي') }}">+ {{ _('إخلاء نهائي') }}</a>
+        {% endif %}
       {% elif qtab == 'permits' and can('modules.write') %}
       <a class="btn primary" href="{{ url_for('module_new', name='issued_licenses') }}">+ {{ _('رخصة') }}</a>
       {% elif qtab == 'evacuations' and can('modules.write') %}
@@ -98,53 +121,7 @@
     </div>
   </div>
 
-  {% if qtab == 'permits' and not qsub %}
-  <div class="quality-metric-row">
-    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='active') }}">
-      <div>{{ _('الرخص السارية') }}</div>
-      <strong>{{ counts.active or 0 }}</strong>
-    </a>
-    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='checks') }}">
-      <div>{{ _('تحت التشييكات') }}</div>
-      <strong>{{ counts.checks or 0 }}</strong>
-    </a>
-    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='closing') }}">
-      <div>{{ _('تحت إجراءات الإغلاق') }}</div>
-      <strong>{{ counts.closing or 0 }}</strong>
-    </a>
-    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='asphalt') }}">
-      <div>{{ _('موردي الأسفلت') }}</div>
-      <strong>{{ counts.asphalt or 0 }}</strong>
-    </a>
-    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='expired') }}">
-      <div>{{ _('الرخص المنتهية') }}</div>
-      <strong>{{ counts.expired or 0 }}</strong>
-    </a>
-  </div>
-  <div class="quality-empty-hint">
-    {{ _('اختر التبويبة أولاً حتى يظهر التقرير المتاح لها. لن يظهر أي تقرير في هذه الصفحة قبل اختيار التصنيف المطلوب.') }}
-  </div>
-
-  {% elif qtab == 'evacuations' and not qsub %}
-  <div class="quality-evac-cards">
-    <div class="quality-evac-card">
-      <div class="meta">{{ _('الإخلاء المبدئي') }}</div>
-      <strong>{{ clearance_counts.initial or 0 }}</strong>
-      <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='initial') }}">{{ _('فتح الإخلاء المبدئي') }}</a>
-    </div>
-    <div class="quality-evac-card">
-      <div class="meta">{{ _('الإخلاء النهائي') }}</div>
-      <strong>{{ clearance_counts.final or 0 }}</strong>
-      <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='final') }}">{{ _('فتح الإخلاء النهائي') }}</a>
-    </div>
-    <div class="quality-evac-card">
-      <div class="meta">{{ _('الرخص الملغاة') }}</div>
-      <strong>{{ (clearance_counts.cancelled or 0) + (clearance_counts.cancelled_licenses or 0) }}</strong>
-      <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='cancelled') }}">{{ _('فتح الرخص الملغاة') }}</a>
-    </div>
-  </div>
-
-  {% elif qtab == 'permits' and qsub %}
+  {% if mode == 'licenses' %}
   {% if buckets %}
   <div class="quality-metric-row compact">
     <div class="quality-metric"><div>{{ _('إجمالي المعاملات') }}</div><strong>{{ buckets.total or 0 }}</strong></div>
@@ -207,13 +184,14 @@
     </table>
   </div>
 
-  {% elif qtab == 'new_coords' %}
+  {% elif mode == 'new_coords' %}
   <div class="table-wrap">
     <table class="table quality-table">
       <thead>
         <tr>
           <th>#</th>
           <th>{{ _('رقم التنسيق') }}</th>
+          <th>{{ _('نوع التبويب') }}</th>
           <th>{{ _('تاريخ الطلب') }}</th>
           <th>{{ _('الجهة') }}</th>
           <th>{{ _('الحي') }}</th>
@@ -230,6 +208,7 @@
         <tr>
           <td dir="ltr">#{{ r.id }}</td>
           <td dir="ltr"><strong>{{ r.coord_no or '—' }}</strong></td>
+          <td>{{ tv(r.coord_kind) if r.coord_kind else _('تنسيق جديد') }}</td>
           <td>{{ r.request_date or '—' }}</td>
           <td>{{ r.authority or '—' }}</td>
           <td>{{ r.district or '—' }}</td>
@@ -250,14 +229,14 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11" class="meta">{{ _('لا توجد تنسيقات جديدة مطابقة.') }}</td></tr>
+        <tr><td colspan="12" class="meta">{{ _('لا توجد سجلات مطابقة في هذا التبويب.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
-  {% elif qtab == 'evacuations' and qsub %}
-  {% if qsub == 'cancelled' and cancelled_licenses %}
+  {% elif mode == 'cancelled' or mode == 'clearances' %}
+  {% if mode == 'cancelled' and cancelled_licenses %}
   <h3 class="section-title" style="font-size:1.05rem;margin:12px 0 8px;">{{ _('الرخص الملغاة') }}</h3>
   <div class="table-wrap" style="margin-bottom:14px;">
     <table class="table quality-table">

@@ -79,6 +79,7 @@ DEFAULT_LISTS = {
     "project_status": ["جديد", "قيد التنفيذ", "موقوف", "مكتمل", "مغلق"],
     "work_class": ["اعتيادي", "طوارئ"],
     "new_coord_status": ["مسودة", "قيد التنسيق", "بانتظار الرخصة", "تم الإصدار", "مرفوض", "ملغي"],
+    "new_coord_kind": ["تنسيق جديد", "بلاغ", "مخطط شامل", "مخالفة"],
     "issued_license_status": ["سارية", "منتهية", "ملغاة", "تم إصدار الرخصة", "جاري العمل"],
     "license_types": ["بلدية", "أمانة", "كهرباء", "حفر", "أخرى"],
     "license_workflow": [
@@ -236,6 +237,7 @@ EXTRA_TABLE_DDL = {
             expiry_date TEXT,
             officer TEXT,
             transferred_license_id INTEGER,
+            coord_kind TEXT,
             notes TEXT
         )
     """,
@@ -337,6 +339,16 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "construction_works" in existing or "construction_works" in created:
             if _ensure_column(conn, "construction_works", "ticket_no"):
                 created.append("construction_works.ticket_no")
+        if "new_coordinations" in existing or "new_coordinations" in created:
+            if _ensure_column(conn, "new_coordinations", "coord_kind"):
+                created.append("new_coordinations.coord_kind")
+            conn.execute(
+                """
+                UPDATE new_coordinations
+                SET coord_kind='تنسيق جديد'
+                WHERE coord_kind IS NULL OR trim(coord_kind)=''
+                """
+            )
         # ربط معاملات الحفر بالتنسيقات لبدء إجراءات الإخلاء
         n_exc = link_excavation_transactions_to_coordination(conn)
         if n_exc:
@@ -2284,9 +2296,31 @@ def license_days_buckets(rows: list[dict]) -> dict:
     return buckets
 
 
+_COORD_KIND_BY_SUB = {
+    "coords": "تنسيق جديد",
+    "reports": "بلاغ",
+    "master_plan": "مخطط شامل",
+    "violations": "مخالفة",
+    "تنسيق جديد": "تنسيق جديد",
+    "بلاغ": "بلاغ",
+    "بلاغات": "بلاغ",
+    "مخطط شامل": "مخطط شامل",
+    "مخالفة": "مخالفة",
+    "المخالفات": "مخالفة",
+}
+
+
+def coord_kind_for_sub(sub: str | None) -> str | None:
+    key = (sub or "coords").strip().lower()
+    if key in ("", "coords", "list", "new"):
+        return "تنسيق جديد"
+    return _COORD_KIND_BY_SUB.get(key) or _COORD_KIND_BY_SUB.get(sub or "")
+
+
 def list_new_coordinations_for_hub(
     conn=None,
     *,
+    kind: str | None = "تنسيق جديد",
     year: str | None = None,
     month: str | None = None,
     q: str | None = None,
@@ -2296,6 +2330,13 @@ def list_new_coordinations_for_hub(
     conn = conn or connect()
     where = ["1=1"]
     params: list = []
+    kind_label = (kind or "").strip()
+    if kind_label:
+        if kind_label == "تنسيق جديد":
+            where.append("coalesce(nullif(trim(coord_kind), ''), 'تنسيق جديد') = ?")
+        else:
+            where.append("coalesce(coord_kind, '') = ?")
+        params.append(kind_label)
     ym_clauses, ym_params = _year_month_clause("request_date", year, month)
     where.extend(ym_clauses)
     params.extend(ym_params)
@@ -2308,17 +2349,45 @@ def list_new_coordinations_for_hub(
               coord_no LIKE ? OR authority LIKE ? OR ticket_no LIKE ?
               OR project_code LIKE ? OR construction_work_no LIKE ?
               OR district LIKE ? OR location LIKE ? OR license_no LIKE ?
-              OR status LIKE ? OR cast(id as text) LIKE ?
+              OR status LIKE ? OR coord_kind LIKE ? OR cast(id as text) LIKE ?
             )
             """
         )
-        params.extend([like] * 10)
+        params.extend([like] * 11)
     sql = f"SELECT * FROM new_coordinations WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?"
     params.append(int(limit))
     rows = rows_to_dicts(conn.execute(sql, params).fetchall())
     if own:
         conn.close()
     return rows
+
+
+def count_new_coordinations_by_kind(conn=None) -> dict:
+    """عدادات تبويبات التنسيقات الجديدة (تنسيق/بلاغ/مخطط/مخالفة)."""
+    own = conn is None
+    conn = conn or connect()
+    out = {"coords": 0, "reports": 0, "master_plan": 0, "violations": 0}
+    rows = conn.execute(
+        """
+        SELECT coalesce(nullif(trim(coord_kind), ''), 'تنسيق جديد') AS kind, COUNT(*) AS n
+        FROM new_coordinations
+        GROUP BY 1
+        """
+    ).fetchall()
+    for r in rows:
+        label = (r["kind"] or "تنسيق جديد").strip()
+        n = int(r["n"] or 0)
+        if label == "بلاغ":
+            out["reports"] += n
+        elif label == "مخطط شامل":
+            out["master_plan"] += n
+        elif label == "مخالفة":
+            out["violations"] += n
+        else:
+            out["coords"] += n
+    if own:
+        conn.close()
+    return out
 
 
 def list_clearances_for_hub(
