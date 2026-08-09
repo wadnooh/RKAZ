@@ -229,8 +229,8 @@
 
     @media print {
       html, body {
-        width: 210mm;
-        height: 297mm;
+        width: auto;
+        height: auto;
         background: #fff !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
@@ -249,13 +249,17 @@
         border-radius: 0;
         box-shadow: none;
       }
-      .section, .hero, .footer, table, tr, .meta-item {
+      .section, .hero, .footer, .meta-item {
         break-inside: avoid;
         page-break-inside: avoid;
       }
       .section.boq {
         break-inside: auto;
         page-break-inside: auto;
+      }
+      tr {
+        break-inside: avoid;
+        page-break-inside: avoid;
       }
       thead { display: table-header-group; }
       tfoot { display: table-footer-group; }
