@@ -674,6 +674,12 @@ td.col-item-name[title]:hover {
   border: 1px solid var(--border);
   border-radius: 14px;
 }
+.quality-workflow-actions {
+  padding: 10px 0 2px;
+}
+.quality-workflow-actions .actions {
+  gap: 8px;
+}
 .quality-hub .quality-breadcrumb {
   margin-bottom: 4px;
   font-size: 0.88rem;

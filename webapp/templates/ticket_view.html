@@ -55,24 +55,27 @@
     </div>
   </div>
 
+  {% if can('section.quality') %}
+  <div class="card" style="margin:0 0 12px;padding:14px 16px;">
+    <div class="toolbar" style="margin:0 0 8px;">
+      <div>
+        <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('مسار التنسيقات والجودة') }}</h3>
+        <div class="meta">{{ _('العطل يبدأ من التنسيقات الجديدة ثم متابعة التصاريح ثم الإخلاءات') }}</div>
+      </div>
+    </div>
+    {% set ticket_no = ticket.ticket_no %}
+    {% set linked_section = 'ops' %}
+    {% set district = ticket.district or '' %}
+    {% set location = ticket.district or '' %}
+    {% set work_desc = ticket.work_type or ticket.notes or '' %}
+    {% include "_quality_workflow_actions.html" %}
+  </div>
+  {% endif %}
+
   {% if ticket.has_excavation %}
   <div class="flash ok" style="margin:0 0 12px;">
     <strong>{{ _('معاملة بها حفر') }}</strong> —
     {{ _('تم ربطها بالتنسيقات لبدء إجراءات إخلاء الأسفلت.') }}
-    {% if can('section.quality') %}
-    <span class="actions" style="display:inline-flex;gap:8px;margin-inline-start:8px;">
-      {% if related.coordination %}
-      <a class="btn ghost" href="{{ url_for('module_edit', name='coordination', row_id=related.coordination[0].id) }}">{{ _('فتح التنسيق') }}</a>
-      {% else %}
-      <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">{{ _('+ تنسيق') }}</a>
-      {% endif %}
-      {% if related.clearances %}
-      <a class="btn primary" href="{{ url_for('module_edit', name='quality_clearances', row_id=related.clearances[0].id) }}">{{ _('متابعة الإخلاء') }}</a>
-      {% else %}
-      <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">{{ _('بدء الإخلاء') }}</a>
-      {% endif %}
-    </span>
-    {% endif %}
   </div>
   {% endif %}
 
@@ -517,16 +520,16 @@
   <div class="toolbar" {% if step!='done' %}style="margin:0"{% endif %}>
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('ربط بأقسام أخرى') }}</h3>
-      <div class="meta">{{ _('تنسيقات:') }} {{ related.coordination|length }} {{ _('سجل') }}</div>
+      <div class="meta">
+        {{ _('تنسيقات جديدة:') }} {{ related.new_coordinations|length if related.new_coordinations is defined else 0 }}
+        — {{ _('رخص:') }} {{ related.issued_licenses|length if related.issued_licenses is defined else 0 }}
+        — {{ _('إخلاءات:') }} {{ related.clearances|length if related.clearances is defined else 0 }}
+      </div>
     </div>
   </div>
   <div class="actions">
     {% if can('section.financial') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">{{ _('+ مستخلص') }}</a>
-    {% endif %}
-    {% if can('section.quality') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='coordination', ticket_no=ticket.ticket_no) }}">{{ _('+ تنسيق') }}</a>
-    <a class="btn ghost" href="{{ url_for('module_new', name='quality_clearances', ticket_no=ticket.ticket_no) }}">{{ _('+ فسوح / إخلاء أسفلت (RR)') }}</a>
     {% endif %}
     {% if can('section.warehouses') %}
     <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, **{'from': 'ops'}) }}">{{ _('+ حركة مستودع') }}</a>

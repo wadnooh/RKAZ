@@ -171,8 +171,18 @@
             {% if can_mod_write and name == 'construction_works' and r.work_no and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}
+            {% if can('section.quality') and name == 'construction_works' and r.work_no %}
+            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='coords', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions', district=r.district or r.site or none, location=r.site or none, work_desc=r.work_type or none) }}">{{ _('تنسيقات') }}</a>
+            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='permits', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">{{ _('تصاريح') }}</a>
+            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='evacuations', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">{{ _('إخلاءات') }}</a>
+            {% endif %}
             {% if can_mod_write and name == 'projects' and r.project_code and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف مستودع') }}</a>
+            {% endif %}
+            {% if can('section.quality') and name == 'projects' and r.project_code %}
+            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='coords', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects', work_desc=r.project_name or none) }}">{{ _('تنسيقات') }}</a>
+            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='permits', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">{{ _('تصاريح') }}</a>
+            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='evacuations', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">{{ _('إخلاءات') }}</a>
             {% endif %}
             {% if can_mod_delete %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">

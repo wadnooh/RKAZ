@@ -595,6 +595,123 @@ def new_coords_home():
     return redirect(url_for("quality_home", tab="new_coords", sub="coords"))
 
 
+@app.route("/quality/workflow")
+@login_required
+def quality_workflow_go():
+    """
+    مسار موحد لنقل المعاملة عبر الجودة:
+    التنسيقات الجديدة → متابعة تصاريح العمل → الإخلاءات.
+    """
+    if not permissions.can("section.quality"):
+        return permissions.deny_redirect()
+
+    stage = (request.args.get("stage") or "coords").strip().lower()
+    if stage not in {"coords", "permits", "evacuations"}:
+        stage = "coords"
+
+    ticket_no = (request.args.get("ticket_no") or "").strip()
+    work_no = (request.args.get("construction_work_no") or "").strip()
+    project_code = (request.args.get("project_code") or "").strip()
+    linked_section = (request.args.get("linked_section") or "").strip()
+    district = (request.args.get("district") or "").strip()
+    location = (request.args.get("location") or "").strip()
+    work_desc = (request.args.get("work_desc") or "").strip()
+
+    wf = db.quality_workflow_for_ref(
+        ticket_no=ticket_no,
+        construction_work_no=work_no,
+        project_code=project_code,
+        linked_section=linked_section,
+    )
+    section_label = wf.get("linked_section_label") or db.linked_section_label(linked_section)
+    common = {
+        "ticket_no": ticket_no or None,
+        "construction_work_no": work_no or None,
+        "project_code": project_code or None,
+        "linked_section": section_label,
+        "district": district or None,
+        "location": location or None,
+        "work_desc": work_desc or None,
+    }
+    # أزل المفاتيح الفارغة من رابط الإضافة
+    common = {k: v for k, v in common.items() if v}
+
+    if stage == "coords":
+        coord = wf.get("latest_coord")
+        if coord:
+            return redirect(url_for("module_edit", name="new_coordinations", row_id=coord["id"]))
+        if not permissions.can("modules.write"):
+            flash(_t("لا توجد تنسيقات بعد لهذه المعاملة."), "danger")
+            return redirect(url_for("quality_home", tab="new_coords", sub="coords"))
+        return redirect(url_for("module_new", name="new_coordinations", coord_kind="تنسيق جديد", **common))
+
+    if stage == "permits":
+        lic = wf.get("latest_license")
+        if lic:
+            return redirect(url_for("quality_home", tab="permits", sub="active", q=lic.get("license_no") or ""))
+        coord = wf.get("latest_coord")
+        if coord and not coord.get("transferred_license_id") and permissions.can("modules.write"):
+            try:
+                result = db.transfer_new_coordination_to_license(coord["id"])
+                if result.get("created"):
+                    flash(
+                        _t(
+                            "تم نقل الرخصة المصدرة {no} إلى قسم {sec}",
+                            no=result.get("license_no"),
+                            sec=_linked_section_label(result.get("linked_section")),
+                        ),
+                        "ok",
+                    )
+                    _after_data_change()
+                return redirect(url_for("quality_home", tab="permits", sub="active"))
+            except Exception as exc:
+                flash(_t("تعذر نقل الرخصة: {exc}", exc=exc), "danger")
+                return redirect(url_for("module_edit", name="new_coordinations", row_id=coord["id"]))
+        if coord:
+            flash(_t("أكمل التنسيق أولاً ثم انقله إلى متابعة التصاريح."), "ok")
+            return redirect(url_for("module_edit", name="new_coordinations", row_id=coord["id"]))
+        flash(_t("ابدأ من التنسيقات الجديدة أولاً قبل متابعة التصاريح."), "ok")
+        return redirect(url_for("quality_workflow_go", stage="coords", **{
+            k: v for k, v in {
+                "ticket_no": ticket_no,
+                "construction_work_no": work_no,
+                "project_code": project_code,
+                "linked_section": linked_section or section_label,
+                "district": district,
+                "location": location,
+                "work_desc": work_desc,
+            }.items() if v
+        }))
+
+    # evacuations
+    clr = wf.get("latest_clearance")
+    if clr:
+        return redirect(url_for("quality_home", tab="evacuations", sub="initial", q=clr.get("ticket_no") or ticket_no or ""))
+    if not ticket_no:
+        flash(_t("الإخلاءات تحتاج رقم عطل (عمليات). اربط المعاملة بعطل أولاً أو ابدأ من التنسيقات."), "danger")
+        return redirect(url_for("quality_home", tab="evacuations", sub="initial"))
+    if not wf.get("has_license"):
+        flash(_t("المسار: التنسيقات الجديدة ← متابعة التصاريح ← ثم الإخلاءات. أكمل متابعة التصاريح أولاً."), "ok")
+        return redirect(url_for("quality_workflow_go", stage="permits", **{
+            k: v for k, v in {
+                "ticket_no": ticket_no,
+                "construction_work_no": work_no,
+                "project_code": project_code,
+                "linked_section": linked_section or section_label,
+            }.items() if v
+        }))
+    if not permissions.can("modules.write"):
+        return redirect(url_for("quality_home", tab="evacuations", sub="initial", q=ticket_no))
+    return redirect(
+        url_for(
+            "module_new",
+            name="quality_clearances",
+            ticket_no=ticket_no,
+            clearance_stage="إخلاء مبدئي",
+        )
+    )
+
+
 @app.route("/projects")
 @login_required
 def projects_home():
@@ -2070,7 +2187,18 @@ def ticket_view(ticket_id):
             ).fetchall()
         ),
         "boq_lines": db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn),
+        "new_coordinations": db.rows_to_dicts(
+            conn.execute("SELECT * FROM new_coordinations WHERE ticket_no=? ORDER BY id DESC", (tno,)).fetchall()
+        ),
+        "issued_licenses": db.rows_to_dicts(
+            conn.execute("SELECT * FROM issued_licenses WHERE ticket_no=? ORDER BY id DESC", (tno,)).fetchall()
+        ),
     }
+    quality_workflow = db.quality_workflow_for_ref(
+        ticket_no=tno,
+        linked_section="ops",
+        conn=conn,
+    )
     boq_file = db.active_contract_boq_file(conn)
     has_boq = db.has_boq_catalog(conn)
     has_excavation = db.ticket_has_excavation(tno, conn)
@@ -2130,6 +2258,7 @@ def ticket_view(ticket_id):
         "ticket_view.html",
         ticket=ticket,
         related=related,
+        quality_workflow=quality_workflow,
         has_boq_catalog=has_boq,
         boq_file=boq_file,
         emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
@@ -2801,6 +2930,14 @@ def module_new(name):
             prefill["coord_kind"] = kind_arg
         elif not (prefill.get("coord_kind") or "").strip():
             prefill["coord_kind"] = "تنسيق جديد"
+    # ربط مسار الجودة من العمليات / الإنشاءات / المشاريع
+    for key in ("linked_section", "project_code", "construction_work_no", "district", "location", "work_desc", "authority"):
+        if key in prefill and request.args.get(key):
+            prefill[key] = (request.args.get(key) or "").strip()
+    if "linked_section" in prefill and request.args.get("linked_section"):
+        sec = db.normalize_linked_section(request.args.get("linked_section"))
+        if sec:
+            prefill["linked_section"] = db.linked_section_label(sec)
     if name == "issued_licenses" and request.args.get("workflow_status") and "workflow_status" in prefill:
         prefill["workflow_status"] = (request.args.get("workflow_status") or "").strip()
     if name == "warehouse_tx" and request.args.get("ticket_no"):

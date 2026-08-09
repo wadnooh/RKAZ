@@ -57,7 +57,28 @@
   </form>
   {% elif name == 'new_coordinations' and mode == 'edit' and row.get('transferred_license_id') %}
   <div class="actions" style="margin-bottom:12px;">
-    <a class="btn primary" href="{{ url_for('module_edit', name='issued_licenses', row_id=row.transferred_license_id) }}">{{ _('فتح الرخصة المصدرة') }}</a>
+    <a class="btn primary" href="{{ url_for('quality_home', tab='permits', sub='active') }}">{{ _('فتح متابعة التصاريح') }}</a>
+  </div>
+  {% endif %}
+
+  {% if mode == 'edit' and name == 'construction_works' and can('section.quality') %}
+  <div style="margin-bottom:14px;">
+    {% set ticket_no = row.ticket_no or '' %}
+    {% set construction_work_no = row.work_no or '' %}
+    {% set linked_section = 'constructions' %}
+    {% set district = row.district or '' %}
+    {% set location = row.site or '' %}
+    {% set work_desc = row.work_type or '' %}
+    {% include "_quality_workflow_actions.html" %}
+  </div>
+  {% elif mode == 'edit' and name == 'projects' and can('section.quality') %}
+  <div style="margin-bottom:14px;">
+    {% set ticket_no = row.ticket_no or '' %}
+    {% set project_code = row.project_code or '' %}
+    {% set linked_section = 'projects' %}
+    {% set location = row.site or '' %}
+    {% set work_desc = row.project_name or '' %}
+    {% include "_quality_workflow_actions.html" %}
   </div>
   {% endif %}
 

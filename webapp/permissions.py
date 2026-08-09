@@ -313,6 +313,7 @@ def required_perm_for_request() -> str | None:
         "contractors_home": "section.contractors",
         "new_coords_home": "section.quality",
         "quality_home": "section.quality",
+        "quality_workflow_go": "section.quality",
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
         "warehouse_balances": "section.warehouses",

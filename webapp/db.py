@@ -2081,6 +2081,116 @@ def transfer_new_coordination_to_license(
     }
 
 
+def linked_section_label(section_key: str | None) -> str:
+    key = normalize_linked_section(section_key)
+    return {
+        "ops": "العمليات والصيانة",
+        "projects": "المشاريع",
+        "constructions": "الإنشاءات",
+    }.get(key, "الإنشاءات")
+
+
+def quality_workflow_for_ref(
+    *,
+    ticket_no: str | None = None,
+    construction_work_no: str | None = None,
+    project_code: str | None = None,
+    linked_section: str | None = None,
+    conn=None,
+) -> dict:
+    """حالة مسار الجودة للمعاملة: تنسيقات → متابعة تصاريح → إخلاءات."""
+    own = conn is None
+    conn = conn or connect()
+    tno = (ticket_no or "").strip()
+    work_no = (construction_work_no or "").strip()
+    pr_code = (project_code or "").strip()
+    section = normalize_linked_section(linked_section)
+    if not section:
+        if tno:
+            section = "ops"
+        elif pr_code:
+            section = "projects"
+        elif work_no:
+            section = "constructions"
+
+    where = ["1=0"]
+    params: list = []
+    if tno:
+        where.append("ticket_no=?")
+        params.append(tno)
+    if work_no:
+        where.append("construction_work_no=?")
+        params.append(work_no)
+    if pr_code:
+        where.append("project_code=?")
+        params.append(pr_code)
+    clause = " OR ".join(where)
+
+    coords = rows_to_dicts(
+        conn.execute(
+            f"SELECT * FROM new_coordinations WHERE {clause} ORDER BY id DESC LIMIT 20",
+            params,
+        ).fetchall()
+    ) if params else []
+    licenses = rows_to_dicts(
+        conn.execute(
+            f"SELECT * FROM issued_licenses WHERE {clause} ORDER BY id DESC LIMIT 20",
+            params,
+        ).fetchall()
+    ) if params else []
+    clearances = []
+    if tno:
+        clearances = rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM quality_clearances WHERE ticket_no=? ORDER BY id DESC LIMIT 20",
+                (tno,),
+            ).fetchall()
+        )
+
+    latest_coord = coords[0] if coords else None
+    latest_license = licenses[0] if licenses else None
+    if latest_coord and latest_coord.get("transferred_license_id") and not latest_license:
+        lic = conn.execute(
+            "SELECT * FROM issued_licenses WHERE id=?",
+            (latest_coord["transferred_license_id"],),
+        ).fetchone()
+        if lic:
+            latest_license = dict(lic)
+            licenses = [latest_license] + licenses
+    latest_clearance = clearances[0] if clearances else None
+
+    if latest_clearance:
+        stage = "evacuations"
+    elif latest_license:
+        stage = "permits"
+    elif latest_coord:
+        stage = "coords"
+    else:
+        stage = "none"
+
+    out = {
+        "ticket_no": tno,
+        "construction_work_no": work_no,
+        "project_code": pr_code,
+        "linked_section": section,
+        "linked_section_label": linked_section_label(section),
+        "stage": stage,
+        "coords": coords,
+        "licenses": licenses,
+        "clearances": clearances,
+        "latest_coord": latest_coord,
+        "latest_license": latest_license,
+        "latest_clearance": latest_clearance,
+        "has_coord": bool(latest_coord),
+        "has_license": bool(latest_license),
+        "has_clearance": bool(latest_clearance),
+        "coord_transferred": bool(latest_coord and latest_coord.get("transferred_license_id")),
+    }
+    if own:
+        conn.close()
+    return out
+
+
 def count_issued_licenses(linked_section: str | None = None, conn=None) -> int:
     own = conn is None
     conn = conn or connect()

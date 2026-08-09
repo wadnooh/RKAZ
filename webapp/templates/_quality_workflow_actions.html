@@ -1,0 +1,43 @@
+{# أزرار مسار الجودة: تنسيقات → متابعة تصاريح → إخلاءات #}
+{% set qwf = quality_workflow if quality_workflow is defined else none %}
+{% set tno = ticket_no if ticket_no is defined else (qwf.ticket_no if qwf else '') %}
+{% set work_no = construction_work_no if construction_work_no is defined else (qwf.construction_work_no if qwf else '') %}
+{% set pr_code = project_code if project_code is defined else (qwf.project_code if qwf else '') %}
+{% set sec = linked_section if linked_section is defined else (qwf.linked_section if qwf else '') %}
+{% set dist = district if district is defined else '' %}
+{% set loc = location if location is defined else '' %}
+{% set wdesc = work_desc if work_desc is defined else '' %}
+{% if can('section.quality') %}
+<div class="quality-workflow-actions">
+  {% if show_title is not defined or show_title %}
+  <div class="meta" style="margin-bottom:8px;">
+    {{ _('مسار الجودة:') }}
+    {{ _('التنسيقات الجديدة') }}
+    → {{ _('متابعة تصاريح العمل') }}
+    → {{ _('الإخلاءات') }}
+    {% if qwf and qwf.stage and qwf.stage != 'none' %}
+      — <strong>
+        {% if qwf.stage == 'coords' %}{{ _('المرحلة الحالية: التنسيقات') }}
+        {% elif qwf.stage == 'permits' %}{{ _('المرحلة الحالية: متابعة التصاريح') }}
+        {% elif qwf.stage == 'evacuations' %}{{ _('المرحلة الحالية: الإخلاءات') }}
+        {% endif %}
+      </strong>
+    {% endif %}
+  </div>
+  {% endif %}
+  <div class="actions" style="flex-wrap:wrap;">
+    <a class="btn {% if qwf and qwf.stage == 'coords' %}primary{% else %}ghost{% endif %}"
+       href="{{ url_for('quality_workflow_go', stage='coords', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, district=dist or none, location=loc or none, work_desc=wdesc or none) }}">
+      {% if qwf and qwf.has_coord %}{{ _('فتح التنسيقات الجديدة') }}{% else %}{{ _('نقل إلى التنسيقات الجديدة') }}{% endif %}
+    </a>
+    <a class="btn {% if qwf and qwf.stage == 'permits' %}primary{% else %}ghost{% endif %}"
+       href="{{ url_for('quality_workflow_go', stage='permits', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, district=dist or none, location=loc or none, work_desc=wdesc or none) }}">
+      {% if qwf and qwf.has_license %}{{ _('فتح متابعة التصاريح') }}{% else %}{{ _('نقل إلى متابعة التصاريح') }}{% endif %}
+    </a>
+    <a class="btn {% if qwf and qwf.stage == 'evacuations' %}primary{% else %}ghost{% endif %}"
+       href="{{ url_for('quality_workflow_go', stage='evacuations', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none) }}">
+      {% if qwf and qwf.has_clearance %}{{ _('فتح الإخلاءات') }}{% else %}{{ _('نقل إلى الإخلاءات') }}{% endif %}
+    </a>
+  </div>
+</div>
+{% endif %}
