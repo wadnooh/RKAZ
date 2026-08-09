@@ -51,7 +51,6 @@
   <nav class="tabs">
     {% if can('section.constructions') %}
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">{{ tr('nav_constructions') }}</a>
-    <a class="tab{% if p.startswith('/new-coordinations') or p.startswith('/module/new_coordinations') or p.startswith('/module/issued_licenses') or (p.startswith('/quality') and request.args.get('tab')=='new_coords') %} active{% endif %}" href="{{ url_for('new_coords_home') }}">{{ tr('nav_new_coords') }}</a>
     {% endif %}
     {% if can('section.projects') %}
     <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>
@@ -63,7 +62,7 @@
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>
     {% endif %}
     {% if can('section.quality') %}
-    <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') or p.startswith('/new-coordinations') %} active{% endif %}" href="{{ url_for('quality_home') }}">{{ tr('nav_quality') }}</a>
+    <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') or p.startswith('/module/new_coordinations') or p.startswith('/module/issued_licenses') or p.startswith('/new-coordinations') %} active{% endif %}" href="{{ url_for('quality_home') }}">{{ tr('nav_quality') }}</a>
     {% endif %}
     {% if can('section.safety') %}
     <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">{{ tr('nav_safety') }}</a>

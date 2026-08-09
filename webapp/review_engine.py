@@ -7,10 +7,10 @@ def jump_destinations():
     """قائمة وجهات نافذة القفز السريع."""
     return [
         {"title": "الإنشاءات - التنفيذ", "path": "/constructions", "group": "أقسام", "keywords": "إنشاءات"},
-        {"title": "التنسيقات الجديدة", "path": "/quality?tab=new_coords", "group": "أقسام", "keywords": "تنسيق رخصة إصدار"},
-        {"title": "متابعة تصاريح العمل", "path": "/quality?tab=permits", "group": "أقسام", "keywords": "رخص سارية تصاريح"},
-        {"title": "الإخلاءات", "path": "/quality?tab=evacuations", "group": "أقسام", "keywords": "إخلاء أسفلت"},
-        {"title": "الرخص المصدرة", "path": "/module/issued_licenses", "group": "أقسام", "keywords": "رخص مصدرة"},
+        {"title": "التنسيقات الجديدة", "path": "/quality?tab=new_coords", "group": "التنسيقات والجودة", "keywords": "تنسيق رخصة إصدار"},
+        {"title": "متابعة تصاريح العمل", "path": "/quality?tab=permits", "group": "التنسيقات والجودة", "keywords": "رخص سارية تصاريح"},
+        {"title": "الإخلاءات", "path": "/quality?tab=evacuations", "group": "التنسيقات والجودة", "keywords": "إخلاء أسفلت"},
+        {"title": "الرخص المصدرة", "path": "/module/issued_licenses", "group": "التنسيقات والجودة", "keywords": "رخص مصدرة"},
         {"title": "لوحة العمليات", "path": "/ops", "group": "عمليات", "keywords": "لوحة dashboard ops"},
         {"title": "الأعطال", "path": "/tickets", "group": "عمليات", "keywords": "عطل أعطال ticket fault طوارئ"},
         {"title": "عطل جديد", "path": "/tickets/new", "group": "عمليات", "keywords": "إضافة عطل جديد"},

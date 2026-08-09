@@ -215,11 +215,11 @@ MODULES = {
         ],
         "list_cols": ["ticket_no", "inspect_date", "inspector", "result"],
     },
-    # ---- التنسيقات الجديدة (مرتبطة بالإنشاءات) ----
+    # ---- التنسيقات الجديدة (داخل التنسيقات والجودة) ----
     "new_coordinations": {
         "title": "التنسيقات الجديدة",
         "table": "new_coordinations",
-        "section": "new_coords",
+        "section": "quality",
         "fields": [
             ("coord_no", "رقم التنسيق", "text"),
             ("request_date", "تاريخ الطلب", "date"),
@@ -253,7 +253,7 @@ MODULES = {
     "issued_licenses": {
         "title": "الرخص المصدرة",
         "table": "issued_licenses",
-        "section": "new_coords",
+        "section": "quality",
         "fields": [
             ("license_no", "رقم الرخصة", "text"),
             ("rtc_no", "رقم رسملة / RTC", "text"),
@@ -483,7 +483,6 @@ SECTION_META = {
     "projects": {"title": "المشاريع", "home": "projects_home"},
     "ops": {"title": "العمليات والصيانة", "home": "ops_home"},
     "contractors": {"title": "المقاولين", "home": "contractors_home"},
-    "new_coords": {"title": "التنسيقات الجديدة", "home": "new_coords_home"},
     "quality": {"title": "التنسيقات والجودة", "home": "quality_home"},
     "safety": {"title": "السلامة", "home": "safety_home"},
     "warehouses": {"title": "المستودعات", "home": "warehouses_home"},

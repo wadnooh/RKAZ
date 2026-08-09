@@ -603,20 +603,8 @@ def constructions_home():
 @app.route("/new-coordinations")
 @login_required
 def new_coords_home():
-    """مدخل التنسيقات الجديدة — يعرض واجهة رسملة داخل مركز الجودة عند توفر الصلاحية."""
-    if permissions.can("section.quality"):
-        return redirect(url_for("quality_home", tab="new_coords"))
-    links = section_links("new_coords")
-    return render_template(
-        "section_hub.html",
-        title=_t("التنسيقات الجديدة"),
-        subtitle=_t("تنسيقات مرتبطة بالإنشاءات — بعد إصدار الرخصة تُنقل إلى الرخص المصدرة وتُربط بالعمليات أو المشاريع أو الإنشاءات."),
-        links=links,
-        section="new_coords",
-        section_modules=modules_for_section("new_coords"),
-        section_meta=_smeta(SECTION_META["new_coords"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    """تحويل قديم: التنسيقات الجديدة داخل قسم التنسيقات والجودة فقط."""
+    return redirect(url_for("quality_home", tab="new_coords"))
 
 
 @app.route("/projects")
@@ -3277,7 +3265,7 @@ def module_delete(name, row_id):
 @login_required
 def new_coordination_transfer(row_id):
     """نقل تنسيق جديد إلى الرخص المصدرة وربطه بالقسم المستهدف."""
-    if not permissions.can("section.constructions") or not permissions.can("modules.write"):
+    if not permissions.can("section.quality") or not permissions.can("modules.write"):
         return permissions.deny_redirect()
     conn = db.connect()
     row = conn.execute("SELECT * FROM new_coordinations WHERE id=?", (row_id,)).fetchone()

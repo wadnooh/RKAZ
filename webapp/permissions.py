@@ -50,8 +50,6 @@ SECTION_PERMS = {
     "projects": "section.projects",
     "ops": "section.ops",
     "contractors": "section.contractors",
-    # التنسيقات الجديدة مربوطة بصلاحية الإنشاءات
-    "new_coords": "section.constructions",
     "quality": "section.quality",
     "safety": "section.safety",
     "warehouses": "section.warehouses",
@@ -278,8 +276,8 @@ def required_perm_for_request() -> str | None:
             return None if has_perm("modules.delete") else "modules.delete"
 
     if ep == "new_coordination_transfer":
-        if not has_perm("section.constructions"):
-            return "section.constructions"
+        if not has_perm("section.quality"):
+            return "section.quality"
         return None if has_perm("modules.write") else "modules.write"
 
     if ep == "media_serve":
@@ -313,7 +311,7 @@ def required_perm_for_request() -> str | None:
         "constructions_home": "section.constructions",
         "projects_home": "section.projects",
         "contractors_home": "section.contractors",
-        "new_coords_home": "section.constructions",
+        "new_coords_home": "section.quality",
         "quality_home": "section.quality",
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
@@ -414,7 +412,7 @@ def _perm_for_path(path: str) -> str | None:
         ("/users", "users.manage"),
         ("/admin/audit", "audit.read"),
         ("/constructions", "section.constructions"),
-        ("/new-coordinations", "section.constructions"),
+        ("/new-coordinations", "section.quality"),
         ("/projects", "section.projects"),
         ("/contractors", "section.contractors"),
         ("/quality", "section.quality"),
