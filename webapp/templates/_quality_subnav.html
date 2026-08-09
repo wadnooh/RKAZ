@@ -1,0 +1,42 @@
+{% set qtab = quality_tab or 'permits' %}
+{% set qsub = quality_sub or '' %}
+<div class="quality-subnav">
+  <div class="actions" data-tab-strip="1">
+    <a class="btn ghost{% if qtab=='permits' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='permits') }}">{{ _('متابعة تصاريح العمل بعد الاصدار') }}</a>
+    <a class="btn ghost{% if qtab=='new_coords' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='new_coords') }}">{{ _('التنسيقات الجديدة') }}</a>
+    <a class="btn ghost{% if qtab=='evacuations' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='evacuations') }}">{{ _('الإخلاءات') }}</a>
+  </div>
+
+  {% if qtab == 'permits' %}
+  <div class="actions quality-subtabs" data-tab-strip="1">
+    <a class="btn ghost{% if qsub=='active' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='permits', sub='active', year=year or '', month=month or '', q=q or '') }}">{{ _('الرخص السارية') }} ({{ counts.active or 0 }})</a>
+    <a class="btn ghost{% if qsub=='checks' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='permits', sub='checks', year=year or '', month=month or '', q=q or '') }}">{{ _('تحت التشييكات') }} ({{ counts.checks or 0 }})</a>
+    <a class="btn ghost{% if qsub=='closing' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='permits', sub='closing', year=year or '', month=month or '', q=q or '') }}">{{ _('تحت إجراءات الإغلاق') }} ({{ counts.closing or 0 }})</a>
+    <a class="btn ghost{% if qsub=='asphalt' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='permits', sub='asphalt', year=year or '', month=month or '', q=q or '') }}">{{ _('موردي الأسفلت') }} ({{ counts.asphalt or 0 }})</a>
+    <a class="btn ghost{% if qsub=='expired' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='permits', sub='expired', year=year or '', month=month or '', q=q or '') }}">{{ _('الرخص المنتهية') }} ({{ counts.expired or 0 }})</a>
+  </div>
+  {% elif qtab == 'evacuations' %}
+  <div class="actions quality-subtabs" data-tab-strip="1">
+    <a class="btn ghost{% if qsub=='initial' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='evacuations', sub='initial', year=year or '', month=month or '', q=q or '') }}">{{ _('الإخلاء المبدئي') }} ({{ clearance_counts.initial or 0 }})</a>
+    <a class="btn ghost{% if qsub=='final' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='evacuations', sub='final', year=year or '', month=month or '', q=q or '') }}">{{ _('الإخلاء النهائي') }} ({{ clearance_counts.final or 0 }})</a>
+    <a class="btn ghost{% if qsub=='cancelled' %} primary{% endif %}"
+       href="{{ url_for('quality_home', tab='evacuations', sub='cancelled', year=year or '', month=month or '', q=q or '') }}">{{ _('الرخص الملغاة') }} ({{ (clearance_counts.cancelled or 0) + (clearance_counts.cancelled_licenses or 0) }})</a>
+  </div>
+  {% elif qtab == 'new_coords' %}
+  <div class="actions quality-subtabs" data-tab-strip="1">
+    <a class="btn ghost primary" href="{{ url_for('quality_home', tab='new_coords') }}">{{ _('التنسيقات الجديدة') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_list', name='issued_licenses') }}">{{ _('الرخص المصدرة') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_list', name='new_coordinations') }}">{{ _('سجل التنسيقات') }}</a>
+  </div>
+  {% endif %}
+</div>

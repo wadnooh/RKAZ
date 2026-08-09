@@ -603,6 +603,9 @@ def constructions_home():
 @app.route("/new-coordinations")
 @login_required
 def new_coords_home():
+    """مدخل التنسيقات الجديدة — يعرض واجهة رسملة داخل مركز الجودة عند توفر الصلاحية."""
+    if permissions.can("section.quality"):
+        return redirect(url_for("quality_home", tab="new_coords"))
     links = section_links("new_coords")
     return render_template(
         "section_hub.html",
@@ -659,26 +662,100 @@ def contractors_home():
 @app.route("/quality")
 @login_required
 def quality_home():
-    links = section_links("quality")
+    """مركز التنسيقات والجودة — واجهة بأسلوب رسملة (تبويبات / فلاتر / تقارير)."""
+    tab = (request.args.get("tab") or "permits").strip().lower()
+    if tab not in ("permits", "new_coords", "evacuations"):
+        tab = "permits"
+    sub = (request.args.get("sub") or "").strip().lower()
+    year = (request.args.get("year") or "").strip()
+    month = (request.args.get("month") or "").strip()
+    q = (request.args.get("q") or "").strip()
+
+    permit_subs = {"active", "checks", "closing", "asphalt", "expired"}
+    evac_subs = {"initial", "final", "cancelled"}
+    if tab == "permits" and sub and sub not in permit_subs:
+        sub = ""
+    if tab == "evacuations" and sub and sub not in evac_subs:
+        sub = ""
+    if tab == "new_coords":
+        sub = ""
+
     conn = db.connect()
     db.link_excavation_transactions_to_coordination(conn)
+    db.refresh_issued_license_expiry_status(conn)
     excavation_queue = db.list_excavation_coordination_queue(conn, limit=40)
+    counts = db.count_issued_licenses_by_hub_sub(conn)
+    clearance_counts = db.count_clearances_by_stage(conn)
+    years = db.quality_hub_year_options(conn)
+
+    rows = []
+    buckets = {}
+    cancelled_licenses = []
+    if tab == "permits" and sub:
+        rows = db.list_issued_licenses_for_hub(conn, sub=sub, year=year, month=month, q=q)
+        buckets = db.license_days_buckets(rows)
+    elif tab == "new_coords":
+        rows = db.list_new_coordinations_for_hub(conn, year=year, month=month, q=q)
+    elif tab == "evacuations" and sub:
+        rows = db.list_clearances_for_hub(conn, stage=sub, year=year, month=month, q=q)
+        if sub == "cancelled":
+            cancelled_licenses = db.list_issued_licenses_for_hub(
+                conn, sub="cancelled", year=year, month=month, q=q
+            )
+
     conn.commit()
     conn.close()
+
     pending_clearance = sum(
         1
         for r in excavation_queue
         if (r.get("clearance_status") or "") in ("مطلوب", "قيد الإصدار", "غير مُنشأ")
     )
+
+    tab_labels = {
+        "permits": _t("متابعة تصاريح العمل بعد الاصدار"),
+        "new_coords": _t("التنسيقات الجديدة"),
+        "evacuations": _t("الإخلاءات"),
+    }
+    sub_labels = {
+        "active": _t("الرخص السارية"),
+        "checks": _t("تحت التشييكات"),
+        "closing": _t("تحت إجراءات الإغلاق"),
+        "asphalt": _t("موردي الأسفلت"),
+        "expired": _t("الرخص المنتهية"),
+        "initial": _t("الإخلاء المبدئي"),
+        "final": _t("الإخلاء النهائي"),
+        "cancelled": _t("الرخص الملغاة"),
+    }
+    current_tab_label = tab_labels[tab]
+    if sub:
+        current_tab_label = f"{tab_labels[tab]} - {sub_labels.get(sub, sub)}"
+
+    page_title = _t("التنسيقات والجودة") + " - " + current_tab_label
+    page_subtitle = _t(
+        "واجهة متابعة التنسيقات والرخص والإخلاءات — بنفس هيكل رسملة: تبويبات وتصنيفات وتقرير موحد."
+    )
+
     return render_template(
-        "section_hub.html",
-        title=_t("التنسيقات والجودة"),
-        subtitle=_t("التنسيقات الفنية وإخلاءات الأسفلت وفحوصات الجودة — معاملات الحفر تُربط تلقائياً لبدء الإخلاء."),
-        links=links,
+        "quality_hub.html",
+        title=page_title,
+        page_title=page_title,
+        page_subtitle=page_subtitle,
+        quality_tab=tab,
+        quality_sub=sub,
+        year=year,
+        month=month,
+        q=q,
+        years=years,
+        counts=counts,
+        clearance_counts=clearance_counts,
+        rows=rows,
+        buckets=buckets,
+        cancelled_licenses=cancelled_licenses,
+        current_tab_label=current_tab_label,
         section="quality",
         section_modules=modules_for_section("quality"),
         section_meta=_smeta(SECTION_META["quality"]),
-        total_count=sum(i.get("count") or 0 for i in links),
         excavation_queue=excavation_queue,
         excavation_pending=pending_clearance,
     )
@@ -2697,6 +2774,10 @@ def module_new(name):
             boq_approved_total = _metering_boq_approved_total(prefill["ticket_no"], conn)
             if boq_approved_total is not None and prefill.get("approved_value") in ("", None):
                 prefill["approved_value"] = boq_approved_total
+    if name == "quality_clearances" and request.args.get("clearance_stage") and "clearance_stage" in prefill:
+        prefill["clearance_stage"] = (request.args.get("clearance_stage") or "").strip()
+    if name == "issued_licenses" and request.args.get("workflow_status") and "workflow_status" in prefill:
+        prefill["workflow_status"] = (request.args.get("workflow_status") or "").strip()
     if name == "warehouse_tx" and request.args.get("ticket_no"):
         prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
         prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")

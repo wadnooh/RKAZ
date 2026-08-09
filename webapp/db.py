@@ -79,8 +79,16 @@ DEFAULT_LISTS = {
     "project_status": ["جديد", "قيد التنفيذ", "موقوف", "مكتمل", "مغلق"],
     "work_class": ["اعتيادي", "طوارئ"],
     "new_coord_status": ["مسودة", "قيد التنسيق", "بانتظار الرخصة", "تم الإصدار", "مرفوض", "ملغي"],
-    "issued_license_status": ["سارية", "منتهية", "ملغاة"],
+    "issued_license_status": ["سارية", "منتهية", "ملغاة", "تم إصدار الرخصة", "جاري العمل"],
     "license_types": ["بلدية", "أمانة", "كهرباء", "حفر", "أخرى"],
+    "license_workflow": [
+        "متابعة بعد الإصدار",
+        "تحت التشييكات",
+        "تحت إجراءات الإغلاق",
+        "موردي الأسفلت",
+    ],
+    "clearance_stage": ["إخلاء مبدئي", "إخلاء نهائي", "رخصة ملغاة"],
+    "consultant_result": ["مقبول", "ملاحظات", "مرفوض", "بانتظار"],
     "linked_sections": ["الإنشاءات", "العمليات والصيانة", "المشاريع"],
 }
 
@@ -248,7 +256,16 @@ EXTRA_TABLE_DDL = {
             construction_work_no TEXT,
             location TEXT,
             work_desc TEXT,
-            notes TEXT
+            notes TEXT,
+            district TEXT,
+            work_order TEXT,
+            rtc_no TEXT,
+            license_length REAL,
+            workflow_status TEXT,
+            consultant_notes TEXT,
+            consultant_submit_date TEXT,
+            consultant_submitted TEXT,
+            consultant_result TEXT
         )
     """,
 }
@@ -285,6 +302,38 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "quality_clearances" in existing or "quality_clearances" in created:
             if _ensure_column(conn, "quality_clearances", "rekaz_code"):
                 created.append("quality_clearances.rekaz_code")
+            if _ensure_column(conn, "quality_clearances", "clearance_stage"):
+                created.append("quality_clearances.clearance_stage")
+                conn.execute(
+                    """
+                    UPDATE quality_clearances
+                    SET clearance_stage='إخلاء مبدئي'
+                    WHERE clearance_stage IS NULL OR trim(clearance_stage)=''
+                    """
+                )
+        if "issued_licenses" in existing or "issued_licenses" in created:
+            for col in (
+                "district",
+                "work_order",
+                "rtc_no",
+                "workflow_status",
+                "consultant_notes",
+                "consultant_submit_date",
+                "consultant_submitted",
+                "consultant_result",
+            ):
+                if _ensure_column(conn, "issued_licenses", col):
+                    created.append(f"issued_licenses.{col}")
+            if _ensure_column(conn, "issued_licenses", "license_length", "REAL"):
+                created.append("issued_licenses.license_length")
+            conn.execute(
+                """
+                UPDATE issued_licenses
+                SET workflow_status='متابعة بعد الإصدار'
+                WHERE workflow_status IS NULL OR trim(workflow_status)=''
+                """
+            )
+            refresh_issued_license_expiry_status(conn)
         if "construction_works" in existing or "construction_works" in created:
             if _ensure_column(conn, "construction_works", "ticket_no"):
                 created.append("construction_works.ticket_no")
@@ -1802,10 +1851,10 @@ def ensure_excavation_coordination(
             cur = conn.execute(
                 """
                 INSERT INTO quality_clearances(
-                  ticket_no, clearance_no, rekaz_code, request_date, status, notes
-                ) VALUES (?,?,?,?,?,?)
+                  ticket_no, clearance_no, rekaz_code, clearance_stage, request_date, status, notes
+                ) VALUES (?,?,?,?,?,?,?)
                 """,
-                (tno, rr, rr, today, "مطلوب", note[:500]),
+                (tno, rr, rr, "إخلاء مبدئي", today, "مطلوب", note[:500]),
             )
             result["clearance_id"] = cur.lastrowid
             result["created_clearance"] = True
@@ -1973,8 +2022,9 @@ def transfer_new_coordination_to_license(
         INSERT INTO issued_licenses(
           license_no, issue_date, expiry_date, authority, license_type, status,
           new_coordination_id, transferred_at, linked_section,
-          ticket_no, project_code, construction_work_no, location, work_desc, notes
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+          ticket_no, project_code, construction_work_no, location, work_desc, notes,
+          district, work_order, rtc_no, workflow_status
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         """,
         (
             lic_no,
@@ -1992,6 +2042,10 @@ def transfer_new_coordination_to_license(
             coord.get("location") or "",
             coord.get("work_desc") or "",
             (coord.get("notes") or "")[:500],
+            coord.get("district") or "",
+            coord.get("construction_work_no") or coord.get("ticket_no") or "",
+            lic_no,
+            "متابعة بعد الإصدار",
         ),
     )
     license_id = cur.lastrowid
@@ -2035,6 +2089,329 @@ def count_issued_licenses(linked_section: str | None = None, conn=None) -> int:
     if own:
         conn.close()
     return int(n or 0)
+
+
+def _parse_iso_date(value: str | None):
+    if not value:
+        return None
+    text = str(value).strip()[:10]
+    if not text:
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%d").date()
+    except ValueError:
+        return None
+
+
+def license_remaining_days(expiry_date: str | None) -> int | None:
+    d = _parse_iso_date(expiry_date)
+    if not d:
+        return None
+    return (d - datetime.now().date()).days
+
+
+def enrich_issued_licenses(rows: list[dict]) -> list[dict]:
+    today = datetime.now().date()
+    for r in rows:
+        rem = license_remaining_days(r.get("expiry_date"))
+        r["remaining_days"] = rem
+        issue = _parse_iso_date(r.get("issue_date"))
+        r["days_since_issue"] = (today - issue).days if issue else None
+        if rem is None:
+            r["days_bucket"] = "unknown"
+        elif rem < 7:
+            r["days_bucket"] = "lt7"
+        elif rem <= 15:
+            r["days_bucket"] = "7_15"
+        elif rem <= 25:
+            r["days_bucket"] = "15_25"
+        else:
+            r["days_bucket"] = "gt25"
+        submitted = (r.get("consultant_submitted") or "").strip()
+        if not submitted and (r.get("consultant_submit_date") or "").strip():
+            submitted = "نعم"
+        r["consultant_submitted_flag"] = submitted in ("نعم", "1", "true", "True", "yes", "Yes")
+    return rows
+
+
+def refresh_issued_license_expiry_status(conn=None) -> int:
+    """حدّث حالة الرخص المنتهية تلقائياً حسب تاريخ الانتهاء."""
+    own = conn is None
+    conn = conn or connect()
+    today = datetime.now().strftime("%Y-%m-%d")
+    cur = conn.execute(
+        """
+        UPDATE issued_licenses
+        SET status='منتهية'
+        WHERE expiry_date IS NOT NULL AND trim(expiry_date) != ''
+          AND substr(expiry_date, 1, 10) < ?
+          AND coalesce(status, '') NOT IN ('ملغاة', 'منتهية')
+        """,
+        (today,),
+    )
+    n = cur.rowcount or 0
+    if own:
+        conn.commit()
+        conn.close()
+    return int(n)
+
+
+def _year_month_clause(column: str, year: str | None, month: str | None):
+    clauses: list[str] = []
+    params: list[str] = []
+    y = (year or "").strip()
+    m = (month or "").strip()
+    if y and y.isdigit():
+        clauses.append(f"substr(coalesce({column}, ''), 1, 4)=?")
+        params.append(y)
+    if m and m.isdigit():
+        mm = m.zfill(2)
+        clauses.append(f"substr(coalesce({column}, ''), 6, 2)=?")
+        params.append(mm)
+    return clauses, params
+
+
+def _license_workflow_match(sub: str) -> tuple[str, list]:
+    """شرط تصفية تبويبات متابعة التصاريح."""
+    key = (sub or "active").strip().lower()
+    if key in ("active", "valid", "سارية", "الرخص السارية"):
+        return (
+            """
+            coalesce(status, '') NOT IN ('منتهية', 'ملغاة')
+            AND (
+              coalesce(workflow_status, '') IN ('', 'متابعة بعد الإصدار')
+              OR workflow_status IS NULL
+            )
+            """,
+            [],
+        )
+    if key in ("checks", "تشييكات", "تحت التشييكات"):
+        return ("coalesce(workflow_status, '') = 'تحت التشييكات'", [])
+    if key in ("closing", "إغلاق", "تحت إجراءات الإغلاق"):
+        return ("coalesce(workflow_status, '') = 'تحت إجراءات الإغلاق'", [])
+    if key in ("asphalt", "أسفلت", "موردي الأسفلت"):
+        return (
+            """
+            (
+              coalesce(workflow_status, '') = 'موردي الأسفلت'
+              OR coalesce(license_type, '') = 'حفر'
+            )
+            """,
+            [],
+        )
+    if key in ("expired", "منتهية", "الرخص المنتهية"):
+        return ("coalesce(status, '') = 'منتهية'", [])
+    if key in ("cancelled", "ملغاة", "الرخص الملغاة"):
+        return ("coalesce(status, '') = 'ملغاة'", [])
+    return ("1=1", [])
+
+
+def list_issued_licenses_for_hub(
+    conn=None,
+    *,
+    sub: str = "active",
+    year: str | None = None,
+    month: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    refresh_issued_license_expiry_status(conn)
+    where = ["1=1"]
+    params: list = []
+    wf_sql, wf_params = _license_workflow_match(sub)
+    where.append(f"({wf_sql})")
+    params.extend(wf_params)
+    ym_clauses, ym_params = _year_month_clause("issue_date", year, month)
+    where.extend(ym_clauses)
+    params.extend(ym_params)
+    query = (q or "").strip()
+    if query:
+        like = f"%{query}%"
+        where.append(
+            """
+            (
+              license_no LIKE ? OR work_order LIKE ? OR rtc_no LIKE ?
+              OR ticket_no LIKE ? OR project_code LIKE ? OR construction_work_no LIKE ?
+              OR district LIKE ? OR location LIKE ? OR authority LIKE ?
+              OR status LIKE ? OR workflow_status LIKE ? OR cast(id as text) LIKE ?
+            )
+            """
+        )
+        params.extend([like] * 12)
+    sql = f"SELECT * FROM issued_licenses WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?"
+    params.append(int(limit))
+    rows = rows_to_dicts(conn.execute(sql, params).fetchall())
+    enrich_issued_licenses(rows)
+    if own:
+        conn.close()
+    return rows
+
+
+def count_issued_licenses_by_hub_sub(conn=None) -> dict:
+    own = conn is None
+    conn = conn or connect()
+    refresh_issued_license_expiry_status(conn)
+    keys = ("active", "checks", "closing", "asphalt", "expired", "cancelled", "all")
+    out = {}
+    for key in keys:
+        if key == "all":
+            out[key] = int(conn.execute("SELECT COUNT(*) FROM issued_licenses").fetchone()[0] or 0)
+            continue
+        wf_sql, wf_params = _license_workflow_match(key)
+        out[key] = int(
+            conn.execute(f"SELECT COUNT(*) FROM issued_licenses WHERE ({wf_sql})", wf_params).fetchone()[0] or 0
+        )
+    if own:
+        conn.close()
+    return out
+
+
+def license_days_buckets(rows: list[dict]) -> dict:
+    buckets = {"lt7": 0, "7_15": 0, "15_25": 0, "gt25": 0, "unknown": 0}
+    submitted = 0
+    waiting = 0
+    for r in rows:
+        buckets[r.get("days_bucket") or "unknown"] = buckets.get(r.get("days_bucket") or "unknown", 0) + 1
+        if r.get("consultant_submitted_flag"):
+            submitted += 1
+        else:
+            waiting += 1
+    buckets["submitted"] = submitted
+    buckets["waiting"] = waiting
+    buckets["total"] = len(rows)
+    return buckets
+
+
+def list_new_coordinations_for_hub(
+    conn=None,
+    *,
+    year: str | None = None,
+    month: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    where = ["1=1"]
+    params: list = []
+    ym_clauses, ym_params = _year_month_clause("request_date", year, month)
+    where.extend(ym_clauses)
+    params.extend(ym_params)
+    query = (q or "").strip()
+    if query:
+        like = f"%{query}%"
+        where.append(
+            """
+            (
+              coord_no LIKE ? OR authority LIKE ? OR ticket_no LIKE ?
+              OR project_code LIKE ? OR construction_work_no LIKE ?
+              OR district LIKE ? OR location LIKE ? OR license_no LIKE ?
+              OR status LIKE ? OR cast(id as text) LIKE ?
+            )
+            """
+        )
+        params.extend([like] * 10)
+    sql = f"SELECT * FROM new_coordinations WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?"
+    params.append(int(limit))
+    rows = rows_to_dicts(conn.execute(sql, params).fetchall())
+    if own:
+        conn.close()
+    return rows
+
+
+def list_clearances_for_hub(
+    conn=None,
+    *,
+    stage: str = "initial",
+    year: str | None = None,
+    month: str | None = None,
+    q: str | None = None,
+    limit: int = 500,
+) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    stage_key = (stage or "initial").strip().lower()
+    stage_map = {
+        "initial": "إخلاء مبدئي",
+        "final": "إخلاء نهائي",
+        "cancelled": "رخصة ملغاة",
+        "إخلاء مبدئي": "إخلاء مبدئي",
+        "إخلاء نهائي": "إخلاء نهائي",
+        "رخصة ملغاة": "رخصة ملغاة",
+    }
+    stage_label = stage_map.get(stage_key, "إخلاء مبدئي")
+    where = ["coalesce(clearance_stage, 'إخلاء مبدئي') = ?"]
+    params: list = [stage_label]
+    ym_clauses, ym_params = _year_month_clause("request_date", year, month)
+    where.extend(ym_clauses)
+    params.extend(ym_params)
+    query = (q or "").strip()
+    if query:
+        like = f"%{query}%"
+        where.append(
+            """
+            (
+              ticket_no LIKE ? OR clearance_no LIKE ? OR rekaz_code LIKE ?
+              OR contractor LIKE ? OR status LIKE ? OR cast(id as text) LIKE ?
+            )
+            """
+        )
+        params.extend([like] * 6)
+    sql = f"SELECT * FROM quality_clearances WHERE {' AND '.join(where)} ORDER BY id DESC LIMIT ?"
+    params.append(int(limit))
+    rows = rows_to_dicts(conn.execute(sql, params).fetchall())
+    if own:
+        conn.close()
+    return rows
+
+
+def count_clearances_by_stage(conn=None) -> dict:
+    own = conn is None
+    conn = conn or connect()
+    out = {"initial": 0, "final": 0, "cancelled": 0}
+    rows = conn.execute(
+        """
+        SELECT coalesce(nullif(trim(clearance_stage), ''), 'إخلاء مبدئي') AS stage, COUNT(*) AS n
+        FROM quality_clearances
+        GROUP BY 1
+        """
+    ).fetchall()
+    for r in rows:
+        label = (r["stage"] or "إخلاء مبدئي").strip()
+        if label == "إخلاء نهائي":
+            out["final"] += int(r["n"] or 0)
+        elif label == "رخصة ملغاة":
+            out["cancelled"] += int(r["n"] or 0)
+        else:
+            out["initial"] += int(r["n"] or 0)
+    # الرخص الملغاة من جدول الرخص أيضاً
+    cancelled_lic = conn.execute(
+        "SELECT COUNT(*) FROM issued_licenses WHERE coalesce(status, '') = 'ملغاة'"
+    ).fetchone()[0]
+    out["cancelled_licenses"] = int(cancelled_lic or 0)
+    if own:
+        conn.close()
+    return out
+
+
+def quality_hub_year_options(conn=None) -> list[str]:
+    own = conn is None
+    conn = conn or connect()
+    years = set()
+    for sql in (
+        "SELECT DISTINCT substr(issue_date,1,4) FROM issued_licenses WHERE length(coalesce(issue_date,'')) >= 4",
+        "SELECT DISTINCT substr(request_date,1,4) FROM new_coordinations WHERE length(coalesce(request_date,'')) >= 4",
+        "SELECT DISTINCT substr(request_date,1,4) FROM quality_clearances WHERE length(coalesce(request_date,'')) >= 4",
+    ):
+        for (y,) in conn.execute(sql).fetchall():
+            if y and str(y).isdigit():
+                years.add(str(y))
+    years.add(str(datetime.now().year))
+    if own:
+        conn.close()
+    return sorted(years, reverse=True)
 
 
 def warehouse_tx_sign(tx_type: str) -> int:

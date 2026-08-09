@@ -1,0 +1,382 @@
+{% extends "base.html" %}
+{% block content %}
+{% set qtab = quality_tab or 'permits' %}
+{% set qsub = quality_sub or '' %}
+{% set section = 'quality' %}
+{% set section_modules = section_modules if section_modules is defined else [] %}
+{% include "_section_subnav.html" %}
+{% include "_quality_subnav.html" %}
+
+<div class="card quality-hub">
+  <div class="toolbar">
+    <div>
+      <div class="meta quality-breadcrumb">
+        {{ _('التنسيقات والجودة') }}
+        {% if qtab == 'permits' %} / {{ _('متابعة تصاريح العمل بعد الاصدار') }}
+          {% if qsub == 'active' %} / {{ _('الرخص السارية') }}
+          {% elif qsub == 'checks' %} / {{ _('تحت التشييكات') }}
+          {% elif qsub == 'closing' %} / {{ _('تحت إجراءات الإغلاق') }}
+          {% elif qsub == 'asphalt' %} / {{ _('موردي الأسفلت') }}
+          {% elif qsub == 'expired' %} / {{ _('الرخص المنتهية') }}
+          {% endif %}
+        {% elif qtab == 'new_coords' %} / {{ _('التنسيقات الجديدة') }}
+        {% elif qtab == 'evacuations' %} / {{ _('الإخلاءات') }}
+          {% if qsub == 'initial' %} / {{ _('الإخلاء المبدئي') }}
+          {% elif qsub == 'final' %} / {{ _('الإخلاء النهائي') }}
+          {% elif qsub == 'cancelled' %} / {{ _('الرخص الملغاة') }}
+          {% endif %}
+        {% endif %}
+      </div>
+      <h2 class="section-title">{{ page_title }}</h2>
+      <div class="meta">{{ page_subtitle }}</div>
+    </div>
+    <div class="actions">
+      {% if qtab == 'new_coords' and can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='new_coordinations') }}">+ {{ _('تنسيق جديد') }}</a>
+      {% elif qtab == 'permits' and can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='issued_licenses') }}">+ {{ _('رخصة') }}</a>
+      {% elif qtab == 'evacuations' and can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', clearance_stage=('إخلاء نهائي' if qsub=='final' else ('رخصة ملغاة' if qsub=='cancelled' else 'إخلاء مبدئي'))) }}">+ {{ _('إخلاء') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='coordination') }}">{{ _('التنسيقات الفنية') }}</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='quality_inspections') }}">{{ _('فحوصات الجودة') }}</a>
+    </div>
+  </div>
+
+  <form method="get" class="quality-filter">
+    <input type="hidden" name="tab" value="{{ qtab }}">
+    {% if qsub %}<input type="hidden" name="sub" value="{{ qsub }}">{% endif %}
+    <label>
+      <span>{{ _('السنة') }}</span>
+      <select name="year">
+        <option value="">{{ _('الكل') }}</option>
+        {% for y in years %}
+        <option value="{{ y }}"{% if year==y %} selected{% endif %}>{{ y }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>
+      <span>{{ _('الشهر') }}</span>
+      <select name="month">
+        <option value="">{{ _('الكل') }}</option>
+        {% for m in range(1, 13) %}
+        {% set mm = '%02d'|format(m) %}
+        <option value="{{ mm }}"{% if month==mm %} selected{% endif %}>{{ mm }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label class="quality-filter-search">
+      <span>{{ _('بحث') }}</span>
+      <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('ابحث بأمر العمل / رقم المحطة / أي عمود') }}">
+    </label>
+    <div class="actions">
+      <button class="btn primary" type="submit">{{ _('بحث') }}</button>
+      <a class="btn ghost" href="{{ url_for('quality_home', tab=qtab, sub=qsub or none) }}">{{ _('مسح البحث') }}</a>
+    </div>
+  </form>
+
+  <div class="quality-summary">
+    <div class="quality-summary-card">
+      <div class="meta">{{ _('التبويبة الحالية') }}</div>
+      <strong>{{ current_tab_label }}</strong>
+      <div class="meta">{{ _('عدد المعاملات:') }} {{ rows|length if rows is defined else 0 }}</div>
+    </div>
+    <div class="quality-summary-card">
+      <div class="meta">{{ _('الفترة الحالية') }}</div>
+      <strong>
+        {% if year or month %}
+          {{ year or _('كل السنوات') }}{% if month %} / {{ month }}{% endif %}
+        {% else %}
+          {{ _('كل الفترات') }}
+        {% endif %}
+      </strong>
+    </div>
+    <div class="quality-summary-card">
+      <div class="meta">{{ _('التقرير المتاح في هذه الصفحة') }}</div>
+      <strong>{{ _('التقرير الموحد') }}</strong>
+      <div class="meta">{{ _('عدد المعاملات:') }} {{ rows|length if rows is defined else 0 }}</div>
+    </div>
+  </div>
+
+  {% if qtab == 'permits' and not qsub %}
+  <div class="quality-metric-row">
+    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='active') }}">
+      <div>{{ _('الرخص السارية') }}</div>
+      <strong>{{ counts.active or 0 }}</strong>
+    </a>
+    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='checks') }}">
+      <div>{{ _('تحت التشييكات') }}</div>
+      <strong>{{ counts.checks or 0 }}</strong>
+    </a>
+    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='closing') }}">
+      <div>{{ _('تحت إجراءات الإغلاق') }}</div>
+      <strong>{{ counts.closing or 0 }}</strong>
+    </a>
+    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='asphalt') }}">
+      <div>{{ _('موردي الأسفلت') }}</div>
+      <strong>{{ counts.asphalt or 0 }}</strong>
+    </a>
+    <a class="quality-metric" href="{{ url_for('quality_home', tab='permits', sub='expired') }}">
+      <div>{{ _('الرخص المنتهية') }}</div>
+      <strong>{{ counts.expired or 0 }}</strong>
+    </a>
+  </div>
+  <div class="quality-empty-hint">
+    {{ _('اختر التبويبة أولاً حتى يظهر التقرير المتاح لها. لن يظهر أي تقرير في هذه الصفحة قبل اختيار التصنيف المطلوب.') }}
+  </div>
+
+  {% elif qtab == 'evacuations' and not qsub %}
+  <div class="quality-evac-cards">
+    <div class="quality-evac-card">
+      <div class="meta">{{ _('الإخلاء المبدئي') }}</div>
+      <strong>{{ clearance_counts.initial or 0 }}</strong>
+      <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='initial') }}">{{ _('فتح الإخلاء المبدئي') }}</a>
+    </div>
+    <div class="quality-evac-card">
+      <div class="meta">{{ _('الإخلاء النهائي') }}</div>
+      <strong>{{ clearance_counts.final or 0 }}</strong>
+      <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='final') }}">{{ _('فتح الإخلاء النهائي') }}</a>
+    </div>
+    <div class="quality-evac-card">
+      <div class="meta">{{ _('الرخص الملغاة') }}</div>
+      <strong>{{ (clearance_counts.cancelled or 0) + (clearance_counts.cancelled_licenses or 0) }}</strong>
+      <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='cancelled') }}">{{ _('فتح الرخص الملغاة') }}</a>
+    </div>
+  </div>
+
+  {% elif qtab == 'permits' and qsub %}
+  {% if buckets %}
+  <div class="quality-metric-row compact">
+    <div class="quality-metric"><div>{{ _('إجمالي المعاملات') }}</div><strong>{{ buckets.total or 0 }}</strong></div>
+    <div class="quality-metric"><div>{{ _('أقل من 7 أيام') }}</div><strong>{{ buckets.lt7 or 0 }}</strong></div>
+    <div class="quality-metric"><div>{{ _('7 إلى 15 يوم') }}</div><strong>{{ buckets['7_15'] or 0 }}</strong></div>
+    <div class="quality-metric"><div>{{ _('15 إلى 25 يوم') }}</div><strong>{{ buckets['15_25'] or 0 }}</strong></div>
+    <div class="quality-metric"><div>{{ _('أكثر من 25 يوم') }}</div><strong>{{ buckets.gt25 or 0 }}</strong></div>
+    <div class="quality-metric"><div>{{ _('مقدّم للاستشاري') }}</div><strong>{{ buckets.submitted or 0 }}</strong></div>
+    <div class="quality-metric"><div>{{ _('بانتظار الاستشاري') }}</div><strong>{{ buckets.waiting or 0 }}</strong></div>
+  </div>
+  {% endif %}
+  <div class="table-wrap">
+    <table class="table quality-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('أمر العمل') }}</th>
+          <th>{{ _('رقم رسملة / RTC') }}</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('تاريخ الإصدار') }}</th>
+          <th>{{ _('تاريخ الانتهاء') }}</th>
+          <th>{{ _('الأيام المتبقية') }}</th>
+          <th>{{ _('الحي') }}</th>
+          <th>{{ _('طول الرخصة') }}</th>
+          <th>{{ _('حالة الرخصة') }}</th>
+          <th>{{ _('ملاحظات الاستشاري') }}</th>
+          <th>{{ _('تقديم الاستشاري') }}</th>
+          <th>{{ _('نتيجة الاستشاري') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td dir="ltr">#{{ r.id }}</td>
+          <td dir="ltr"><strong>{{ r.work_order or r.construction_work_no or '—' }}</strong></td>
+          <td dir="ltr">{{ r.rtc_no or r.license_no or '—' }}</td>
+          <td dir="ltr">{{ r.ticket_no or '—' }}</td>
+          <td>{{ r.issue_date or '—' }}</td>
+          <td>{{ r.expiry_date or '—' }}</td>
+          <td>
+            {% if r.remaining_days is not none %}
+              <span class="badge {% if r.remaining_days < 0 %}danger{% elif r.remaining_days < 7 %}warn{% else %}ok{% endif %}">{{ r.remaining_days }}</span>
+            {% else %}—{% endif %}
+          </td>
+          <td>{{ r.district or '—' }}</td>
+          <td>{{ r.license_length if r.license_length is not none else '—' }}</td>
+          <td><span class="badge info">{{ tv(r.status) if r.status else '—' }}</span></td>
+          <td title="{{ r.consultant_notes or '' }}">{{ (r.consultant_notes or '—')[:40] }}{% if r.consultant_notes and r.consultant_notes|length > 40 %}…{% endif %}</td>
+          <td>{{ tv(r.consultant_submitted) if r.consultant_submitted else ('نعم' if r.consultant_submitted_flag else '—') }}</td>
+          <td>{{ tv(r.consultant_result) if r.consultant_result else '—' }}</td>
+          <td class="actions">
+            <a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.id) }}">{{ _('تعديل') }}</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="14" class="meta">{{ _('لا توجد رخص في هذا التصنيف.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif qtab == 'new_coords' %}
+  <div class="table-wrap">
+    <table class="table quality-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('رقم التنسيق') }}</th>
+          <th>{{ _('تاريخ الطلب') }}</th>
+          <th>{{ _('الجهة') }}</th>
+          <th>{{ _('الحي') }}</th>
+          <th>{{ _('القسم المستهدف') }}</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('كود المشروع') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('رقم الرخصة') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td dir="ltr">#{{ r.id }}</td>
+          <td dir="ltr"><strong>{{ r.coord_no or '—' }}</strong></td>
+          <td>{{ r.request_date or '—' }}</td>
+          <td>{{ r.authority or '—' }}</td>
+          <td>{{ r.district or '—' }}</td>
+          <td>{{ tv(r.linked_section) if r.linked_section else '—' }}</td>
+          <td dir="ltr">{{ r.ticket_no or '—' }}</td>
+          <td dir="ltr">{{ r.project_code or '—' }}</td>
+          <td><span class="badge info">{{ tv(r.status) if r.status else '—' }}</span></td>
+          <td dir="ltr">{{ r.license_no or '—' }}</td>
+          <td class="actions">
+            <a class="btn ghost" href="{{ url_for('module_edit', name='new_coordinations', row_id=r.id) }}">{{ _('تعديل') }}</a>
+            {% if can('modules.write') and r.status != 'تم الإصدار' %}
+            <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">
+              <button class="btn primary" type="submit">{{ _('نقل إلى الرخص المصدرة') }}</button>
+            </form>
+            {% elif r.transferred_license_id %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.transferred_license_id) }}">{{ _('الرخصة') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11" class="meta">{{ _('لا توجد تنسيقات جديدة مطابقة.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% elif qtab == 'evacuations' and qsub %}
+  {% if qsub == 'cancelled' and cancelled_licenses %}
+  <h3 class="section-title" style="font-size:1.05rem;margin:12px 0 8px;">{{ _('الرخص الملغاة') }}</h3>
+  <div class="table-wrap" style="margin-bottom:14px;">
+    <table class="table quality-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('رقم الرخصة') }}</th>
+          <th>{{ _('أمر العمل') }}</th>
+          <th>{{ _('الحي') }}</th>
+          <th>{{ _('تاريخ الإصدار') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in cancelled_licenses %}
+        <tr>
+          <td dir="ltr">#{{ r.id }}</td>
+          <td dir="ltr"><strong>{{ r.license_no or '—' }}</strong></td>
+          <td dir="ltr">{{ r.work_order or '—' }}</td>
+          <td>{{ r.district or '—' }}</td>
+          <td>{{ r.issue_date or '—' }}</td>
+          <td><span class="badge danger">{{ tv(r.status) }}</span></td>
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.id) }}">{{ _('تعديل') }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+  <div class="table-wrap">
+    <table class="table quality-table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('كود RR') }}</th>
+          <th>{{ _('رقم الإخلاء') }}</th>
+          <th>{{ _('مرحلة الإخلاء') }}</th>
+          <th>{{ _('تاريخ الطلب') }}</th>
+          <th>{{ _('الجهة') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td dir="ltr">#{{ r.id }}</td>
+          <td dir="ltr"><strong>{{ r.ticket_no or '—' }}</strong></td>
+          <td dir="ltr">{{ r.rekaz_code or '—' }}</td>
+          <td dir="ltr">{{ r.clearance_no or '—' }}</td>
+          <td>{{ tv(r.clearance_stage) if r.clearance_stage else _('إخلاء مبدئي') }}</td>
+          <td>{{ r.request_date or '—' }}</td>
+          <td>{{ r.contractor or '—' }}</td>
+          <td><span class="badge info">{{ tv(r.status) if r.status else '—' }}</span></td>
+          <td class="actions">
+            <a class="btn ghost" href="{{ url_for('module_edit', name='quality_clearances', row_id=r.id) }}">{{ _('تعديل') }}</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="meta">{{ _('لا توجد إخلاءات في هذا التصنيف.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if excavation_queue is defined and excavation_queue and qtab == 'evacuations' %}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.1rem;margin:0;">{{ _('معاملات الحفر — إجراءات الإخلاء') }}</h3>
+      <div class="meta">{{ _('كل المعاملات التي بها حفر تُربط تلقائياً بالتنسيقات لبدء إخلاء الأسفلت') }}{% if excavation_pending is defined %} — {{ _('بانتظار الإخلاء:') }} {{ excavation_pending }}{% endif %}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('module_list', name='coordination', excavation=1) }}">{{ _('تنسيقات الحفر') }}</a>
+      <a class="btn primary" href="{{ url_for('module_list', name='quality_clearances', excavation=1) }}">{{ _('إخلاءات الحفر') }}</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('الحي') }}</th>
+          <th>{{ _('حالة التنسيق') }}</th>
+          <th>{{ _('حالة الإخلاء') }}</th>
+          <th>{{ _('كود RR') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in excavation_queue %}
+        <tr>
+          <td dir="ltr"><strong>{{ r.ticket_no }}</strong></td>
+          <td>{{ r.district or '—' }}</td>
+          <td>{{ tv(r.coord_status) if r.coord_status else '—' }}</td>
+          <td>{{ tv(r.clearance_status) if r.clearance_status else '—' }}</td>
+          <td dir="ltr">{{ r.rekaz_code or '—' }}</td>
+          <td class="actions">
+            {% if r.ticket_id %}
+            <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=r.ticket_id) }}">{{ _('العطل') }}</a>
+            {% endif %}
+            {% if r.coord_id %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='coordination', row_id=r.coord_id) }}">{{ _('تنسيق') }}</a>
+            {% endif %}
+            {% if r.clearance_id %}
+            <a class="btn primary" href="{{ url_for('module_edit', name='quality_clearances', row_id=r.clearance_id) }}">{{ _('إخلاء') }}</a>
+            {% else %}
+            <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', ticket_no=r.ticket_no) }}">{{ _('+ إخلاء') }}</a>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
