@@ -23,28 +23,7 @@
     <a class="btn ghost{% if source_filter=='contractors' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='contractors') }}">{{ _('مواد موردة من مقاول') }}</a>
   </div>
 
-  <div class="stats-grid warehouse-qty-summary">
-    <div class="stat-card">
-      <div>{{ _('إجمالي الكمية الواردة') }}</div>
-      <strong>{{ '%.2f'|format(totals.inbound or 0) }}</strong>
-      <div class="meta">{{ _('مجموع حركات الوارد') }}</div>
-    </div>
-    <div class="stat-card">
-      <div>{{ _('إجمالي الكمية المنصرفة') }}</div>
-      <strong>{{ '%.2f'|format(totals.outbound or 0) }}</strong>
-      <div class="meta">{{ _('مجموع حركات المنصرف / الإرجاع') }}</div>
-    </div>
-    <div class="stat-card">
-      <div>{{ _('المتبقي') }}</div>
-      <strong>{{ '%.2f'|format(totals.balance or 0) }}</strong>
-      <div class="meta">{{ _('الوارد − المنصرف') }}</div>
-    </div>
-    <div class="stat-card">
-      <div>{{ _('عدد الحركات') }}</div>
-      <strong>{{ totals.tx_count or 0 }}</strong>
-      <div class="meta">{{ _('سجل حركة في الفلتر الحالي') }}</div>
-    </div>
-  </div>
+  {% include "_summary_cards.html" %}
 </div>
 
 {% if not source_filter %}

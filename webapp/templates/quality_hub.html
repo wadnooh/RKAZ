@@ -103,6 +103,9 @@
     <div class="quality-metric"><div>{{ _('مقدّم للاستشاري') }}</div><strong>{{ buckets.submitted or 0 }}</strong></div>
     <div class="quality-metric"><div>{{ _('بانتظار الاستشاري') }}</div><strong>{{ buckets.waiting or 0 }}</strong></div>
   </div>
+  {% else %}
+  {% set summary_cards_style = 'margin:12px 0 14px;' %}
+  {% include "_summary_cards.html" %}
   {% endif %}
 
   {% if mode == 'licenses' %}

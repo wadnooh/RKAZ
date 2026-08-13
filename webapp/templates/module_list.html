@@ -119,6 +119,18 @@
   </p>
   {% endif %}
 
+  {% if name == 'reinforcement_works' and reinforcement_departments %}
+  <div class="actions" style="margin-bottom:12px;flex-wrap:wrap;" data-tab-strip="1">
+    <a class="btn ghost{% if not department_filter %} primary{% endif %}" href="{{ url_for('module_list', name=name) }}">{{ _('الكل') }}</a>
+    {% for d in reinforcement_departments %}
+    <a class="btn ghost{% if department_filter == d.dept_name %} primary{% endif %}" href="{{ url_for('module_list', name=name, department=d.dept_name) }}">{{ d.dept_name }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
+
   <div class="table-wrap">
     <table class="table">
       <thead>

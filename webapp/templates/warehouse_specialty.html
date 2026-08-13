@@ -31,6 +31,8 @@
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('مسح') }}</a>
   </form>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -92,6 +94,8 @@
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='teams') }}">{{ _('مسح') }}</a>
   </form>
   <p class="meta" style="margin-bottom:10px;">{{ _('عرض ونسخ داخل المستودع — إضافة أوامر العمل من العمليات والصيانة ← الفرق الأولية.') }}</p>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -142,6 +146,8 @@
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='tickets') }}">{{ _('مسح') }}</a>
   </form>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -194,6 +200,8 @@
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='works') }}">{{ _('مسح') }}</a>
   </form>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -242,6 +250,8 @@
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='projects') }}">{{ _('مسح') }}</a>
   </form>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>

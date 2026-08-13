@@ -29,11 +29,21 @@
 </div>
 
 <div class="card" style="margin-top:14px;">
-  <form method="get" class="actions" style="margin-bottom:12px;">
+  <form method="get" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بأمر العمل / رقم المستخلص / المبلغ...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <label class="meta" style="display:flex;align-items:center;gap:6px;">
+      <span>{{ _('من') }}</span>
+      <input type="date" name="date_from" value="{{ date_from or '' }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+    </label>
+    <label class="meta" style="display:flex;align-items:center;gap:6px;">
+      <span>{{ _('إلى') }}</span>
+      <input type="date" name="date_to" value="{{ date_to or '' }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+    </label>
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for('ops_primary_teams') }}">{{ _('مسح') }}</a>
   </form>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>

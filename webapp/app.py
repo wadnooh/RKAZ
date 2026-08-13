@@ -339,6 +339,208 @@ def money(n):
         return f"0.00 {_t('ر.س')}"
 
 
+def _summary_card(title, value, subtitle="", *, money=False, href=None):
+    """بطاقة ملخص بنفس أسلوب إجمالي الكميات في المستودعات."""
+    return {
+        "title": title,
+        "value": value if value is not None else "—",
+        "subtitle": subtitle or "",
+        "money": bool(money),
+        "href": href or None,
+    }
+
+
+def _to_float_safe(val):
+    if val is None or val == "":
+        return None
+    try:
+        return float(val)
+    except (TypeError, ValueError):
+        return None
+
+
+def _sum_money_field(rows, *keys):
+    total = 0.0
+    for r in rows or []:
+        for key in keys:
+            num = _to_float_safe(r.get(key))
+            if num is not None:
+                total += num
+                break
+    return total
+
+
+def _latest_row(rows, *date_keys):
+    """أحدث صف حسب أول تاريخ متاح ثم أعلى id."""
+    best = None
+    best_key = None
+    for r in rows or []:
+        date_val = ""
+        for key in date_keys:
+            date_val = (r.get(key) or "").strip()
+            if date_val:
+                break
+        sort_key = (date_val or "", int(r.get("id") or 0))
+        if best is None or sort_key > best_key:
+            best = r
+            best_key = sort_key
+    return best
+
+
+def _filter_rows_by_date_range(rows, date_from, date_to, *date_keys):
+    """تصفية الصفوف حسب تاريخ من/إلى باستخدام أول حقل تاريخ غير فارغ."""
+    date_from = (date_from or "").strip()
+    date_to = (date_to or "").strip()
+    if not date_from and not date_to:
+        return list(rows or [])
+    out = []
+    for r in rows or []:
+        d = ""
+        for key in date_keys:
+            d = (r.get(key) or "").strip()
+            if d:
+                break
+        if not d:
+            continue
+        if date_from and d < date_from:
+            continue
+        if date_to and d > date_to:
+            continue
+        out.append(r)
+    return out
+
+
+def _module_money_keys(name, module=None):
+    module = module or MODULES.get(name) or {}
+    preferred = {
+        "metering": ("approved_value",),
+        "invoices": ("value",),
+        "quantities": ("total", "unit_price"),
+        "external_purchases": ("total",),
+        "contractor_supplies": ("total",),
+        "primary_team_orders": ("amount",),
+        "reinforcement_works": ("value",),
+        "construction_works": ("value",),
+        "contractor_works": ("value",),
+    }.get(name)
+    if preferred:
+        return preferred
+    keys = []
+    for key, _label, ftype in module.get("fields") or []:
+        if ftype != "number":
+            continue
+        lk = key.lower()
+        if any(tok in lk for tok in ("value", "amount", "price", "collected", "approved", "total")):
+            keys.append(key)
+    return tuple(keys)
+
+
+def _module_date_keys(name, module=None):
+    module = module or MODULES.get(name) or {}
+    preferred = {
+        "metering": ("approve_date", "submit_date", "start_date"),
+        "invoices": ("invoice_date", "support_date", "paid_date"),
+        "primary_team_orders": ("order_date",),
+        "reinforcement_works": ("work_date",),
+        "construction_works": ("work_date",),
+        "contractor_works": ("work_date",),
+        "contractor_supplies": ("supply_date",),
+        "external_purchases": ("purchase_date", "order_date"),
+        "projects": ("start_date", "end_date"),
+        "warehouse_tx": ("tx_date",),
+        "new_coordinations": ("request_date",),
+        "issued_licenses": ("issue_date", "expiry_date"),
+        "quality_clearances": ("request_date", "clearance_date"),
+    }.get(name)
+    if preferred:
+        return preferred
+    keys = []
+    for key, _label, ftype in module.get("fields") or []:
+        if ftype == "date" or key.endswith("_date") or key in ("tx_date",):
+            keys.append(key)
+    return tuple(keys)
+
+
+def _module_detail_key(name, module=None):
+    module = module or MODULES.get(name) or {}
+    preferred = {
+        "metering": "ticket_no",
+        "invoices": "invoice_id",
+        "primary_team_orders": "work_order",
+        "reinforcement_works": "work_no",
+        "construction_works": "work_no",
+        "contractor_works": "work_no",
+        "contractor_supplies": "supply_no",
+        "projects": "project_code",
+        "warehouse_tx": "voucher_no",
+        "new_coordinations": "coord_no",
+        "issued_licenses": "license_no",
+        "quality_clearances": "ticket_no",
+        "quantities": "ticket_no",
+        "photos": "ticket_no",
+        "external_purchases": "purchase_no",
+    }.get(name)
+    if preferred:
+        return preferred
+    for key, _label, _ftype in module.get("fields") or []:
+        if key in module.get("list_cols") or []:
+            return key
+    fields = module.get("fields") or []
+    return fields[0][0] if fields else "id"
+
+
+def build_list_summary_cards(
+    rows,
+    *,
+    count_label=None,
+    money_keys=(),
+    date_keys=(),
+    detail_key=None,
+    filter_hint=None,
+):
+    """يبني بطاقات ملخص من الصفوف المعروضة (بعد الفلترة)."""
+    rows = list(rows or [])
+    hint = filter_hint or _t("حسب الفلتر الحالي")
+    count_label = count_label or _t("عدد السجلات")
+    cards = [
+        _summary_card(count_label, len(rows), hint),
+    ]
+    if money_keys:
+        cards.append(
+            _summary_card(
+                _t("المبالغ المدخلة"),
+                _sum_money_field(rows, *money_keys),
+                hint,
+                money=True,
+            )
+        )
+    latest = _latest_row(rows, *date_keys) if date_keys else (rows[0] if rows else None)
+    if detail_key:
+        detail_val = (latest or {}).get(detail_key) if latest else None
+        cards.append(
+            _summary_card(
+                _t("آخر سجل"),
+                detail_val or "—",
+                _t("تفاصيل أحدث حركة"),
+            )
+        )
+    if date_keys:
+        last_date = ""
+        if latest:
+            for key in date_keys:
+                last_date = (latest.get(key) or "").strip()
+                if last_date:
+                    break
+        cards.append(
+            _summary_card(
+                _t("تاريخ آخر حركة"),
+                last_date or "—",
+                _t("أحدث تاريخ في القائمة"),
+            )
+        )
+    return cards
+
+
 def response_minutes(dispatch, arrival):
     if not dispatch or not arrival:
         return None
@@ -820,6 +1022,28 @@ def _render_custom_tab_page(section: str, slug: str):
     title = (tab.get("title_en") or "").strip() if lang == "en" else (tab.get("title_ar") or "").strip()
     if lang == "en" and not title:
         title = (tab.get("title_ar") or "").strip()
+    summary_cards = [
+        _summary_card(
+            _t("حالة التبويب"),
+            _t("ظاهر") if int(tab.get("is_visible") or 0) else _t("مخفي"),
+            _t("صفحة نائبة"),
+        ),
+        _summary_card(
+            _t("مسار مربوط") if target else _t("لا يوجد مسار مربوط"),
+            target or "—",
+            f"{_t('قسم النظام')}: {section}",
+        ),
+        _summary_card(
+            _t("تاريخ الإنشاء"),
+            (str(tab.get("created_at") or "")[:10] or "—"),
+            _t("تفاصيل أحدث حركة"),
+        ),
+        _summary_card(
+            _t("آخر تحديث"),
+            (str(tab.get("updated_at") or "")[:10] or "—"),
+            _t("أحدث تاريخ في القائمة"),
+        ),
+    ]
     return render_template(
         "app_custom_tab_page.html",
         tab=tab,
@@ -828,6 +1052,7 @@ def _render_custom_tab_page(section: str, slug: str):
         section=section,
         section_modules=modules_for_section(section) if section in SECTION_META else [],
         section_meta=_smeta(SECTION_META.get(section)) if section in SECTION_META else None,
+        summary_cards=summary_cards,
     )
 
 
@@ -1105,6 +1330,58 @@ def quality_home():
         "واجهة متابعة التنسيقات والرخص والإخلاءات — بنفس هيكل رسملة: تبويبات وتصنيفات وتقرير موحد."
     )
 
+    # بطاقات الملخص لغير وضع الرخص (الرخص لها quality-metric-row الخاصة)
+    summary_cards = []
+    if content_mode == "new_coords":
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=_t("عدد التنسيقات"),
+            money_keys=(),
+            date_keys=("request_date",),
+            detail_key="coord_no",
+        )
+    elif content_mode == "clearances":
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=_t("عدد الإخلاءات"),
+            money_keys=(),
+            date_keys=("request_date", "clearance_date"),
+            detail_key="ticket_no",
+        )
+    elif content_mode == "cancelled":
+        latest_clr = _latest_row(rows, "request_date", "clearance_date")
+        latest_lic = _latest_row(cancelled_licenses, "issue_date")
+        last_date = "—"
+        if latest_clr:
+            last_date = (latest_clr.get("request_date") or latest_clr.get("clearance_date") or "—")
+        elif latest_lic:
+            last_date = latest_lic.get("issue_date") or "—"
+        summary_cards = [
+            _summary_card(
+                _t("عدد الإخلاءات"),
+                len(rows),
+                _t("حسب الفلتر الحالي"),
+            ),
+            _summary_card(
+                _t("رخص ملغاة"),
+                len(cancelled_licenses),
+                _t("حسب الفلتر الحالي"),
+            ),
+            _summary_card(
+                _t("تاريخ آخر حركة"),
+                last_date,
+                _t("أحدث تاريخ في القائمة"),
+            ),
+        ]
+    elif content_mode == "licenses" and not buckets:
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=_t("عدد الرخص"),
+            money_keys=(),
+            date_keys=("issue_date", "expiry_date"),
+            detail_key="license_no",
+        )
+
     return render_template(
         "quality_hub.html",
         title=page_title,
@@ -1129,6 +1406,7 @@ def quality_home():
         section_meta=_smeta(SECTION_META["quality"]),
         excavation_queue=excavation_queue,
         excavation_pending=pending_clearance,
+        summary_cards=summary_cards,
     )
 
 
@@ -1144,6 +1422,40 @@ def reinforcement_home():
     db.ensure_schema()
     links = section_links("reinforcement")
     departments = db.list_reinforcement_departments(active_only=False)
+    conn = db.connect()
+    works = db.rows_to_dicts(conn.execute("SELECT * FROM reinforcement_works").fetchall())
+    conn.close()
+    active_depts = sum(
+        1
+        for d in departments
+        if (d.get("status") or "") not in ("موقوف", "لا")
+    )
+    latest = _latest_row(works, "work_date")
+    summary_cards = [
+        _summary_card(_t("عدد الأقسام"), len(departments), _t("أقسام التعزيز")),
+        _summary_card(_t("أقسام نشطة"), active_depts, _t("جاهزة لإدخال المعاملات")),
+        _summary_card(
+            _t("عدد المعاملات"),
+            len(works),
+            _t("معاملات التعزيز / اسكيمات"),
+        ),
+        _summary_card(
+            _t("المبالغ المدخلة"),
+            _sum_money_field(works, "value"),
+            _t("مجموع قيم المعاملات"),
+            money=True,
+        ),
+        _summary_card(
+            _t("آخر معاملة"),
+            (latest or {}).get("work_no") or "—",
+            ((latest or {}).get("department") or _t("تفاصيل أحدث حركة")),
+        ),
+        _summary_card(
+            _t("تاريخ آخر حركة"),
+            ((latest or {}).get("work_date") or "—"),
+            _t("أحدث تاريخ في القائمة"),
+        ),
+    ]
     return render_template(
         "reinforcement_home.html",
         title=_t("التعزيز - اسكيمات"),
@@ -1154,6 +1466,7 @@ def reinforcement_home():
         section_modules=modules_for_section("reinforcement"),
         section_meta=_smeta(SECTION_META["reinforcement"]),
         total_count=sum(i.get("count") or 0 for i in links),
+        summary_cards=summary_cards,
     )
 
 
@@ -1174,12 +1487,35 @@ def warehouse_movements_summary():
         source = ""
     totals = db.warehouse_movements_totals(source or None)
     by_source = db.warehouse_movements_totals_by_source()
+    summary_cards = [
+        _summary_card(
+            _t("إجمالي الكمية الواردة"),
+            f"{float(totals.get('inbound') or 0):.2f}",
+            _t("مجموع حركات الوارد"),
+        ),
+        _summary_card(
+            _t("إجمالي الكمية المنصرفة"),
+            f"{float(totals.get('outbound') or 0):.2f}",
+            _t("مجموع حركات المنصرف / الإرجاع"),
+        ),
+        _summary_card(
+            _t("المتبقي"),
+            f"{float(totals.get('balance') or 0):.2f}",
+            _t("الوارد − المنصرف"),
+        ),
+        _summary_card(
+            _t("عدد الحركات"),
+            totals.get("tx_count") or 0,
+            _t("سجل حركة في الفلتر الحالي"),
+        ),
+    ]
     return render_template(
         "warehouse_movements_summary.html",
         totals=totals,
         by_source=by_source,
         source_filter=source,
         warehouse_active="summary",
+        summary_cards=summary_cards,
     )
 
 
@@ -1313,6 +1649,70 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             r["wh_count"] = cmap.get(str(r.get("project_code") or ""), 0)
     conn.close()
 
+    summary_cards = []
+    if view == "tickets":
+        summary_cards = [
+            _summary_card(_t("عدد الأعطال"), len(rows), _t("حسب الفلتر الحالي")),
+            _summary_card(
+                _t("حركات المواد"),
+                sum(int(r.get("wh_count") or 0) for r in rows),
+                _t("مرتبطة بالأعطال المعروضة"),
+            ),
+            _summary_card(
+                _t("آخر عطل"),
+                ((_latest_row(rows, "receive_date") or {}).get("ticket_no") or "—"),
+                _t("تفاصيل أحدث عطل"),
+            ),
+            _summary_card(
+                _t("تاريخ آخر عطل"),
+                ((_latest_row(rows, "receive_date") or {}).get("receive_date") or "—"),
+                _t("أحدث تاريخ استلام"),
+            ),
+        ]
+    elif view == "teams":
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=_t("عدد الأوامر"),
+            money_keys=("amount",),
+            date_keys=("order_date",),
+            detail_key="work_order",
+        )
+    elif view == "works":
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=_t("عدد المعاملات"),
+            money_keys=("value",),
+            date_keys=("work_date",),
+            detail_key="work_no",
+        )
+    elif view == "projects":
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=_t("عدد المشاريع"),
+            money_keys=(),
+            date_keys=("start_date", "end_date"),
+            detail_key="project_code",
+        )
+    elif view == "movements":
+        summary_cards = [
+            _summary_card(_t("عدد الحركات"), len(tx_rows), _t("حسب الفلتر الحالي")),
+            _summary_card(
+                _t("إجمالي الكميات"),
+                f"{sum(float(r.get('qty') or 0) for r in tx_rows):.2f}",
+                _t("مجموع كميات الحركات المعروضة"),
+            ),
+            _summary_card(
+                _t("آخر سجل"),
+                ((_latest_row(tx_rows, "tx_date") or {}).get("voucher_no") or "—"),
+                _t("تفاصيل أحدث حركة"),
+            ),
+            _summary_card(
+                _t("تاريخ آخر حركة"),
+                ((_latest_row(tx_rows, "tx_date") or {}).get("tx_date") or "—"),
+                _t("أحدث تاريخ في القائمة"),
+            ),
+        ]
+
     return render_template(
         "warehouse_specialty.html",
         active=active,
@@ -1326,6 +1726,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         tx_rows=tx_rows,
         tx_count=tx_count,
         list_endpoint=list_endpoint,
+        summary_cards=summary_cards,
         wh_from={
             "ops": "wh_ops",
             "constructions": "wh_constructions",
@@ -2399,6 +2800,8 @@ def ticket_from_form():
 def tickets_list():
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
     conn = db.connect()
     sql = "SELECT * FROM tickets WHERE 1=1"
     params = []
@@ -2409,13 +2812,51 @@ def tickets_list():
     if status:
         sql += " AND status = ?"
         params.append(status)
+    if date_from:
+        sql += " AND coalesce(receive_date,'') >= ?"
+        params.append(date_from)
+    if date_to:
+        sql += " AND coalesce(receive_date,'') <= ?"
+        params.append(date_to)
     sql += " ORDER BY id DESC"
     rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
     for r in rows:
         r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
     _attach_ticket_final_values(rows, conn)
     conn.close()
-    return render_template("tickets_list.html", rows=rows, q=q, status=status)
+    summary_cards = [
+        _summary_card(_t("عدد الأعطال"), len(rows), _t("حسب الفلتر الحالي")),
+        _summary_card(
+            _t("المبالغ المدخلة"),
+            _sum_money_field(rows, "final_value"),
+            _t("مجموع القيم النهائية"),
+            money=True,
+        ),
+    ]
+    latest = _latest_row(rows, "receive_date")
+    summary_cards.append(
+        _summary_card(
+            _t("آخر عطل"),
+            (latest or {}).get("ticket_no") or "—",
+            ((latest or {}).get("fault_type") or _t("تفاصيل أحدث عطل")),
+        )
+    )
+    summary_cards.append(
+        _summary_card(
+            _t("تاريخ آخر عطل"),
+            ((latest or {}).get("receive_date") or "—"),
+            _t("أحدث تاريخ استلام"),
+        )
+    )
+    return render_template(
+        "tickets_list.html",
+        rows=rows,
+        q=q,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        summary_cards=summary_cards,
+    )
 
 
 @app.route("/tickets/template.xlsx")
@@ -3264,6 +3705,35 @@ def module_list(name):
             if db.normalize_linked_section(r.get("linked_section")) == linked_section_filter
         ]
     section = module.get("section")
+    # لا نكرر بطاقات المستودع الخاصة بإجمالي الكميات على صفحات الحركات التفصيلية
+    skip_summary = name in ("warehouse_items",)
+    if skip_summary:
+        summary_cards = []
+    else:
+        count_labels = {
+            "metering": _t("عدد سجلات التمتير"),
+            "invoices": _t("عدد المستخلصات"),
+            "construction_works": _t("عدد المعاملات"),
+            "contractor_works": _t("عدد المعاملات"),
+            "reinforcement_works": _t("عدد المعاملات"),
+            "projects": _t("عدد المشاريع"),
+            "quantities": _t("عدد البنود"),
+            "photos": _t("عدد سجلات الصور"),
+            "warehouse_tx": _t("عدد الحركات"),
+            "external_purchases": _t("عدد المشتريات"),
+            "contractor_supplies": _t("عدد التوريدات"),
+            "new_coordinations": _t("عدد التنسيقات"),
+            "issued_licenses": _t("عدد الرخص"),
+            "quality_clearances": _t("عدد الإخلاءات"),
+            "reinforcement_departments": _t("عدد الأقسام"),
+        }
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=count_labels.get(name),
+            money_keys=_module_money_keys(name, module),
+            date_keys=_module_date_keys(name, module),
+            detail_key=_module_detail_key(name, module),
+        )
     return render_template(
         "module_list.html",
         name=name,
@@ -3281,6 +3751,7 @@ def module_list(name):
         warehouse_source=source_filter if name == "warehouse_tx" else None,
         department_filter=dept_filter if name == "reinforcement_works" else "",
         reinforcement_departments=db.list_reinforcement_departments(active_only=False) if name == "reinforcement_works" else [],
+        summary_cards=summary_cards,
     )
 
 
@@ -4037,6 +4508,8 @@ def ops_primary_teams():
             flash(_t("تم الحذف"), "ok")
             _after_data_change()
     q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
     rows = db.rows_to_dicts(
         conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall()
     )
@@ -4051,11 +4524,22 @@ def ops_primary_teams():
             or ql in (str(r.get("amount") or "")).lower()
             or ql in (r.get("notes") or "").lower()
         ]
+    rows = _filter_rows_by_date_range(rows, date_from, date_to, "order_date")
+    summary_cards = build_list_summary_cards(
+        rows,
+        count_label=_t("عدد الأوامر"),
+        money_keys=("amount",),
+        date_keys=("order_date",),
+        detail_key="work_order",
+    )
     return render_template(
         "primary_teams.html",
         rows=rows,
         q=q,
+        date_from=date_from,
+        date_to=date_to,
         today=datetime.now().strftime("%Y-%m-%d"),
+        summary_cards=summary_cards,
     )
 
 
@@ -4090,7 +4574,19 @@ def teams_page():
             flash(_t("تم الحذف"), "ok")
     rows = db.rows_to_dicts(conn.execute("SELECT * FROM teams ORDER BY id").fetchall())
     conn.close()
-    return render_template("teams.html", rows=rows)
+    active_n = sum(1 for r in rows if (r.get("status") or "") == "نشطة")
+    tech_n = sum(int(r.get("technicians") or 0) for r in rows)
+    summary_cards = [
+        _summary_card(_t("عدد الفرق"), len(rows), _t("كل الفرق المسجّلة")),
+        _summary_card(_t("فرق نشطة"), active_n, _t("جاهزة للمهام")),
+        _summary_card(_t("إجمالي الفنيين"), tech_n, _t("مجموع عدد الفنيين")),
+        _summary_card(
+            _t("فرق متوقفة / صيانة"),
+            len(rows) - active_n,
+            _t("غير جاهزة حالياً"),
+        ),
+    ]
+    return render_template("teams.html", rows=rows, summary_cards=summary_cards)
 
 
 @app.route("/admin/backups", defaults={"subpath": ""})
