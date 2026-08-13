@@ -18,7 +18,7 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 
-from flask import flash, redirect, request, session, url_for
+from flask import redirect, request, session, url_for
 
 from webapp import db
 from webapp import mailer
@@ -48,10 +48,6 @@ PRIVILEGED_POST_ENDPOINTS = frozenset(
         "contract_boq_activate",
     }
 )
-
-MSG_MAIN_ONLY = "التعديل من الجهاز الرئيسي فقط"
-MSG_NEED_VERIFY = "يلزم تحقق المبرمج"
-
 
 def _lang() -> str:
     return session.get("lang") or "ar"
@@ -255,7 +251,7 @@ def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
         return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
     wait = _otp_send_wait_seconds()
     if wait > 0:
-        return False, _t("انتظر {sec} ثانية قبل إعادة إرسال الرمز.", sec=wait)
+        return False, _t("انتظر {sec} ثانية قبل إعادة إرسال رمز التحقق.", sec=wait)
     if not smtp_ready():
         return False, _t(
             "البريد غير جاهز. لا يمكن التحقق من جهاز ثانوي حتى يعمل SMTP، أو استخدم طوارئ SSH فقط عند تعطّل البريد."
@@ -277,7 +273,7 @@ def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
     if not ok:
         return False, _t("تعذّر إرسال البريد: {err}", err=err)
     session["programmer_otp_sent_at"] = time.time()
-    return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد فقط.")
+    return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد.")
 
 
 def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, str]:
@@ -350,9 +346,7 @@ def gate_control_plane_mutation():
     if can_mutate_control_plane():
         return None
     if not main_device_registered():
-        flash(_t("يجب تسجيل الجهاز الرئيسي أولاً قبل أي تعديل إداري."), "danger")
         return redirect(url_for("programmer_device_setup", next=request.path))
-    flash(_t(MSG_NEED_VERIFY) + " — " + _t(MSG_MAIN_ONLY), "danger")
     return redirect(url_for("programmer_verify", next=request.path))
 
 
@@ -361,9 +355,7 @@ def require_programmer_control(fn):
     def wrapper(*args, **kwargs):
         if is_programmer() and (request.method or "").upper() == "POST" and not can_mutate_control_plane():
             if not main_device_registered():
-                flash(_t("يجب تسجيل الجهاز الرئيسي أولاً قبل أي تعديل إداري."), "danger")
                 return redirect(url_for("programmer_device_setup", next=request.path))
-            flash(_t(MSG_NEED_VERIFY) + " — " + _t(MSG_MAIN_ONLY), "danger")
             return redirect(url_for("programmer_verify", next=request.path))
         return fn(*args, **kwargs)
 

@@ -21,18 +21,6 @@
 
   {% if is_this_main %}
   <p class="badge ok" style="display:block;margin-bottom:12px;">{{ _('هذا المتصفح هو الجهاز الرئيسي المعتمد.') }}</p>
-  {% elif can_mutate %}
-  <p class="badge info" style="display:block;margin-bottom:12px;">
-    {{ _('تحقق مؤقت ساري (~{mins} د).', mins=((elevated_seconds // 60) or 1)) }}
-  </p>
-  {% elif already_registered %}
-  <p class="badge danger" style="display:block;margin-bottom:12px;">
-    {{ _('التعديل من الجهاز الرئيسي فقط') }} — {{ _('يلزم تحقق المبرمج') }}
-  </p>
-  {% else %}
-  <p class="badge info" style="display:block;margin-bottom:12px;">
-    {{ _('لم يُسجَّل جهاز رئيسي بعد. سجّله من جهازك المعتمد الآن.') }}
-  </p>
   {% endif %}
 
   {% if not already_registered or is_this_main %}

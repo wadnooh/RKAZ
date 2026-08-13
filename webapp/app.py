@@ -2984,12 +2984,11 @@ def programmer_verify():
         return redirect(nxt)
 
     if not prog_guard.main_device_registered():
-        flash(_t("يجب تسجيل الجهاز الرئيسي أولاً."), "danger")
         return redirect(url_for("programmer_device_setup", next=nxt))
 
     if request.method == "POST":
         action = (request.form.get("action") or "verify").strip()
-        if action == "send_otp":
+        if action in {"send_otp", "resend_otp"}:
             ok, msg = prog_guard.send_email_otp(next_path=nxt)
             flash(msg, "ok" if ok else "danger")
             if ok:
@@ -3014,6 +3013,7 @@ def programmer_verify():
         )
         return redirect(nxt)
 
+    otp_wait = prog_guard.otp_send_wait_seconds()
     return render_template(
         "programmer_verify.html",
         next_url=nxt,
@@ -3021,7 +3021,8 @@ def programmer_verify():
         secrets_ok=prog_guard.secrets_configured(),
         smtp_ready=prog_guard.smtp_ready(),
         programmer_emails=prog_guard.masked_programmer_emails(),
-        otp_wait_seconds=prog_guard.otp_send_wait_seconds(),
+        otp_wait_seconds=otp_wait,
+        otp_already_sent=session.get("programmer_otp_sent_at") is not None,
     )
 
 

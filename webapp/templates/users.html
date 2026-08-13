@@ -12,21 +12,6 @@
   </div>
 </div>
 
-{% if programmer_is_admin and not programmer_can_mutate %}
-<div class="card" style="margin-bottom:12px;border-color:var(--danger, #b42318);">
-  <p class="badge danger" style="display:block;">
-    {{ _('التعديل من الجهاز الرئيسي فقط') }}
-    {% if programmer_main_registered %} — {{ _('يلزم تحقق المبرمج') }}{% else %} — {{ _('سجّل الجهاز الرئيسي أولاً') }}{% endif %}
-  </p>
-</div>
-{% elif programmer_is_admin and programmer_elevated and not programmer_main_device %}
-<div class="card" style="margin-bottom:12px;">
-  <p class="badge info" style="display:block;">
-    {{ _('تحقق مؤقت ساري (~{mins} د) — ثم يُطلب مجدداً.', mins=((programmer_elevation_seconds // 60) or 1)) }}
-  </p>
-</div>
-{% endif %}
-
 <div class="card">
   <div class="toolbar">
     <div>
@@ -35,7 +20,7 @@
     </div>
   </div>
 
-  <form method="post" class="form-grid"{% if programmer_is_admin and not programmer_can_mutate %} onsubmit="alert('{{ _('يلزم تحقق المبرمج') }}');return false;"{% endif %}>
+  <form method="post" class="form-grid">
     <input type="hidden" name="action" value="add">
     <div class="field"><label>{{ _('اسم المستخدم') }}</label><input name="username" required></div>
     <div class="field"><label>{{ _('الاسم الكامل') }}</label><input name="full_name" required></div>

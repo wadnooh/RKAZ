@@ -24,13 +24,18 @@
 
   <form method="post" class="form-grid" style="max-width:520px;margin-bottom:16px;">
     <input type="hidden" name="next" value="{{ next_url }}">
-    <input type="hidden" name="action" value="send_otp">
+    <input type="hidden" name="action" value="{% if otp_already_sent %}resend_otp{% else %}send_otp{% endif %}">
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit" {% if not secrets_ok or not smtp_ready %}disabled{% endif %}>
-        {{ _('أرسل رمز التحقق إلى بريدي') }}
+      <button class="btn primary" type="submit"
+        {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
+        {% if otp_already_sent %}
+          {{ _('إعادة إرسال رمز التحقق') }}
+        {% else %}
+          {{ _('إرسال رمز التحقق') }}
+        {% endif %}
       </button>
       {% if otp_wait_seconds %}
-      <span class="meta">{{ _('انتظر {sec} ث', sec=otp_wait_seconds) }}</span>
+      <span class="meta">{{ _('انتظر {sec} ث قبل إعادة الإرسال', sec=otp_wait_seconds) }}</span>
       {% endif %}
     </div>
   </form>
