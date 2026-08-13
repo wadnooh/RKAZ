@@ -3022,7 +3022,6 @@ def programmer_verify():
         smtp_ready=prog_guard.smtp_ready(),
         programmer_emails=prog_guard.masked_programmer_emails(),
         otp_wait_seconds=otp_wait,
-        otp_already_sent=session.get("programmer_otp_sent_at") is not None,
     )
 
 
