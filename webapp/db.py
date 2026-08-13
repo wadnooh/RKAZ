@@ -376,6 +376,29 @@ EXTRA_TABLE_DDL = {
             UNIQUE(section, slug)
         )
     """,
+    # أجهزة المبرمج الموثوقة (الجهاز الرئيسي) + رموز موافقة لمرة واحدة
+    "programmer_devices": """
+        CREATE TABLE IF NOT EXISTS programmer_devices (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER,
+            token_hash TEXT NOT NULL UNIQUE,
+            label TEXT,
+            is_main INTEGER DEFAULT 1,
+            user_agent TEXT,
+            ip TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            last_seen TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
+    "programmer_approve_codes": """
+        CREATE TABLE IF NOT EXISTS programmer_approve_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            code_hash TEXT NOT NULL UNIQUE,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT NOT NULL,
+            used_at TEXT
+        )
+    """,
 }
 
 
@@ -4159,3 +4182,159 @@ def enrich_warehouse_tx_from_item(data: dict) -> dict:
         if not data.get("unit"):
             data["unit"] = item["unit"]
     return data
+
+# ---- أجهزة المبرمج / رموز الموافقة ----
+
+def count_programmer_main_devices(conn=None) -> int:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        row = conn.execute(
+            "SELECT COUNT(*) FROM programmer_devices WHERE is_main=1"
+        ).fetchone()
+        return int(row[0] if row else 0)
+    except Exception:
+        return 0
+    finally:
+        if own:
+            conn.close()
+
+
+def get_programmer_device_by_hash(token_hash: str, *, main_only: bool = False, conn=None) -> dict | None:
+    if not token_hash:
+        return None
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        sql = "SELECT * FROM programmer_devices WHERE token_hash=?"
+        if main_only:
+            sql += " AND is_main=1"
+        row = conn.execute(sql, (token_hash,)).fetchone()
+        return rows_to_dicts([row])[0] if row else None
+    finally:
+        if own:
+            conn.close()
+
+
+def touch_programmer_device(device_id: int, conn=None) -> None:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        conn.execute(
+            "UPDATE programmer_devices SET last_seen=CURRENT_TIMESTAMP WHERE id=?",
+            (int(device_id),),
+        )
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+def upsert_programmer_main_device(
+    *,
+    user_id: int,
+    token_hash: str,
+    label: str = "الجهاز الرئيسي",
+    user_agent: str = "",
+    ip: str = "",
+    conn=None,
+) -> None:
+    """جهاز رئيسي واحد فقط: يحذف الأجهزة الرئيسية السابقة ثم يضيف الجديد."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        conn.execute("DELETE FROM programmer_devices WHERE is_main=1")
+        conn.execute(
+            """
+            INSERT INTO programmer_devices(user_id, token_hash, label, is_main, user_agent, ip)
+            VALUES (?,?,?,1,?,?)
+            """,
+            (int(user_id), token_hash, label, user_agent, ip),
+        )
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+def list_programmer_devices(conn=None) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        rows = conn.execute(
+            "SELECT * FROM programmer_devices ORDER BY is_main DESC, id DESC"
+        ).fetchall()
+        return rows_to_dicts(rows)
+    finally:
+        if own:
+            conn.close()
+
+
+def clear_programmer_devices(conn=None) -> int:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        cur = conn.execute("DELETE FROM programmer_devices")
+        conn.commit()
+        return cur.rowcount or 0
+    finally:
+        if own:
+            conn.close()
+
+
+def create_programmer_approve_code(code_hash: str, expires_at: str, conn=None) -> None:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        # نظّف المنتهية/المستخدمة القديمة
+        conn.execute(
+            """
+            DELETE FROM programmer_approve_codes
+            WHERE used_at IS NOT NULL OR expires_at < CURRENT_TIMESTAMP
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO programmer_approve_codes(code_hash, expires_at)
+            VALUES (?,?)
+            """,
+            (code_hash, expires_at),
+        )
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+def consume_programmer_approve_code(code_hash: str, conn=None) -> bool:
+    if not code_hash:
+        return False
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        row = conn.execute(
+            """
+            SELECT id FROM programmer_approve_codes
+            WHERE code_hash=? AND used_at IS NULL AND expires_at >= CURRENT_TIMESTAMP
+            ORDER BY id DESC LIMIT 1
+            """,
+            (code_hash,),
+        ).fetchone()
+        if not row:
+            return False
+        conn.execute(
+            "UPDATE programmer_approve_codes SET used_at=CURRENT_TIMESTAMP WHERE id=?",
+            (row["id"],),
+        )
+        conn.commit()
+        return True
+    finally:
+        if own:
+            conn.close()

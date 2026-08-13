@@ -31,6 +31,7 @@ from webapp import warehouse_excel
 from webapp import tickets_excel
 from webapp import backup as backup_svc
 from webapp import media as media_svc
+from webapp import programmer_guard as prog_guard
 
 app = Flask(__name__, instance_relative_config=True)
 # يجب أن يبقى SECRET_KEY ثابتاً بين إعادة التشغيل — تغييره يُبطل جلسات الجميع
@@ -116,7 +117,10 @@ def _load_context():
         if missing:
             label = permissions.PERM_LABELS.get(missing, missing)
             return permissions.deny_redirect(_t("ليس لديك صلاحية: {label}", label=_t(label)))
-
+        # قفل تعديلات المبرمج: جهاز رئيسي أو تحقق صارم
+        blocked = prog_guard.gate_control_plane_mutation()
+        if blocked is not None:
+            return blocked
 
 def current_user_name():
     return session.get("full_name") or session.get("username") or _t("مستخدم")
@@ -324,7 +328,7 @@ def inject_globals():
         return permissions.can(*perms)
 
     tabs_by_section = _app_custom_tabs_by_section(lang) if session.get("user_id") else {}
-    return {
+    ctx = {
         "settings": g.get("settings") or db.get_settings(),
         "lists": g.get("lists") or db.get_lists(),
         "current_year": g.get("year") or datetime.now().year,
@@ -345,6 +349,8 @@ def inject_globals():
         "hosting": backup_svc.hosting_info(),
         "asset_v": _static_asset_version(),
     }
+    ctx.update(prog_guard.template_context())
+    return ctx
 
 
 def money(n):
@@ -2887,6 +2893,117 @@ def contract_boq_activate(file_id):
 @login_required
 def users_home():
     return redirect(url_for("users_list"))
+
+
+def _safe_next_path(raw: str | None, fallback: str) -> str:
+    nxt = (raw or "").strip()
+    if nxt.startswith("/") and not nxt.startswith("//") and nxt not in {"/", "/login"}:
+        return nxt
+    return fallback
+
+
+@app.route("/admin/programmer/device", methods=["GET", "POST"])
+@login_required
+def programmer_device_setup():
+    """تسجيل الجهاز الرئيسي للمبرمج (مرة واحدة / بعد إعادة التعيين عبر SSH)."""
+    if not prog_guard.is_programmer():
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
+    nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
+    already = prog_guard.main_device_registered()
+    is_this_main = prog_guard.is_main_device()
+
+    if request.method == "POST":
+        action = (request.form.get("action") or "register").strip()
+        if action == "register":
+            if already and not is_this_main:
+                flash(
+                    _t("الجهاز الرئيسي مسجّل مسبقاً. من جهاز آخر استخدم تحقق المبرمج، أو أعد التعيين عبر SSH."),
+                    "danger",
+                )
+                return redirect(url_for("programmer_device_setup", next=nxt))
+            ok, err = prog_guard.verify_bootstrap(request.form.get("bootstrap_code") or "")
+            if not ok:
+                flash(err, "danger")
+                return redirect(url_for("programmer_device_setup", next=nxt))
+            token = prog_guard.register_main_device(
+                label=(request.form.get("label") or "").strip() or "الجهاز الرئيسي",
+                user_agent=request.headers.get("User-Agent") or "",
+                ip=request.headers.get("X-Forwarded-For", request.remote_addr) or "",
+            )
+            db.log_audit(current_user_name(), "تسجيل جهاز رئيسي", "أمان", session.get("user_id"))
+            flash(_t("تم ربط هذا الجهاز كجهاز المبرمج الرئيسي."), "ok")
+            resp = redirect(nxt)
+            return prog_guard.attach_device_cookie(resp, token)
+        if action == "logout_device":
+            # إزالة كوكي الجهاز من هذا المتصفح فقط (لا يمسح السجل على السيرفر)
+            flash(_t("تم إلغاء اعتماد هذا المتصفح محلياً."), "ok")
+            resp = redirect(url_for("programmer_device_setup"))
+            return prog_guard.clear_device_cookie(resp)
+
+    devices = db.list_programmer_devices() if already else []
+    return render_template(
+        "programmer_device.html",
+        next_url=nxt,
+        already_registered=already,
+        is_this_main=is_this_main,
+        devices=devices,
+        secrets_ok=prog_guard.secrets_configured(),
+        can_mutate=prog_guard.can_mutate_control_plane(),
+        elevated_seconds=prog_guard.elevation_remaining_seconds(),
+    )
+
+
+@app.route("/admin/programmer/verify", methods=["GET", "POST"])
+@login_required
+def programmer_verify():
+    """تحقق صارم لتعديل إداري من جهاز غير رئيسي."""
+    if not prog_guard.is_programmer():
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
+    nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
+
+    if prog_guard.is_main_device():
+        flash(_t("أنت على الجهاز الرئيسي — التعديل مسموح مباشرة."), "ok")
+        return redirect(nxt)
+    if prog_guard.is_elevated():
+        flash(
+            _t(
+                "التحقق ساري لمدة {mins} دقيقة تقريباً.",
+                mins=max(1, prog_guard.elevation_remaining_seconds() // 60),
+            ),
+            "ok",
+        )
+        return redirect(nxt)
+
+    if not prog_guard.main_device_registered():
+        flash(_t("يجب تسجيل الجهاز الرئيسي أولاً."), "danger")
+        return redirect(url_for("programmer_device_setup", next=nxt))
+
+    if request.method == "POST":
+        ok, err = prog_guard.verify_strict(
+            password=request.form.get("password") or "",
+            pin=request.form.get("change_pin") or "",
+            approve_code=request.form.get("approve_code") or "",
+        )
+        if not ok:
+            flash(err, "danger")
+            return redirect(url_for("programmer_verify", next=nxt))
+        prog_guard.grant_elevation()
+        db.log_audit(current_user_name(), "تحقق مبرمج (جهاز ثانوي)", "أمان", session.get("user_id"))
+        flash(
+            _t(
+                "تم التحقق — يمكنك إجراء تعديلات إدارية لمدة {mins} دقيقة من هذا الجهاز.",
+                mins=prog_guard.ELEVATION_MINUTES,
+            ),
+            "ok",
+        )
+        return redirect(nxt)
+
+    return render_template(
+        "programmer_verify.html",
+        next_url=nxt,
+        elevation_minutes=prog_guard.ELEVATION_MINUTES,
+        secrets_ok=prog_guard.secrets_configured(),
+    )
 
 
 @app.route("/admin/audit-log")

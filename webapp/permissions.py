@@ -385,6 +385,10 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
+    if ep in {"programmer_device_setup", "programmer_verify"}:
+        # صفحات أمان المبرمج — لمدير النظام فقط
+        return None if has_perm("users.manage") else "users.manage"
+
     if ep in {"app_custom_tabs_manage", "ops_custom_tabs_manage"}:
         # الإدارة من داخل إدارة العقود — للمضيف فقط
         if not has_perm("section.contracts"):

@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('تحقق المبرمج') }}</h2>
+      <div class="meta">{{ _('يلزم تحقق المبرمج') }} — {{ _('التعديل من الجهاز الرئيسي فقط') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('programmer_device_setup', next=next_url) }}">{{ _('الجهاز الرئيسي') }}</a>
+    </div>
+  </div>
+
+  {% if not secrets_ok %}
+  <p class="badge danger" style="display:block;margin-bottom:12px;">
+    {{ _('أسرار الحماية غير مكتملة على السيرفر. لا يمكن إكمال التحقق حتى تُضبط عبر SSH.') }}
+  </p>
+  {% endif %}
+
+  <p class="meta" style="margin-bottom:14px;line-height:1.8;">
+    {{ _('من جهاز غير رئيسي يلزم الثلاثة معاً: كلمة مرور حسابك + رمز التغيير (من البيئة) + رمز موافقة لمرة واحدة يُولَّد على السيرفر.') }}
+    {{ _('بعد النجاح يمكنك التعديل لمدة {mins} دقيقة.', mins=elevation_minutes) }}
+  </p>
+
+  <form method="post" class="form-grid" style="max-width:520px;">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <div class="field" style="grid-column:1/-1">
+      <label>{{ _('كلمة مرور حساب المبرمج') }}</label>
+      <input name="password" type="password" autocomplete="current-password" required>
+    </div>
+    <div class="field" style="grid-column:1/-1">
+      <label>{{ _('رمز التغيير PROGRAMMER_CHANGE_PIN') }}</label>
+      <input name="change_pin" type="password" autocomplete="off" required>
+    </div>
+    <div class="field" style="grid-column:1/-1">
+      <label>{{ _('رمز الموافقة من السيرفر') }}</label>
+      <input name="approve_code" autocomplete="off" required placeholder="XXXXXXXX" style="letter-spacing:0.12em;text-transform:uppercase;">
+      <div class="meta" style="margin-top:6px;">
+        {{ _('على VPS:') }} <code>python tools/programmer_approve.py</code>
+      </div>
+    </div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit" {% if not secrets_ok %}disabled{% endif %}>{{ _('تحقق والمتابعة') }}</button>
+    </div>
+  </form>
+</div>
+{% endblock %}

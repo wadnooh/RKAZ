@@ -68,10 +68,26 @@ AWS_S3_BUCKET=rekaz-alenjaz-backups
 AWS_S3_REGION=eu-north-1
 AWS_S3_PREFIX=rekaz-backups
 AWS_S3_AUTO_RESTORE=1
+PROGRAMMER_BOOTSTRAP_CODE=...   # تسجيل الجهاز الرئيسي للمبرمج
+PROGRAMMER_CHANGE_PIN=...       # تحقق صارم من جهاز ثانوي
 ```
 
 `TRIAL_MODE=1` لا يلغي ثبات القرص (`RAKAZ_DATA_DIR`). الحفظ تلقائي صامت بدون واجهة للمستخدم.
 بعد الاعتماد النهائي يمكن ضبط `TRIAL_MODE=0`.
+
+حماية التحكم الإداري (جهاز المبرمج): انظر [`للعميل/حماية_جهاز_المبرمج.md`](للعميل/حماية_جهاز_المبرمج.md).
+توليد رمز موافقة لمرة واحدة:
+
+```bash
+cd /opt/rekaz
+sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/programmer_approve.py
+```
+
+إعادة تعيين الأجهزة عند القفل:
+
+```bash
+sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/programmer_reset_devices.py --yes
+```
 
 ---
 

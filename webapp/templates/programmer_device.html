@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('جهاز المبرمج الرئيسي') }}</h2>
+      <div class="meta">{{ _('التحكم الإداري (المستخدمون، التبويبات، بنود العقد) مرتبط بهذا الجهاز') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('users_list') }}">{{ _('المستخدمون') }}</a>
+      {% if already_registered and not is_this_main %}
+      <a class="btn primary" href="{{ url_for('programmer_verify', next=next_url) }}">{{ _('تحقق من جهاز آخر') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if not secrets_ok %}
+  <p class="badge danger" style="display:block;margin-bottom:12px;">
+    {{ _('أسرار الحماية غير مكتملة على السيرفر (PROGRAMMER_BOOTSTRAP_CODE / PROGRAMMER_CHANGE_PIN). راجع التوثيق مع المبرمج عبر SSH.') }}
+  </p>
+  {% endif %}
+
+  {% if is_this_main %}
+  <p class="badge ok" style="display:block;margin-bottom:12px;">{{ _('هذا المتصفح هو الجهاز الرئيسي المعتمد.') }}</p>
+  {% elif can_mutate %}
+  <p class="badge info" style="display:block;margin-bottom:12px;">
+    {{ _('تحقق مؤقت ساري (~{mins} د).', mins=((elevated_seconds // 60) or 1)) }}
+  </p>
+  {% elif already_registered %}
+  <p class="badge danger" style="display:block;margin-bottom:12px;">
+    {{ _('التعديل من الجهاز الرئيسي فقط') }} — {{ _('يلزم تحقق المبرمج') }}
+  </p>
+  {% else %}
+  <p class="badge info" style="display:block;margin-bottom:12px;">
+    {{ _('لم يُسجَّل جهاز رئيسي بعد. سجّله من جهازك المعتمد الآن.') }}
+  </p>
+  {% endif %}
+
+  {% if not already_registered or is_this_main %}
+  <form method="post" class="form-grid" style="max-width:520px;">
+    <input type="hidden" name="action" value="register">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <div class="field" style="grid-column:1/-1">
+      <label>{{ _('رمز التهيئة (من السيرفر)') }}</label>
+      <input name="bootstrap_code" type="password" autocomplete="off" required placeholder="PROGRAMMER_BOOTSTRAP_CODE">
+    </div>
+    <div class="field" style="grid-column:1/-1">
+      <label>{{ _('وصف الجهاز') }}</label>
+      <input name="label" value="{{ _('الجهاز الرئيسي') }}" maxlength="120">
+    </div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">
+        {% if already_registered %}{{ _('إعادة ربط هذا الجهاز كرئيسي') }}{% else %}{{ _('تسجيل الجهاز الرئيسي') }}{% endif %}
+      </button>
+    </div>
+  </form>
+  {% endif %}
+
+  {% if is_this_main %}
+  <form method="post" style="margin-top:12px;">
+    <input type="hidden" name="action" value="logout_device">
+    <button class="btn ghost" type="submit">{{ _('إلغاء اعتماد هذا المتصفح محلياً') }}</button>
+  </form>
+  {% endif %}
+
+  {% if devices %}
+  <div class="table-wrap" style="margin-top:18px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('الوصف') }}</th>
+          <th>{{ _('رئيسي؟') }}</th>
+          <th>{{ _('آخر ظهور') }}</th>
+          <th>{{ _('IP') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for d in devices %}
+        <tr>
+          <td>{{ d.label or '—' }}</td>
+          <td>{% if d.is_main %}<span class="badge ok">{{ _('نعم') }}</span>{% else %}{{ _('لا') }}{% endif %}</td>
+          <td>{{ d.last_seen or d.created_at or '—' }}</td>
+          <td>{{ d.ip or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <div class="meta" style="margin-top:16px;line-height:1.7;">
+    <div>{{ _('استعادة عند القفل: عبر SSH فقط — انظر توثيق حماية جهاز المبرمج.') }}</div>
+  </div>
+</div>
+{% endblock %}
