@@ -438,6 +438,7 @@ PHRASE_EN = {
     'الرخص السارية': 'Valid licenses',
     'تحت التشييكات': 'Under checks',
     'تحت إجراءات الإغلاق': 'Under closing procedures',
+    'من هنا تبدأ رحلة الإخلاءات': 'Evacuations journey starts here',
     'موردي الأسفلت': 'Asphalt suppliers',
     'الرخص المنتهية': 'Expired licenses',
     'الإخلاء المبدئي': 'Initial evacuation',
