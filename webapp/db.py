@@ -2390,30 +2390,6 @@ def link_excavation_transactions_to_coordination(conn=None) -> int:
     return changed
 
 
-def ticket_reached_evacuations_gate(ticket_no: str, conn=None) -> bool:
-    """True إذا وصلت رخصة العطل إلى «الإخلاء المبدئي» عبر مسار التنسيقات الجديدة."""
-    tno = str(ticket_no or "").strip()
-    if not tno:
-        return False
-    own = conn is None
-    conn = conn or connect()
-    origin = _license_started_from_new_coords_sql("il")
-    row = conn.execute(
-        f"""
-        SELECT il.id FROM issued_licenses il
-        WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
-          AND il.ticket_no = ?
-          AND coalesce(il.workflow_status, '') = ?
-          AND {origin}
-        LIMIT 1
-        """,
-        (tno, LICENSE_EVACUATION_WORKFLOW),
-    ).fetchone()
-    if own:
-        conn.close()
-    return bool(row)
-
-
 def list_excavation_coordination_queue(conn=None, limit: int = 50) -> list[dict]:
     """معاملات الحفر التي وصلت فعلاً لبوابة الإخلاء (بعد التنسيقات ومتابعة التصاريح)."""
     own = conn is None
@@ -2829,6 +2805,30 @@ def _year_month_clause(column: str, year: str | None, month: str | None):
 LICENSE_EVACUATION_WORKFLOW = "الإخلاء المبدئي"
 
 
+def ticket_reached_evacuations_gate(ticket_no: str, conn=None) -> bool:
+    """True إذا وصلت رخصة العطل إلى «الإخلاء المبدئي» عبر مسار التنسيقات الجديدة."""
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return False
+    own = conn is None
+    conn = conn or connect()
+    origin = _license_started_from_new_coords_sql("il")
+    row = conn.execute(
+        f"""
+        SELECT il.id FROM issued_licenses il
+        WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
+          AND il.ticket_no = ?
+          AND coalesce(il.workflow_status, '') = ?
+          AND {origin}
+        LIMIT 1
+        """,
+        (tno, LICENSE_EVACUATION_WORKFLOW),
+    ).fetchone()
+    if own:
+        conn.close()
+    return bool(row)
+
+
 def _license_started_from_new_coords_sql(table: str = "issued_licenses") -> str:
     """الرخصة مرتبطة برحلة بدأت من التنسيقات الجديدة (لا تظهر مراحل لاحقة بدون أصل)."""
     return f"""
@@ -2863,16 +2863,33 @@ def _license_started_from_new_coords_sql(table: str = "issued_licenses") -> str:
 
 
 def _clearance_reached_evacuations_sql(table: str = "quality_clearances") -> str:
-    """إخلاء يظهر فقط إذا وصلت رخصة العطل إلى بوابة «الإخلاء المبدئي» عبر المسار."""
+    """
+    إخلاء يظهر فقط عبر المسار:
+    - الإخلاء المبدئي: بعد وصول الرخصة لبوابة «الإخلاء المبدئي»
+    - النهائي/الملغاة: إن وُجدت رخصة من رحلة التنسيقات الجديدة لنفس العطل
+    """
+    origin = _license_started_from_new_coords_sql("il")
     return f"""
     (
       nullif(trim({table}.ticket_no), '') IS NOT NULL
-      AND EXISTS (
-        SELECT 1 FROM issued_licenses il
-        WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
-          AND il.ticket_no = {table}.ticket_no
-          AND coalesce(il.workflow_status, '') = '{LICENSE_EVACUATION_WORKFLOW}'
-          AND {_license_started_from_new_coords_sql('il')}
+      AND (
+        EXISTS (
+          SELECT 1 FROM issued_licenses il
+          WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
+            AND il.ticket_no = {table}.ticket_no
+            AND coalesce(il.workflow_status, '') = '{LICENSE_EVACUATION_WORKFLOW}'
+            AND {origin}
+        )
+        OR (
+          coalesce(nullif(trim({table}.clearance_stage), ''), 'إخلاء مبدئي')
+            IN ('إخلاء نهائي', 'رخصة ملغاة')
+          AND EXISTS (
+            SELECT 1 FROM issued_licenses il
+            WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
+              AND il.ticket_no = {table}.ticket_no
+              AND {origin}
+          )
+        )
       )
     )
     """
