@@ -164,7 +164,7 @@ def _link_excavation_if_needed(ticket_no: str, reason: str = "", conn=None) -> d
             tno,
             reason=reason or "ربط تلقائي — معاملة بها حفر",
             conn=conn,
-            create_clearance=True,
+            create_clearance=False,
         )
     finally:
         if own:
@@ -184,7 +184,27 @@ def _flash_excavation_link(result: dict | None):
         flash(" — ".join(parts), "ok")
 
 
-_LICENSE_EVACUATION_WORKFLOW = "الإخلاء المبدئي"
+def _reject_final_clearance_lock(name: str, row, *, action: str = "edit"):
+    """يرفض تعديل/حذف إخلاء نهائي لغير admin. يعيد redirect أو None إن مسموح."""
+    if name != "quality_clearances" or not permissions.clearance_row_locked(row):
+        return None
+    if permissions.can_edit_clearance_row(row):
+        return None
+    flash(
+        _t(
+            "المعاملة في الإخلاء النهائي ومقفلة — التعديل والحذف للمدير (admin) فقط."
+        ),
+        "danger",
+    )
+    if action == "delete":
+        return redirect(url_for("module_list", name=name))
+    rid = dict(row).get("id") if row else None
+    if rid:
+        return redirect(url_for("module_edit", name=name, row_id=rid))
+    return redirect(url_for("quality_home", tab="evacuations", sub="final"))
+
+
+_LICENSE_EVACUATION_WORKFLOW = db.LICENSE_EVACUATION_WORKFLOW
 
 
 def _redirect_license_evacuations_journey(data: dict | None):
@@ -323,6 +343,9 @@ def inject_globals():
         "tv": tv,
         "can": can,
         "has_perm": permissions.has_perm,
+        "is_admin": permissions.is_admin,
+        "clearance_row_locked": permissions.clearance_row_locked,
+        "can_edit_clearance_row": permissions.can_edit_clearance_row,
         "is_pdf_ref": media_svc.is_pdf_ref,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "ops_custom_tabs": tabs_by_section.get("ops") or [],
@@ -938,10 +961,7 @@ def quality_workflow_go():
             }.items() if v
         }))
 
-    # evacuations
-    clr = wf.get("latest_clearance")
-    if clr:
-        return redirect(url_for("quality_home", tab="evacuations", sub="initial", q=clr.get("ticket_no") or ticket_no or ""))
+    # evacuations — فقط بعد وصول الرخصة لبوابة «الإخلاء المبدئي» عبر المسار
     if not ticket_no:
         flash(_t("الإخلاءات تحتاج رقم عطل (عمليات). اربط المعاملة بعطل أولاً أو ابدأ من التنسيقات."), "danger")
         return redirect(url_for("quality_home", tab="evacuations", sub="initial"))
@@ -955,6 +975,22 @@ def quality_workflow_go():
                 "linked_section": linked_section or section_label,
             }.items() if v
         }))
+    if not db.ticket_reached_evacuations_gate(ticket_no):
+        lic = wf.get("latest_license") or {}
+        flash(
+            _t(
+                "لنقل المعاملة إلى الإخلاءات: أكمل التنسيقات الجديدة ثم متابعة التصاريح حتى تصل حالة المتابعة إلى «الإخلاء المبدئي»."
+            ),
+            "ok",
+        )
+        if lic.get("id"):
+            return redirect(url_for("module_edit", name="issued_licenses", row_id=lic["id"]))
+        return redirect(url_for("quality_home", tab="permits", sub="closing"))
+    clr = wf.get("latest_clearance")
+    if clr:
+        stage = (clr.get("clearance_stage") or "إخلاء مبدئي").strip()
+        sub = "final" if stage == "إخلاء نهائي" else ("cancelled" if stage == "رخصة ملغاة" else "initial")
+        return redirect(url_for("quality_home", tab="evacuations", sub=sub, q=clr.get("ticket_no") or ticket_no or ""))
     if not permissions.can("modules.write"):
         return redirect(url_for("quality_home", tab="evacuations", sub="initial", q=ticket_no))
     return redirect(
@@ -1015,7 +1051,11 @@ def quality_home():
     conn = db.connect()
     db.link_excavation_transactions_to_coordination(conn)
     db.refresh_issued_license_expiry_status(conn)
-    excavation_queue = db.list_excavation_coordination_queue(conn, limit=40)
+    # قائمة «معاملات الحفر» للمتابعة المبدئية فقط — لا تُعرض في الإخلاء النهائي/الملغاة
+    show_excavation_queue = tab == "evacuations" and sub == "initial"
+    excavation_queue = (
+        db.list_excavation_coordination_queue(conn, limit=40) if show_excavation_queue else []
+    )
     counts = db.count_issued_licenses_by_hub_sub(conn)
     clearance_counts = db.count_clearances_by_stage(conn)
     new_coords_counts = db.count_new_coordinations_by_kind(conn)
@@ -1127,8 +1167,8 @@ def quality_home():
         section="quality",
         section_modules=[],
         section_meta=_smeta(SECTION_META["quality"]),
-        excavation_queue=excavation_queue,
-        excavation_pending=pending_clearance,
+        excavation_queue=excavation_queue if show_excavation_queue else [],
+        excavation_pending=pending_clearance if show_excavation_queue else 0,
     )
 
 
@@ -2569,7 +2609,7 @@ def ticket_view(ticket_id):
             tno,
             reason="ربط تلقائي من عرض العطل — حفر",
             conn=conn,
-            create_clearance=True,
+            create_clearance=False,
         )
         # أعد تحميل التنسيقات/الإخلاء بعد الربط
         related["coordination"] = db.rows_to_dicts(
@@ -2789,7 +2829,7 @@ def ticket_boq_add(ticket_id):
             ticket["ticket_no"],
             reason=f"ربط تلقائي — بند حفر {item_no}",
             conn=conn,
-            create_clearance=True,
+            create_clearance=False,
         )
     conn.commit()
     conn.close()
@@ -3544,7 +3584,7 @@ def module_new(name):
                     tno,
                     reason=f"ربط تلقائي — معاملة حفر {data.get('work_no') or ''}".strip(),
                     conn=conn,
-                    create_clearance=True,
+                    create_clearance=False,
                 )
             else:
                 flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
@@ -3657,7 +3697,16 @@ def module_edit(name, row_id):
         conn.close()
         flash(_t("السجل غير موجود"), "danger")
         return redirect(url_for("module_list", name=name))
+    form_locked = bool(
+        name == "quality_clearances"
+        and permissions.clearance_row_locked(row)
+        and not permissions.can_edit_clearance_row(row)
+    )
     if request.method == "POST":
+        locked_redirect = _reject_final_clearance_lock(name, row, action="edit")
+        if locked_redirect:
+            conn.close()
+            return locked_redirect
         data = _module_form_data(module)
         if name == "photos":
             try:
@@ -3793,7 +3842,7 @@ def module_edit(name, row_id):
                     tno,
                     reason=f"ربط تلقائي — معاملة حفر {data.get('work_no') or ''}".strip(),
                     conn=conn,
-                    create_clearance=True,
+                    create_clearance=False,
                 )
             else:
                 flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
@@ -3872,6 +3921,7 @@ def module_edit(name, row_id):
         warehouse_items=warehouse_items,
         boq_items=boq_items,
         mode="edit",
+        form_locked=form_locked,
         section=section,
         section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
@@ -3907,6 +3957,11 @@ def module_delete(name, row_id):
         )
         return _reject_bad_delete_password(fallback)
     conn = db.connect()
+    row = conn.execute(f"SELECT * FROM {module['table']} WHERE id=?", (row_id,)).fetchone()
+    locked_redirect = _reject_final_clearance_lock(name, row, action="delete")
+    if locked_redirect:
+        conn.close()
+        return locked_redirect
     conn.execute(f"DELETE FROM {module['table']} WHERE id=?", (row_id,))
     conn.commit()
     conn.close()

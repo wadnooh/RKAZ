@@ -267,7 +267,16 @@
           <td>{{ r.contractor or '—' }}</td>
           <td><span class="badge info">{{ tv(r.status) if r.status else '—' }}</span></td>
           <td class="actions">
+            {% if can_edit_clearance_row(r) and can('modules.write') %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='quality_clearances', row_id=r.id) }}">{{ _('تعديل') }}</a>
+            {% elif clearance_row_locked(r) %}
+            <span class="badge">{{ _('مقفل') }}</span>
+            {% if can('modules.write') or can('modules.read') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='quality_clearances', row_id=r.id) }}">{{ _('عرض') }}</a>
+            {% endif %}
+            {% elif can('modules.write') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name='quality_clearances', row_id=r.id) }}">{{ _('تعديل') }}</a>
+            {% endif %}
           </td>
         </tr>
         {% else %}
@@ -279,12 +288,13 @@
   {% endif %}
 </div>
 
-{% if excavation_queue is defined and excavation_queue and qtab == 'evacuations' %}
+{# معاملات الحفر بانتظار الإخلاء المبدئي فقط — لا تُعرض في الإخلاء النهائي أو الملغاة #}
+{% if excavation_queue is defined and excavation_queue and qtab == 'evacuations' and qsub == 'initial' %}
 <div class="card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.1rem;margin:0;">{{ _('معاملات الحفر — إجراءات الإخلاء') }}</h3>
-      <div class="meta">{{ _('كل المعاملات التي بها حفر تُربط تلقائياً بالتنسيقات لبدء إخلاء الأسفلت') }}{% if excavation_pending is defined %} — {{ _('بانتظار الإخلاء:') }} {{ excavation_pending }}{% endif %}</div>
+      <div class="meta">{{ _('معاملات الحفر التي أكملت المسار ووصلت لبوابة الإخلاء المبدئي') }}{% if excavation_pending is defined %} — {{ _('بانتظار الإخلاء:') }} {{ excavation_pending }}{% endif %}</div>
     </div>
   </div>
   <div class="table-wrap">

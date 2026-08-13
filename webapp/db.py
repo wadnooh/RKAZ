@@ -2377,7 +2377,8 @@ def link_excavation_transactions_to_coordination(conn=None) -> int:
             tno,
             reason="ربط تلقائي من معاملات الحفر",
             conn=conn,
-            create_clearance=True,
+            # الإخلاء يُفتح فقط عند وصول الرخصة لبوابة «الإخلاء المبدئي» عبر المسار
+            create_clearance=False,
         )
         if res.get("created_coord") or res.get("created_clearance"):
             changed += 1
@@ -2389,21 +2390,56 @@ def link_excavation_transactions_to_coordination(conn=None) -> int:
     return changed
 
 
+def ticket_reached_evacuations_gate(ticket_no: str, conn=None) -> bool:
+    """True إذا وصلت رخصة العطل إلى «الإخلاء المبدئي» عبر مسار التنسيقات الجديدة."""
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return False
+    own = conn is None
+    conn = conn or connect()
+    origin = _license_started_from_new_coords_sql("il")
+    row = conn.execute(
+        f"""
+        SELECT il.id FROM issued_licenses il
+        WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
+          AND il.ticket_no = ?
+          AND coalesce(il.workflow_status, '') = ?
+          AND {origin}
+        LIMIT 1
+        """,
+        (tno, LICENSE_EVACUATION_WORKFLOW),
+    ).fetchone()
+    if own:
+        conn.close()
+    return bool(row)
+
+
 def list_excavation_coordination_queue(conn=None, limit: int = 50) -> list[dict]:
-    """قائمة معاملات الحفر المرتبطة بالتنسيق/الإخلاء للمتابعة."""
+    """معاملات الحفر التي وصلت فعلاً لبوابة الإخلاء (بعد التنسيقات ومتابعة التصاريح)."""
     own = conn is None
     conn = conn or connect()
     tickets = collect_excavation_ticket_nos(conn)
     out = []
-    for tno in tickets[: max(int(limit or 50), 1)]:
+    for tno in tickets:
+        if len(out) >= max(int(limit or 50), 1):
+            break
+        # لا تُعرض معاملات ما زالت في المختبر/التنسيق قبل إكمال الرحلة
+        if not ticket_reached_evacuations_gate(tno, conn):
+            continue
         coord = conn.execute(
             "SELECT id, status, needs_asphalt, request_date FROM coordination WHERE ticket_no=? ORDER BY id LIMIT 1",
             (tno,),
         ).fetchone()
         clearance = conn.execute(
-            "SELECT id, status, rekaz_code, clearance_no FROM quality_clearances WHERE ticket_no=? ORDER BY id LIMIT 1",
+            """
+            SELECT id, status, rekaz_code, clearance_no, clearance_stage
+            FROM quality_clearances WHERE ticket_no=? ORDER BY id LIMIT 1
+            """,
             (tno,),
         ).fetchone()
+        # المكتملة نهائياً تُتابع من تبويب الإخلاء النهائي وليس من طابور الحفر
+        if clearance and (clearance["clearance_stage"] or "").strip() == "إخلاء نهائي":
+            continue
         ticket = conn.execute(
             "SELECT id, district, status, asphalt_clearance FROM tickets WHERE ticket_no=? LIMIT 1",
             (tno,),
@@ -2789,40 +2825,98 @@ def _year_month_clause(column: str, year: str | None, month: str | None):
     return clauses, params
 
 
+# بوابة الدخول إلى الإخلاءات من متابعة التصاريح
+LICENSE_EVACUATION_WORKFLOW = "الإخلاء المبدئي"
+
+
+def _license_started_from_new_coords_sql(table: str = "issued_licenses") -> str:
+    """الرخصة مرتبطة برحلة بدأت من التنسيقات الجديدة (لا تظهر مراحل لاحقة بدون أصل)."""
+    return f"""
+    (
+      EXISTS (
+        SELECT 1 FROM new_coordinations nc
+        WHERE nc.transferred_license_id = {table}.id
+      )
+      OR (
+        nullif(trim({table}.ticket_no), '') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM new_coordinations nc
+          WHERE nc.ticket_no = {table}.ticket_no
+        )
+      )
+      OR (
+        nullif(trim({table}.construction_work_no), '') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM new_coordinations nc
+          WHERE nc.construction_work_no = {table}.construction_work_no
+        )
+      )
+      OR (
+        nullif(trim({table}.project_code), '') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM new_coordinations nc
+          WHERE nc.project_code = {table}.project_code
+        )
+      )
+    )
+    """
+
+
+def _clearance_reached_evacuations_sql(table: str = "quality_clearances") -> str:
+    """إخلاء يظهر فقط إذا وصلت رخصة العطل إلى بوابة «الإخلاء المبدئي» عبر المسار."""
+    return f"""
+    (
+      nullif(trim({table}.ticket_no), '') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM issued_licenses il
+        WHERE nullif(trim(il.ticket_no), '') IS NOT NULL
+          AND il.ticket_no = {table}.ticket_no
+          AND coalesce(il.workflow_status, '') = '{LICENSE_EVACUATION_WORKFLOW}'
+          AND {_license_started_from_new_coords_sql('il')}
+      )
+    )
+    """
+
+
 def _license_workflow_match(sub: str) -> tuple[str, list]:
-    """شرط تصفية تبويبات متابعة التصاريح."""
+    """شرط تصفية تبويبات متابعة التصاريح — كل مرحلة تعرض ما وصل إليها فقط عبر المسار."""
     key = (sub or "active").strip().lower()
+    origin = _license_started_from_new_coords_sql("issued_licenses")
     if key in ("active", "valid", "سارية", "الرخص السارية"):
         return (
-            """
+            f"""
             coalesce(status, '') NOT IN ('منتهية', 'ملغاة')
             AND (
               coalesce(workflow_status, '') IN ('', 'متابعة بعد الإصدار')
               OR workflow_status IS NULL
             )
+            AND {origin}
             """,
             [],
         )
     if key in ("checks", "تشييكات", "تحت التشييكات"):
-        return ("coalesce(workflow_status, '') = 'تحت التشييكات'", [])
-    if key in ("closing", "إغلاق", "تحت إجراءات الإغلاق"):
         return (
-            """
-            coalesce(workflow_status, '') IN (
-              'تحت إجراءات الإغلاق',
-              'الإخلاء المبدئي',
-              'من هنا تبدأ رحلة الإخلاءات'
-            )
+            f"""
+            coalesce(workflow_status, '') = 'تحت التشييكات'
+            AND {origin}
+            """,
+            [],
+        )
+    if key in ("closing", "إغلاق", "تحت إجراءات الإغلاق"):
+        # لا تُخلط مع الإخلاءات — بوابة الإخلاء منفصلة
+        return (
+            f"""
+            coalesce(workflow_status, '') = 'تحت إجراءات الإغلاق'
+            AND {origin}
             """,
             [],
         )
     if key in ("asphalt", "أسفلت", "موردي الأسفلت"):
+        # فقط من وصل لهذه المرحلة — لا تُدرج كل رخص الحفر تلقائياً
         return (
-            """
-            (
-              coalesce(workflow_status, '') = 'موردي الأسفلت'
-              OR coalesce(license_type, '') = 'حفر'
-            )
+            f"""
+            coalesce(workflow_status, '') = 'موردي الأسفلت'
+            AND {origin}
             """,
             [],
         )
@@ -3026,7 +3120,11 @@ def list_clearances_for_hub(
         "رخصة ملغاة": "رخصة ملغاة",
     }
     stage_label = stage_map.get(stage_key, "إخلاء مبدئي")
-    where = ["coalesce(clearance_stage, 'إخلاء مبدئي') = ?"]
+    # لا تُعرض إخلاءات أُنشئت مبكراً قبل وصول الرخصة لبوابة الإخلاء عبر المسار
+    where = [
+        "coalesce(clearance_stage, 'إخلاء مبدئي') = ?",
+        _clearance_reached_evacuations_sql("quality_clearances"),
+    ]
     params: list = [stage_label]
     ym_clauses, ym_params = _year_month_clause("request_date", year, month)
     where.extend(ym_clauses)
@@ -3055,10 +3153,12 @@ def count_clearances_by_stage(conn=None) -> dict:
     own = conn is None
     conn = conn or connect()
     out = {"initial": 0, "final": 0, "cancelled": 0}
+    journey = _clearance_reached_evacuations_sql("quality_clearances")
     rows = conn.execute(
-        """
+        f"""
         SELECT coalesce(nullif(trim(clearance_stage), ''), 'إخلاء مبدئي') AS stage, COUNT(*) AS n
         FROM quality_clearances
+        WHERE {journey}
         GROUP BY 1
         """
     ).fetchall()

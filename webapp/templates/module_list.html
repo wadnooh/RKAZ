@@ -191,7 +191,15 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
-            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
+            {% set clr_locked = name == 'quality_clearances' and clearance_row_locked(r) %}
+            {% set clr_can_edit = (name != 'quality_clearances') or can_edit_clearance_row(r) %}
+            {% if can_mod_write and clr_can_edit %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>
+            {% elif clr_locked %}
+            <span class="badge">{{ _('مقفل') }}</span>
+            {% if can('modules.write') or can('modules.read') %}
+            <a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">{{ _('عرض') }}</a>
+            {% endif %}
+            {% elif can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}">{{ _('تعديل') }}</a>{% endif %}
             {% if can_mod_write and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
             <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">
               <button class="btn primary" type="submit">{{ _('نقل إلى متابعة التصاريح') }}</button>
@@ -220,7 +228,7 @@
               <a href="{{ url_for('quality_workflow_go', stage='evacuations', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">3 {{ _('إخلاء') }}</a>
             </span>
             {% endif %}
-            {% if can_mod_delete %}
+            {% if can_mod_delete and clr_can_edit %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
               <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>

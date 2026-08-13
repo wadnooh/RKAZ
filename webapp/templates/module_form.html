@@ -26,11 +26,15 @@
   {% include "_section_subnav.html" %}
 {% endif %}
 
+{% set form_locked = form_locked if form_locked is defined else false %}
 <div class="card">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">{% if mode=='new' %}{{ _('إضافة') }} — {{ module.title }}{% else %}{{ _('تعديل') }} — {{ module.title }}{% endif %}</h2>
+      <h2 class="section-title">{% if mode=='new' %}{{ _('إضافة') }} — {{ module.title }}{% elif form_locked %}{{ _('عرض') }} — {{ module.title }}{% else %}{{ _('تعديل') }} — {{ module.title }}{% endif %}</h2>
       {% if row.get('ticket_no') %}<div class="meta">{{ _('مرتبط برقم العطل') }} {{ row.ticket_no }}</div>{% endif %}
+      {% if form_locked %}
+      <div class="meta" style="color:var(--danger,#b42318);margin-top:4px;">{{ _('مقفل — الإخلاء النهائي: التعديل للمدير (admin) فقط.') }}</div>
+      {% endif %}
       {% if name == 'metering' and boq_approved_total is defined and boq_approved_total is not none %}
       <div class="meta">{{ _('مبلغ الكميات (القيمة المعتمدة من البنود):') }} <strong>{{ boq_approved_total|money }}</strong></div>
       {% elif name == 'metering' and row.get('ticket_no') %}
@@ -88,7 +92,8 @@
   </div>
   {% endif %}
 
-  <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}>
+  <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}{% if form_locked %} onsubmit="return false;"{% endif %}>
+    <fieldset {% if form_locked %}disabled{% endif %} style="border:0;margin:0;padding:0;min-inline-size:0;display:contents">
     {% if name == 'warehouse_tx' and form_ctx %}
     <input type="hidden" name="from" value="{{ form_ctx }}">
     {% if reuse_voucher %}
@@ -203,22 +208,27 @@
       {% if photo_storage == 's3' %}{{ _('التخزين: Amazon S3 (دائم).') }}{% else %}{{ _('التخزين: محلي على السيرفر') }}{% if photo_ephemeral %} {{ _('— إن كان القرص مؤقتاً يُفضّل تفعيل S3.') }}{% endif %}.{% endif %}
     </p>
     {% endif %}
+    </fieldset>
     <div class="actions" style="grid-column:1/-1">
+      {% if not form_locked %}
       <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
+      {% endif %}
       {% if name == 'warehouse_tx' and form_ctx in ['wh_constructions','constructions'] %}
-      <a class="btn ghost" href="{{ url_for('warehouse_constructions') }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_constructions') }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% elif name == 'warehouse_tx' and form_ctx in ['wh_projects','projects'] %}
-      <a class="btn ghost" href="{{ url_for('warehouse_projects') }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_projects') }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% elif name == 'warehouse_tx' and form_ctx in ['wh_ops','ops'] %}
-      <a class="btn ghost" href="{{ url_for('warehouse_ops') }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_ops') }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% elif name == 'warehouse_tx' %}
-      <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% elif name == 'warehouse_items' %}
-      <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% elif name == 'primary_team_orders' %}
-      <a class="btn ghost" href="{{ url_for('ops_primary_teams') }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('ops_primary_teams') }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
+      {% elif name == 'quality_clearances' %}
+      <a class="btn ghost" href="{{ url_for('quality_home', tab='evacuations', sub=('final' if row.get('clearance_stage') == 'إخلاء نهائي' else 'initial')) }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% else %}
-      <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('إلغاء') }}</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{% if form_locked %}{{ _('رجوع') }}{% else %}{{ _('إلغاء') }}{% endif %}</a>
       {% endif %}
     </div>
   </form>

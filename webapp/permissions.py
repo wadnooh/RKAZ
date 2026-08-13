@@ -149,6 +149,11 @@ def current_role() -> str:
     return normalize_role(session.get("role"))
 
 
+def is_admin(role: str | None = None) -> bool:
+    """مدير النظام فقط (role=admin) — ليس المشرف."""
+    return normalize_role(role if role is not None else session.get("role")) == "admin"
+
+
 def has_perm(perm: str, role: str | None = None) -> bool:
     if not perm:
         return True
@@ -161,6 +166,28 @@ def has_perm(perm: str, role: str | None = None) -> bool:
 def can(*perms: str, role: str | None = None) -> bool:
     """True إذا توفرت كل الصلاحيات المطلوبة."""
     return all(has_perm(p, role) for p in perms)
+
+
+FINAL_CLEARANCE_STAGE = "إخلاء نهائي"
+
+
+def is_final_clearance_stage(stage: str | None) -> bool:
+    return (stage or "").strip() == FINAL_CLEARANCE_STAGE
+
+
+def clearance_row_locked(row) -> bool:
+    """True إذا وصلت المعاملة لمرحلة الإخلاء النهائي (تُقفل لغير admin)."""
+    if not row:
+        return False
+    data = dict(row) if not isinstance(row, dict) else row
+    return is_final_clearance_stage(data.get("clearance_stage"))
+
+
+def can_edit_clearance_row(row, role: str | None = None) -> bool:
+    """التعديل على سجل إخلاء نهائي مسموح لـ admin فقط."""
+    if not clearance_row_locked(row):
+        return True
+    return is_admin(role)
 
 
 def role_matrix() -> list[dict]:
@@ -277,7 +304,16 @@ def required_perm_for_request() -> str | None:
         # كميات/صور/تمتير مرتبطة بالعطل: لا تُعدَّل دون tickets.write
         if mod_name in TICKET_LINKED_WRITE_MODULES and not has_perm("tickets.write"):
             return "tickets.write"
-        if ep in {"module_new", "module_edit"}:
+        if ep == "module_new":
+            return None if has_perm("modules.write") else "modules.write"
+        if ep == "module_edit":
+            # عرض إخلاء نهائي مقفل: يكفي modules.read (GET)؛ التعديل يُفحص داخل المسار
+            if (
+                mod_name == "quality_clearances"
+                and method == "GET"
+                and has_perm("modules.read")
+            ):
+                return None
             return None if has_perm("modules.write") else "modules.write"
         if ep == "module_delete":
             return None if has_perm("modules.delete") else "modules.delete"
