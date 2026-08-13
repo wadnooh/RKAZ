@@ -3019,23 +3019,12 @@ def programmer_verify():
 @app.route("/admin/programmer/magic/<token>")
 @login_required
 def programmer_magic(token):
-    """رابط موافقة لمرة واحدة من بريد المبرمج — يرفع الصلاحية المؤقتة إن كان المستخدم admin."""
-    if not prog_guard.is_programmer():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
-    ok, err = prog_guard.consume_magic_token(token)
-    if not ok:
-        flash(err, "danger")
-        return redirect(url_for("programmer_verify"))
-    prog_guard.grant_elevation()
-    db.log_audit(current_user_name(), "تحقق مبرمج (رابط بريد)", "أمان", session.get("user_id"))
+    """الروابط السريعة أُلغيت — التحقق يتم فقط بإدخال رمز البريد في النموذج."""
     flash(
-        _t(
-            "تم التحقق عبر البريد — تعديلات إدارية لمدة {mins} دقيقة.",
-            mins=prog_guard.ELEVATION_MINUTES,
-        ),
-        "ok",
+        _t("يلزم إدخال رمز التحقق من البريد يدوياً مع كلمة المرور ورمز التغيير."),
+        "danger",
     )
-    return redirect(url_for("users_list"))
+    return redirect(url_for("programmer_verify"))
 
 
 @app.route("/admin/audit-log")

@@ -394,6 +394,7 @@ EXTRA_TABLE_DDL = {
         CREATE TABLE IF NOT EXISTS programmer_approve_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             code_hash TEXT NOT NULL UNIQUE,
+            channel TEXT DEFAULT 'email',
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
             expires_at TEXT NOT NULL,
             used_at TEXT
@@ -426,6 +427,13 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             if name not in existing:
                 conn.execute(ddl)
                 created.append(name)
+        # قناة رمز موافقة المبرمج (email | ssh_emergency)
+        if "programmer_approve_codes" in existing or "programmer_approve_codes" in created:
+            if _ensure_column(conn, "programmer_approve_codes", "channel", "TEXT DEFAULT 'email'"):
+                created.append("programmer_approve_codes.channel")
+                conn.execute(
+                    "UPDATE programmer_approve_codes SET channel='email' WHERE channel IS NULL OR trim(channel)=''"
+                )
         # أعمدة الترقيم والربط
         if "tickets" in existing or "tickets" in created:
             if _ensure_column(conn, "tickets", "rekaz_code"):
@@ -4287,12 +4295,14 @@ def clear_programmer_devices(conn=None) -> int:
             conn.close()
 
 
-def create_programmer_approve_code(code_hash: str, expires_at: str, conn=None) -> None:
+def create_programmer_approve_code(
+    code_hash: str, expires_at: str, *, channel: str = "email", conn=None
+) -> None:
     own = conn is None
     conn = conn or connect()
     try:
         ensure_schema(conn)
-        # نظّف المنتهية/المستخدمة القديمة
+        ch = (channel or "email").strip().lower() or "email"
         conn.execute(
             """
             DELETE FROM programmer_approve_codes
@@ -4301,10 +4311,10 @@ def create_programmer_approve_code(code_hash: str, expires_at: str, conn=None) -
         )
         conn.execute(
             """
-            INSERT INTO programmer_approve_codes(code_hash, expires_at)
-            VALUES (?,?)
+            INSERT INTO programmer_approve_codes(code_hash, expires_at, channel)
+            VALUES (?,?,?)
             """,
-            (code_hash, expires_at),
+            (code_hash, expires_at, ch),
         )
         conn.commit()
     finally:
@@ -4312,20 +4322,27 @@ def create_programmer_approve_code(code_hash: str, expires_at: str, conn=None) -
             conn.close()
 
 
-def consume_programmer_approve_code(code_hash: str, conn=None) -> bool:
+def consume_programmer_approve_code(
+    code_hash: str, *, allowed_channels: list[str] | None = None, conn=None
+) -> bool:
     if not code_hash:
         return False
     own = conn is None
     conn = conn or connect()
     try:
         ensure_schema(conn)
+        channels = [c.strip().lower() for c in (allowed_channels or ["email"]) if c and c.strip()]
+        if not channels:
+            channels = ["email"]
+        placeholders = ",".join("?" * len(channels))
         row = conn.execute(
-            """
-            SELECT id FROM programmer_approve_codes
+            f"""
+            SELECT id, channel FROM programmer_approve_codes
             WHERE code_hash=? AND used_at IS NULL AND expires_at >= CURRENT_TIMESTAMP
+              AND lower(COALESCE(channel,'email')) IN ({placeholders})
             ORDER BY id DESC LIMIT 1
             """,
-            (code_hash,),
+            (code_hash, *channels),
         ).fetchone()
         if not row:
             return False

@@ -4,7 +4,7 @@
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ _('تحقق المبرمج') }}</h2>
-      <div class="meta">{{ _('يلزم تحقق المبرمج') }} — {{ _('التعديل من الجهاز الرئيسي فقط') }}</div>
+      <div class="meta">{{ _('يلزم تحقق المبرمج') }} — {{ _('رمز البريد فقط من جهاز غير رئيسي') }}</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('programmer_device_setup', next=next_url) }}">{{ _('الجهاز الرئيسي') }}</a>
@@ -13,18 +13,22 @@
 
   {% if not secrets_ok %}
   <p class="badge danger" style="display:block;margin-bottom:12px;">
-    {{ _('أسرار الحماية غير مكتملة على السيرفر. لا يمكن إكمال التحقق حتى تُضبط عبر SSH.') }}
+    {{ _('أسرار الحماية غير مكتملة على السيرفر.') }}
   </p>
   {% endif %}
 
-  {% if not smtp_ready %}
+  {% if smtp_ready %}
+  <p class="badge ok" style="display:block;margin-bottom:12px;">
+    {{ _('التحقق من جهاز آخر يتم فقط عبر رمز يُرسل إلى بريد المبرمج — لا يُقبل تجاوز بالبريد المعطّل أو أدوات بديلة أثناء عمل SMTP.') }}
+  </p>
+  {% else %}
   <p class="badge danger" style="display:block;margin-bottom:12px;">
-    {{ _('إرسال البريد غير جاهز. بعد ضبط SMTP يُفضَّل رمز البريد؛ والبديل: SSH ← tools/programmer_approve.py') }}
+    {{ _('SMTP غير جاهز. طوارئ SSH فقط:') }} <code>python tools/programmer_approve.py</code>
   </p>
   {% endif %}
 
   <p class="meta" style="margin-bottom:14px;line-height:1.8;">
-    {{ _('من جهاز غير رئيسي: أرسل رمز تحقق إلى بريد المبرمج المعتمد، ثم أدخل كلمة المرور + رمز التغيير + الرمز الوارد في البريد.') }}
+    {{ _('أرسل رمز التحقق إلى البريد، ثم أدخل: كلمة المرور + رمز التغيير + رمز البريد.') }}
     {{ _('بعد النجاح يمكنك التعديل لمدة {mins} دقيقة.', mins=elevation_minutes) }}
   </p>
   <p class="meta" style="margin-bottom:14px;">
@@ -36,7 +40,7 @@
     <input type="hidden" name="next" value="{{ next_url }}">
     <input type="hidden" name="action" value="send_otp">
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn ghost" type="submit" {% if not secrets_ok or not smtp_ready %}disabled{% endif %}>
+      <button class="btn primary" type="submit" {% if not secrets_ok or not smtp_ready %}disabled{% endif %}>
         {{ _('أرسل رمز التحقق إلى بريدي') }}
       </button>
       {% if otp_wait_seconds %}
@@ -60,8 +64,11 @@
       <label>{{ _('رمز التحقق من البريد') }}</label>
       <input name="approve_code" autocomplete="one-time-code" required placeholder="XXXXXXXX" style="letter-spacing:0.12em;text-transform:uppercase;">
       <div class="meta" style="margin-top:6px;">
-        {{ _('يصل الرمز إلى بريد المبرمج. بديل SSH عند تعذّر البريد:') }}
-        <code>python tools/programmer_approve.py</code>
+        {% if smtp_ready %}
+        {{ _('يُقبل فقط الرمز الوارد في بريد المبرمج المعتمد.') }}
+        {% else %}
+        {{ _('بديل طوارئ عند تعطّل البريد:') }} <code>python tools/programmer_approve.py</code>
+        {% endif %}
       </div>
     </div>
     <div class="actions" style="grid-column:1/-1">

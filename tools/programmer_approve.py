@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""يولّد رمز موافقة لمرة واحدة (بديل عند تعذّر البريد).
+"""طوارئ SSH فقط عند تعطّل SMTP.
 
-المسار المفضّل: زر «أرسل رمز التحقق» في الواجهة → بريد المبرمج المعتمد.
-هذا السكربت احتياطي عبر SSH فقط:
+أثناء عمل البريد: مرفوض — استخدم واجهة /admin/programmer/verify
+لإرسال رمز إلى wadnooh@gmail.com و wadnooh@wadnooh.com فقط.
 
   cd /opt/rekaz
   sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/programmer_approve.py
@@ -38,11 +38,19 @@ def main() -> int:
 
     db.ensure_schema()
     emails = ", ".join(prog_guard.programmer_emails())
-    print(f"Preferred path: email OTP to {emails}")
-    print("Fallback one-time approval code:")
-    code, expires = prog_guard.create_approve_code_record()
-    print(code)
-    print(f"Expires (UTC): {expires.strftime('%Y-%m-%d %H:%M:%S')}")
+    if prog_guard.smtp_ready():
+        print("REFUSED: SMTP is working.")
+        print(f"Use UI email OTP only → {emails}")
+        print("SSH emergency codes are rejected while SMTP works.")
+        return 2
+    ok, payload, expires = prog_guard.create_ssh_emergency_code()
+    if not ok:
+        print(payload)
+        return 2
+    print("SSH emergency code (SMTP down only):")
+    print(payload)
+    if expires:
+        print(f"Expires (UTC): {expires.strftime('%Y-%m-%d %H:%M:%S')}")
     return 0
 
 

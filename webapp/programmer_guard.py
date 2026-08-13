@@ -211,19 +211,31 @@ def register_main_device(*, label: str = "", user_agent: str = "", ip: str = "")
     return token
 
 
-def create_approve_code_record(code: str | None = None) -> tuple[str, datetime]:
+def create_approve_code_record(
+    code: str | None = None, *, channel: str = "email"
+) -> tuple[str, datetime]:
     code = code or new_approve_code()
     expires = datetime.utcnow() + timedelta(minutes=APPROVE_TTL_MINUTES)
     expires_sql = expires.strftime("%Y-%m-%d %H:%M:%S")
-    db.create_programmer_approve_code(_hash_secret(code.upper()), expires_sql)
+    ch = (channel or "email").strip().lower() or "email"
+    db.create_programmer_approve_code(_hash_secret(code.upper()), expires_sql, channel=ch)
     return code, expires
+
+
+def allowed_approve_channels() -> list[str]:
+    """عند عمل SMTP: رمز البريد فقط. عند تعطّله: رمز طوارئ SSH فقط."""
+    if smtp_ready():
+        return ["email"]
+    return ["ssh_emergency"]
 
 
 def consume_approve_code(code: str) -> bool:
     code = (code or "").strip().upper()
     if not code:
         return False
-    return db.consume_programmer_approve_code(_hash_secret(code))
+    return db.consume_programmer_approve_code(
+        _hash_secret(code), allowed_channels=allowed_approve_channels()
+    )
 
 
 def _otp_send_wait_seconds() -> int:
@@ -238,7 +250,7 @@ def _otp_send_wait_seconds() -> int:
 
 
 def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
-    """يولّد رمزاً ويرسله لبريد المبرمج المعتمد فقط."""
+    """يولّد رمزاً ويرسله لبريد المبرمج المعتمد فقط (قناة email)."""
     if not is_programmer():
         return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
     wait = _otp_send_wait_seconds()
@@ -246,31 +258,30 @@ def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
         return False, _t("انتظر {sec} ثانية قبل إعادة إرسال الرمز.", sec=wait)
     if not smtp_ready():
         return False, _t(
-            "البريد غير مضبوط على السيرفر. استخدم البديل عبر SSH: python tools/programmer_approve.py"
+            "البريد غير جاهز. لا يمكن التحقق من جهاز ثانوي حتى يعمل SMTP، أو استخدم طوارئ SSH فقط عند تعطّل البريد."
         )
-    code, expires = create_approve_code_record()
+    code, expires = create_approve_code_record(channel="email")
     emails = programmer_emails()
     base = (os.environ.get("APP_BASE_URL") or request.url_root or "").rstrip("/")
-    magic = f"{base}{url_for('programmer_magic', token=code)}"
     verify_url = f"{base}{url_for('programmer_verify', next=next_path or '/')}"
     subject = "رمز تحقق مبرمج ركاز — لمرة واحدة"
     body = (
         "رمز التحقق لمرة واحدة لتعديل إداري من جهاز غير رئيسي:\n\n"
         f"  {code}\n\n"
         f"صالح حتى (UTC): {expires.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"صفحة التحقق: {verify_url}\n"
-        f"رابط سريع (وأنت مسجّل كـ admin): {magic}\n\n"
+        f"أدخله في صفحة التحقق مع كلمة المرور ورمز التغيير:\n{verify_url}\n\n"
+        "لا يُقبل أي رمز إلا الوارد في هذا البريد أثناء عمل خدمة البريد.\n"
         "إن لم تطلب هذا الرمز فتجاهل الرسالة.\n"
     )
     ok, err = mailer.send_email(to_addrs=emails, subject=subject, body=body)
     if not ok:
         return False, _t("تعذّر إرسال البريد: {err}", err=err)
     session["programmer_otp_sent_at"] = time.time()
-    return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد.")
+    return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد فقط.")
 
 
 def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, str]:
-    """تحقق صارم: كلمة المرور + PIN + رمز البريد (أو رمز SSH الاحتياطي)."""
+    """تحقق صارم من جهاز ثانوي: كلمة المرور + PIN + رمز البريد (إلزامي عند عمل SMTP)."""
     if not is_programmer():
         return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
     if not change_pin():
@@ -284,17 +295,27 @@ def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, 
         conn.close()
     if not user or (user["password"] or "") != (password or ""):
         return False, _t("كلمة المرور غير صحيحة")
+    if not (approve_code or "").strip():
+        if smtp_ready():
+            return False, _t("يلزم رمز التحقق من بريد المبرمج")
+        return False, _t("البريد معطّل — استخدم رمز طوارئ SSH ثم أعد المحاولة")
     if not consume_approve_code(approve_code):
-        return False, _t("رمز التحقق من البريد غير صالح أو منتهٍ")
+        if smtp_ready():
+            return False, _t("رمز التحقق من البريد غير صالح أو منتهٍ — أعد إرسال الرمز للبريد المعتمد")
+        return False, _t("رمز الطوارئ غير صالح أو منتهٍ")
     return True, ""
 
 
-def consume_magic_token(token: str) -> tuple[bool, str]:
-    if not is_programmer():
-        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
-    if not consume_approve_code(token):
-        return False, _t("رابط الموافقة غير صالح أو منتهٍ")
-    return True, ""
+def create_ssh_emergency_code() -> tuple[bool, str, datetime | None]:
+    """طوارئ SSH فقط عندما SMTP غير جاهز. عند عمل البريد يُرفض التوليد."""
+    if smtp_ready():
+        return (
+            False,
+            "SMTP يعمل — مرفوض. التحقق من جهاز ثانوي عبر رمز البريد فقط (wadnooh@gmail.com / wadnooh@wadnooh.com).",
+            None,
+        )
+    code, expires = create_approve_code_record(channel="ssh_emergency")
+    return True, code, expires
 
 
 def otp_send_wait_seconds() -> int:
