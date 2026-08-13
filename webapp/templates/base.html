@@ -56,7 +56,7 @@
     <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>
     {% endif %}
     {% if can('section.ops') %}
-    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/ops/tabs') or p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %} active{% endif %}" href="{{ url_for('ops_home') }}">{{ tr('nav_ops') }}</a>
+    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/ops/tabs') or p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %} active{% endif %}" href="{{ url_for('tickets_list') if can('tickets.read') else url_for('ops_primary_teams') }}">{{ tr('nav_ops') }}</a>
     {% endif %}
     {% if can('section.contractors') %}
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>
@@ -68,7 +68,7 @@
     <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">{{ tr('nav_safety') }}</a>
     {% endif %}
     {% if can('section.warehouses') %}
-    <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouses_home') }}">{{ tr('nav_warehouses') }}</a>
+    <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouse_movements_summary') }}">{{ tr('nav_warehouses') }}</a>
     {% endif %}
     {% if can('section.external') %}
     <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">{{ tr('nav_external') }}</a>

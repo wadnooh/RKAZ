@@ -1,9 +1,8 @@
-{# شريط فرعي داخل المستودعات — بنفس أسلوب العمليات والصيانة #}
-{% set wh_active = warehouse_active if warehouse_active is defined else 'home' %}
+{# شريط فرعي داخل المستودعات — تبويبات فرعية حقيقية فقط (بدون لوحة مكررة لاسم القسم) #}
+{% set wh_active = warehouse_active if warehouse_active is defined else 'summary' %}
 {% set p = request.path or '' %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1" data-tab-strip-key="warehouse_rakaz_tabs">
-    <a class="btn ghost{% if wh_active=='home' %} primary{% endif %}" href="{{ url_for('warehouses_home') }}">{{ _('لوحة المستودع') }}</a>
     <a class="btn ghost{% if wh_active=='summary' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary') }}">{{ _('إجمالي الكميات') }}</a>
     <a class="btn ghost{% if wh_active=='constructions' %} primary{% endif %}" href="{{ url_for('warehouse_constructions') }}">{{ _('الإنشاءات') }}</a>
     <a class="btn ghost{% if wh_active=='ops' %} primary{% endif %}" href="{{ url_for('warehouse_ops') }}">{{ _('العمليات والصيانة') }}</a>

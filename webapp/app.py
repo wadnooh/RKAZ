@@ -548,6 +548,29 @@ def section_links(section):
     return links
 
 
+def _redirect_section_first_child(section: str):
+    """الانتقال لأول تبويب فرعي حقيقي — بدون صفحة لوحة تكرر اسم القسم."""
+    mods = modules_for_section(section)
+    if mods:
+        return redirect(url_for("module_list", name=mods[0][0]))
+    tabs = _custom_tabs_for_section(section)
+    if tabs:
+        return redirect(tabs[0]["href"])
+    home = SECTION_META.get(section, {}).get("home")
+    if home and home not in {
+        "constructions_home",
+        "projects_home",
+        "contractors_home",
+        "safety_home",
+        "external_purchases_home",
+        "financial_home",
+        "maintenance_home",
+        "hr_home",
+    }:
+        return redirect(url_for(home))
+    return redirect(url_for("dashboard"))
+
+
 @app.route("/health")
 def health():
     """فحص نبض للإبقاء على الخدمة مستيقظة على Render."""
@@ -616,31 +639,10 @@ def dashboard():
 @app.route("/ops")
 @login_required
 def ops_home():
-    tools = [
-        {"label": _t("الفرق الأولية"), "href": url_for("ops_primary_teams")},
-        {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
-    ]
-    if permissions.can("app.tabs.manage") or permissions.can("ops.tabs.manage"):
-        tools.append(
-            {"label": _t("إدارة التبويبات"), "href": url_for("app_custom_tabs_manage")}
-        )
-
-    conn = db.connect()
-    recent = db.rows_to_dicts(
-        conn.execute("SELECT * FROM tickets ORDER BY id DESC LIMIT 12").fetchall()
-    )
-    for r in recent:
-        r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
-    _attach_ticket_final_values(recent, conn)
-    conn.close()
-
-    return render_template(
-        "ops_home.html",
-        stats=dashboard_stats(),
-        tools=tools,
-        recent_tickets=recent,
-        total_count=_count("tickets"),
-    )
+    """توجيه لقسم العمليات → أول تبويب فرعي حقيقي (الأعطال)."""
+    if permissions.can("tickets.read"):
+        return redirect(url_for("tickets_list"))
+    return redirect(url_for("ops_primary_teams"))
 
 
 def _tabs_manage_perm_choices():
@@ -804,17 +806,7 @@ def _render_custom_tab_page(section: str, slug: str):
 @app.route("/constructions")
 @login_required
 def constructions_home():
-    links = section_links("constructions")
-    return render_template(
-        "section_hub.html",
-        title=_t("الإنشاءات - التنفيذ"),
-        subtitle=_t("متابعة معاملات الإنشاءات والتنفيذ وربطها بأعطال المكتب."),
-        links=links,
-        section="constructions",
-        section_modules=modules_for_section("constructions"),
-        section_meta=_smeta(SECTION_META["constructions"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("constructions")
 
 
 @app.route("/new-coordinations")
@@ -950,33 +942,13 @@ def quality_workflow_go():
 @app.route("/projects")
 @login_required
 def projects_home():
-    links = section_links("projects")
-    return render_template(
-        "section_hub.html",
-        title=_t("المشاريع"),
-        subtitle=_t("مشاريع خاصة ومشاريع الكهرباء — أكواد PR وترقيم مستقل عن أعطال الطوارئ."),
-        links=links,
-        section="projects",
-        section_modules=modules_for_section("projects"),
-        section_meta=_smeta(SECTION_META["projects"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("projects")
 
 
 @app.route("/contractors")
 @login_required
 def contractors_home():
-    links = section_links("contractors")
-    return render_template(
-        "section_hub.html",
-        title=_t("المقاولين"),
-        subtitle=_t("متابعة أعمال المقاولين ومواد موردة للمستودع وربطها بأعطال المكتب."),
-        links=links,
-        section="contractors",
-        section_modules=modules_for_section("contractors"),
-        section_meta=_smeta(SECTION_META["contractors"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("contractors")
 
 
 @app.route("/quality")
@@ -1135,17 +1107,7 @@ def quality_home():
 @app.route("/safety")
 @login_required
 def safety_home():
-    links = section_links("safety")
-    return render_template(
-        "section_hub.html",
-        title=_t("السلامة"),
-        subtitle=_t("تصاريح العمل وبلاغات السلامة المرتبطة بالمواقع."),
-        links=links,
-        section="safety",
-        section_modules=modules_for_section("safety"),
-        section_meta=_smeta(SECTION_META["safety"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("safety")
 
 
 @app.route("/reinforcement")
@@ -1170,29 +1132,8 @@ def reinforcement_home():
 @app.route("/warehouses")
 @login_required
 def warehouses_home():
-    db.backfill_warehouse_tx_sources()
-    conn = db.connect()
-    recent_tx = db.rows_to_dicts(
-        conn.execute("SELECT * FROM warehouse_tx ORDER BY id DESC LIMIT 12").fetchall()
-    )
-    db.enrich_warehouse_txs_work_order(recent_tx, conn)
-    conn.close()
-    counts = {
-        "constructions_works": _count("construction_works"),
-        "constructions_tx": db.count_warehouse_tx_by_source("constructions"),
-        "ops_tickets": _count("tickets"),
-        "ops_tx": db.count_warehouse_tx_by_source("ops"),
-        "projects": _count("projects"),
-        "projects_tx": db.count_warehouse_tx_by_source("projects"),
-        "items_count": _count("warehouse_items"),
-    }
-    qty_totals = db.warehouse_movements_totals()
-    return render_template(
-        "warehouses_home.html",
-        counts=counts,
-        recent_tx=recent_tx,
-        qty_totals=qty_totals,
-    )
+    """توجيه للمستودعات → إجمالي الكميات (أول تبويب فرعي حقيقي)."""
+    return redirect(url_for("warehouse_movements_summary"))
 
 
 @app.route("/warehouses/summary")
@@ -1586,7 +1527,7 @@ def warehouse_voucher_detail(voucher_no):
     lines = db.get_warehouse_voucher_lines(voucher_no)
     if not lines:
         flash(_t("المعاملة غير موجودة"), "danger")
-        return redirect(url_for("warehouses_home"))
+        return redirect(url_for("warehouse_movements_summary"))
 
     for ln in lines:
         try:
@@ -1604,7 +1545,7 @@ def warehouse_voucher_detail(voucher_no):
         "ops": "ops",
         "constructions": "constructions",
         "projects": "projects",
-    }.get(section, "home")
+    }.get(section, "summary")
 
     inbound = [r for r in lines if r.get("sign", 0) > 0]
     returns = [r for r in lines if r.get("is_return")]
@@ -1628,7 +1569,7 @@ def warehouse_voucher_detail(voucher_no):
         if t and t not in tx_types:
             tx_types.append(t)
 
-    back_url = url_for("warehouses_home")
+    back_url = url_for("warehouse_movements_summary")
     if section == "ops":
         back_url = url_for("warehouse_ops", view="movements")
     elif section == "constructions":
@@ -2077,17 +2018,7 @@ def _warehouse_parent_url(parent: dict):
 @app.route("/external-purchases")
 @login_required
 def external_purchases_home():
-    links = section_links("external")
-    return render_template(
-        "section_hub.html",
-        title=_t("المشتريات الخارجية والعهد"),
-        subtitle=_t("طلبات الشراء الخارجي ومتابعة العهد المسلمة للموظفين."),
-        links=links,
-        section="external",
-        section_modules=modules_for_section("external"),
-        section_meta=_smeta(SECTION_META["external"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("external")
 
 
 @app.route("/module/external_purchases/<int:row_id>/lines/add", methods=["POST"])
@@ -2259,58 +2190,19 @@ def contractor_supply_receive_warehouse(row_id):
 @app.route("/financial")
 @login_required
 def financial_home():
-    links = section_links("financial")
-    stats = dashboard_stats()
-    finance_stats = {
-        "sap_raised": stats["sap_raised"],
-        "invoices_total": stats["invoices_total"],
-        "collected": stats["collected"],
-        "remaining": stats["remaining"],
-        "liquidity": stats["liquidity"],
-    }
-    return render_template(
-        "section_hub.html",
-        title=_t("المتابعات المالية"),
-        subtitle=_t("المستخلصات و SAP ودليل البنود للتمتير."),
-        links=links,
-        section="financial",
-        section_modules=modules_for_section("financial"),
-        section_meta=_smeta(SECTION_META["financial"]),
-        total_count=_count("invoices"),
-        finance_stats=finance_stats,
-    )
+    return _redirect_section_first_child("financial")
 
 
 @app.route("/maintenance")
 @login_required
 def maintenance_home():
-    links = section_links("maintenance")
-    return render_template(
-        "section_hub.html",
-        title=_t("الورشة (سيارات - معدات)"),
-        subtitle=_t("متابعة سيارات ومعدات الورش وربطها بالفرق الميدانية."),
-        links=links,
-        section="maintenance",
-        section_modules=modules_for_section("maintenance"),
-        section_meta=_smeta(SECTION_META["maintenance"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("maintenance")
 
 
 @app.route("/hr")
 @login_required
 def hr_home():
-    links = section_links("hr")
-    return render_template(
-        "section_hub.html",
-        title=_t("الموارد البشرية"),
-        subtitle=_t("سجل الموظفين والأقسام وحالات الالتحاق."),
-        links=links,
-        section="hr",
-        section_modules=modules_for_section("hr"),
-        section_meta=_smeta(SECTION_META["hr"]),
-        total_count=sum(i.get("count") or 0 for i in links),
-    )
+    return _redirect_section_first_child("hr")
 
 
 @app.route("/contracts-admin")

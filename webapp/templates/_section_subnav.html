@@ -1,13 +1,9 @@
 {% if section and (section_modules or section_meta) %}
 {% set p = request.path or '' %}
-{% set hub_path = url_for(section_meta.home) if section_meta else '' %}
-{% set on_hub = section_meta and (p == hub_path or p.rstrip('/') == hub_path.rstrip('/')) and not name and not tabs_manage_active %}
 {% set section_custom_tabs = (app_custom_tabs_by_section or {}).get(section) or [] %}
+{% if section_modules or section_custom_tabs or (section == 'contracts' and (can('app.tabs.manage') or can('ops.tabs.manage'))) %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1">
-    {% if section_meta %}
-    <a class="btn ghost{% if on_hub %} primary{% endif %}" href="{{ url_for(section_meta.home) }}">{{ tr('nav_' ~ section) if section else section_meta.title }}</a>
-    {% endif %}
     {% for key, mod in section_modules or [] %}
     <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>
     {% endfor %}
@@ -19,4 +15,5 @@
     {% endif %}
   </div>
 </div>
+{% endif %}
 {% endif %}

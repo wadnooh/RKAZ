@@ -531,11 +531,11 @@ MODULES = {
 SECTION_META = {
     "constructions": {"title": "الإنشاءات - التنفيذ", "home": "constructions_home"},
     "projects": {"title": "المشاريع", "home": "projects_home"},
-    "ops": {"title": "العمليات والصيانة", "home": "ops_home"},
+    "ops": {"title": "العمليات والصيانة", "home": "ops_home"},  # يوجّه لأول تبويب فرعي
     "contractors": {"title": "المقاولين", "home": "contractors_home"},
     "quality": {"title": "التنسيقات والجودة", "home": "quality_home"},
     "safety": {"title": "السلامة", "home": "safety_home"},
-    "warehouses": {"title": "المستودعات", "home": "warehouses_home"},
+    "warehouses": {"title": "المستودعات", "home": "warehouse_movements_summary"},
     "external": {"title": "المشتريات الخارجية والعهد", "home": "external_purchases_home"},
     "financial": {"title": "المتابعات المالية", "home": "financial_home"},
     "maintenance": {"title": "الورشة (سيارات - معدات)", "home": "maintenance_home"},
