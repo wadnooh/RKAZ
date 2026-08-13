@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
+<div class="card programmer-page">
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ _('جهاز المبرمج الرئيسي') }}</h2>
-      <div class="meta">{{ _('التحكم الإداري (المستخدمون، التبويبات، بنود العقد) مرتبط بهذا الجهاز') }}</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('users_list') }}">{{ _('المستخدمون') }}</a>
@@ -42,7 +41,7 @@
     <input type="hidden" name="next" value="{{ next_url }}">
     <div class="field" style="grid-column:1/-1">
       <label>{{ _('رمز التهيئة (من السيرفر)') }}</label>
-      <input name="bootstrap_code" type="password" autocomplete="off" required placeholder="PROGRAMMER_BOOTSTRAP_CODE">
+      <input name="bootstrap_code" type="password" autocomplete="off" required>
     </div>
     <div class="field" style="grid-column:1/-1">
       <label>{{ _('وصف الجهاز') }}</label>
@@ -87,9 +86,5 @@
     </table>
   </div>
   {% endif %}
-
-  <div class="meta" style="margin-top:16px;line-height:1.7;">
-    <div>{{ _('استعادة عند القفل: عبر SSH فقط — انظر توثيق حماية جهاز المبرمج.') }}</div>
-  </div>
 </div>
 {% endblock %}

@@ -232,6 +232,17 @@ main.container .toolbar,
   font-size: 1.25rem;
 }
 .meta, .ui-hint { color: var(--muted); font-size: 0.9rem; }
+
+/* إخفاء التلميحات / النصوص الإرشادية من الواجهة (بدون لمس رسائل الخطأ) */
+.login-hint,
+.ui-hint,
+.qflow__hint,
+.photo-storage-hint,
+.quality-empty-hint,
+.stat-card > .meta,
+.toolbar > div > .meta {
+  display: none !important;
+}
 .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
 .btn {

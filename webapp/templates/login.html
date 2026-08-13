@@ -91,7 +91,6 @@
       <button class="btn primary" type="submit">{{ tr('login') }}</button>
       <a class="btn ghost" href="{{ url_for('forgot_password') }}">{{ tr('forgot_password') }}</a>
     </form>
-    <div class="login-hint">{{ tr('login_hint').replace('\n', '<br>')|safe }}</div>
   </div>
 </div>
 {% endblock %}

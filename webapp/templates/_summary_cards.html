@@ -14,7 +14,6 @@
     <strong{% if c.money %} style="font-size:1.05rem"{% endif %}>
       {% if c.money %}{{ c.value|money }}{% else %}{{ c.value }}{% endif %}
     </strong>
-    {% if c.subtitle %}<div class="meta">{{ c.subtitle }}</div>{% endif %}
   {% if c.href %}
   </a>
   {% else %}

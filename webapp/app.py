@@ -299,7 +299,7 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
 
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "summary-row-1"
+_LAYOUT_ASSET_TAG = "hide-hints-1"
 
 
 def _static_asset_version() -> str:
@@ -468,6 +468,15 @@ def _missing_amount_card(
     )
 
 
+def _xlsx_sheet_title(title, fallback="Export"):
+    """عناوين أوراق Excel لا تقبل \\ / * ? : [ ] وبحد أقصى 31 حرفاً."""
+    raw = (title or "").strip() or fallback
+    for ch in '\\/*?:[]':
+        raw = raw.replace(ch, "-")
+    raw = " ".join(raw.split()).strip() or fallback
+    return raw[:31]
+
+
 def _simple_xlsx_export(title, headers, rows, field_keys, download_name):
     """تصدير Excel بسيط للصفوف المفلترة."""
     from openpyxl import Workbook
@@ -475,7 +484,7 @@ def _simple_xlsx_export(title, headers, rows, field_keys, download_name):
 
     wb = Workbook()
     ws = wb.active
-    ws.title = (title or "Export")[:31]
+    ws.title = _xlsx_sheet_title(title)
     ncol = len(headers)
     header_row = brand.apply_brand_header(ws, title=title, ncol=ncol)
     brand.write_header_row(ws, headers, header_row)
