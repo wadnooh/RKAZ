@@ -167,8 +167,9 @@ body {
   background: linear-gradient(180deg, #c4a574 0%, var(--accent) 100%);
 }
 
-.container {
-  /* Full-bleed content on ultra-wide monitors; modest side padding only */
+.container,
+.container.container-wide {
+  /* App-wide ultra-wide: full viewport, light side padding only (no 960/1100/1280 traps) */
   max-width: none;
   width: 100%;
   margin: 0 auto;
@@ -177,29 +178,25 @@ body {
   z-index: 1;
   box-sizing: border-box;
 }
-.container.container-wide {
-  /* Alias kept for pages that opt in; same ultra-wide default */
-  max-width: none;
-  width: 100%;
-  padding-inline: clamp(12px, 1.4vw, 40px);
-  box-sizing: border-box;
-}
-/* Report / quality list surfaces: always use full viewport width */
+/* Every content surface stretches with the container (ops, warehouses, finance, HR, workshop, contracts, quality, custom tabs, forms, hubs, lists) */
+main.container > .card,
+main.container > .page,
+main.container .table-wrap,
+main.container .stats-grid,
+main.container .form-grid,
+main.container .meta-grid,
+main.container .toolbar,
 .quality-hub,
 .quality-hub .table-wrap,
 .quality-hub .quality-table,
 .tickets-page,
-.tickets-page .tickets-table-wrap {
+.tickets-page .tickets-table-wrap,
+.tickets-page .tickets-filters {
   width: 100%;
   max-width: none;
   box-sizing: border-box;
 }
-.tickets-page .tickets-filters {
-  width: 100%;
-}
 .tickets-page .tickets-table-wrap {
-  width: 100%;
-  max-width: 100%;
   -webkit-overflow-scrolling: touch;
 }
 .tickets-page .tickets-table {
@@ -216,6 +213,9 @@ body {
   border-radius: 18px;
   box-shadow: 0 14px 34px rgba(11, 94, 215, 0.08);
   padding: 16px;
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
 }
 
 .toolbar {

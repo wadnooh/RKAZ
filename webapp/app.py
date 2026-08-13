@@ -294,13 +294,17 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
     return by_sec
 
 
+# Bump when layout/CSS must force clients past nginx/browser 7d static cache.
+_LAYOUT_ASSET_TAG = "uw-appwide-1"
+
+
 def _static_asset_version() -> str:
     """Cache-bust static CSS/JS so layout updates (e.g. ultra-wide) reach clients despite nginx expires."""
     try:
         css = Path(app.root_path) / "static" / "styles.css"
-        return str(int(css.stat().st_mtime))
+        return f"{_LAYOUT_ASSET_TAG}-{int(css.stat().st_mtime)}"
     except OSError:
-        return "1"
+        return _LAYOUT_ASSET_TAG
 
 
 @app.context_processor

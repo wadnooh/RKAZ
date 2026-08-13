@@ -108,7 +108,7 @@
   </div>
   {% endif %}
 
-  <main class="container{% block container_class %}{% endblock %}">
+  <main class="container container-wide{% block container_class %}{% endblock %}">
     {% with messages = get_flashed_messages(with_categories=true) %}
       {% if messages %}
         <div class="flash-list">
