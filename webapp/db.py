@@ -356,6 +356,25 @@ EXTRA_TABLE_DDL = {
             updated_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """,
+    # تبويبات مخصصة عامة لكل أقسام التطبيق (تعميم ops_custom_tabs)
+    "app_custom_tabs": """
+        CREATE TABLE IF NOT EXISTS app_custom_tabs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            section TEXT NOT NULL,
+            slug TEXT NOT NULL,
+            title_ar TEXT NOT NULL,
+            title_en TEXT,
+            target_path TEXT,
+            sort_order INTEGER DEFAULT 100,
+            is_visible INTEGER DEFAULT 1,
+            icon TEXT,
+            required_perm TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(section, slug)
+        )
+    """,
 }
 
 
@@ -495,6 +514,10 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 ):
                     if _ensure_column(conn, table, col, ddl):
                         created.append(f"{table}.{col}")
+        # ترحيل تبويبات العمليات القديمة → app_custom_tabs (مرة واحدة)
+        n_migrated = _migrate_ops_custom_tabs_to_app(conn)
+        if n_migrated:
+            created.append(f"app_custom_tabs.migrated_from_ops:{n_migrated}")
         # تعبئة أكواد ER للأعطال القديمة الفارغة
         if "tickets" in existing or "tickets" in created:
             missing = conn.execute(
@@ -1792,6 +1815,47 @@ def get_lists(conn=None):
 
 def rows_to_dicts(rows):
     return [dict(r) for r in rows]
+
+
+def _migrate_ops_custom_tabs_to_app(conn: sqlite3.Connection) -> int:
+    """ترحيل صفوف ops_custom_tabs → app_custom_tabs (section=ops) مرة واحدة."""
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "app_custom_tabs" not in tables:
+        return 0
+    if "ops_custom_tabs" not in tables:
+        return 0
+    existing = conn.execute("SELECT COUNT(*) FROM app_custom_tabs WHERE section='ops'").fetchone()[0]
+    if existing:
+        return 0
+    rows = conn.execute("SELECT * FROM ops_custom_tabs ORDER BY id").fetchall()
+    n = 0
+    for r in rows:
+        try:
+            conn.execute(
+                """
+                INSERT OR IGNORE INTO app_custom_tabs(
+                    section, slug, title_ar, title_en, target_path, sort_order,
+                    is_visible, icon, required_perm, notes, created_at, updated_at
+                ) VALUES ('ops',?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    r["slug"],
+                    r["title_ar"],
+                    r["title_en"],
+                    r["target_path"],
+                    r["sort_order"] if r["sort_order"] is not None else 100,
+                    1 if r["is_visible"] is None else int(r["is_visible"]),
+                    r["icon"],
+                    r["required_perm"],
+                    r["notes"],
+                    r["created_at"],
+                    r["updated_at"],
+                ),
+            )
+            n += 1
+        except Exception:
+            continue
+    return n
 
 
 def _slugify_ops_tab(text: str) -> str:

@@ -29,7 +29,7 @@ def jump_destinations():
         {"title": "قائمة الصور (من داخل العطل)", "path": "/module/photos", "group": "سجلات مرتبطة", "keywords": "صور"},
         {"title": "التمتير (من داخل العطل)", "path": "/module/metering", "group": "سجلات مرتبطة", "keywords": "تمتير مستخلص"},
         {"title": "المقاولين", "path": "/contractors", "group": "أقسام", "keywords": "مقاول"},
-        {"title": "التعزيز - اسكيمات", "path": "/reinforcement", "group": "أقسام", "keywords": "تعزيز اسكيمات عدادات محطات"},
+        {"title": "التعزيز - اسكيمات", "path": "/reinforcement", "group": "عمليات", "keywords": "تعزيز اسكيمات عدادات محطات ops"},
         {"title": "التنسيقات والجودة", "path": "/quality", "group": "أقسام", "keywords": "تنسيق جودة"},
         {"title": "السلامة", "path": "/safety", "group": "أقسام", "keywords": "سلامة تصريح"},
         {"title": "المستودعات", "path": "/warehouses", "group": "أقسام", "keywords": "مستودع مواد"},

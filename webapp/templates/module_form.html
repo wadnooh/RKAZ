@@ -12,6 +12,9 @@
 {% elif name in ['quantities','photos','metering'] %}
   {% set active = 'tickets' %}
   {% include "_ops_subnav.html" %}
+{% elif section == 'reinforcement' or name in ['reinforcement_departments','reinforcement_works'] %}
+  {% set active = 'reinforcement' %}
+  {% include "_ops_subnav.html" %}
 {% elif section == 'ops' %}
   {% set active = 'ops' %}
   {% include "_ops_subnav.html" %}
