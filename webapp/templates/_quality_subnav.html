@@ -73,4 +73,12 @@
        href="{{ url_for('quality_home', tab='evacuations', sub='cancelled', year=year or '', month=month or '', q=q or '') }}">{{ _('الرخص الملغاة') }} <em>{{ (clearance_counts.cancelled or 0) + (counts.cancelled or 0) }}</em></a>
   </div>
   {% endif %}
+  {% set quality_custom_tabs = (app_custom_tabs_by_section or {}).get('quality') or [] %}
+  {% if quality_custom_tabs %}
+  <div class="qnav-subs" data-tab-strip="1" style="margin-top:6px;">
+    {% for tab in quality_custom_tabs %}
+    <a class="qnav-sub" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
 </nav>

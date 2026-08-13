@@ -1,15 +1,22 @@
-{% if section and section_modules %}
+{% if section and (section_modules or section_meta) %}
 {% set p = request.path or '' %}
 {% set hub_path = url_for(section_meta.home) if section_meta else '' %}
-{% set on_hub = section_meta and (p == hub_path or p.rstrip('/') == hub_path.rstrip('/')) and not name %}
+{% set on_hub = section_meta and (p == hub_path or p.rstrip('/') == hub_path.rstrip('/')) and not name and not tabs_manage_active %}
+{% set section_custom_tabs = (app_custom_tabs_by_section or {}).get(section) or [] %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1">
     {% if section_meta %}
     <a class="btn ghost{% if on_hub %} primary{% endif %}" href="{{ url_for(section_meta.home) }}">{{ tr('nav_' ~ section) if section else section_meta.title }}</a>
     {% endif %}
-    {% for key, mod in section_modules %}
+    {% for key, mod in section_modules or [] %}
     <a class="btn ghost{% if name==key %} primary{% endif %}" href="{{ url_for('module_list', name=key) }}">{{ mod.title }}</a>
     {% endfor %}
+    {% for tab in section_custom_tabs %}
+    <a class="btn ghost{% if (active_slug is defined and active_slug==tab.slug) or p == tab.href or p.startswith('/tabs/' ~ section ~ '/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
+    {% endfor %}
+    {% if section == 'contracts' and (can('app.tabs.manage') or can('ops.tabs.manage')) %}
+    <a class="btn ghost{% if tabs_manage_active %} primary{% endif %}" href="{{ url_for('app_custom_tabs_manage') }}">{{ _('إدارة التبويبات') }}</a>
+    {% endif %}
   </div>
 </div>
 {% endif %}

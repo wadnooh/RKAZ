@@ -202,28 +202,67 @@ def login_required(fn):
     return wrapper
 
 
-def _ops_custom_tabs_for_nav(lang: str | None = None) -> list[dict]:
-    """تبويبات العمليات المخصصة الظاهرة للمستخدم الحالي."""
-    if not session.get("user_id") or not permissions.can("section.ops"):
+_SECTION_PERM = {
+    "ops": "section.ops",
+    "constructions": "section.constructions",
+    "projects": "section.projects",
+    "contractors": "section.contractors",
+    "quality": "section.quality",
+    "safety": "section.safety",
+    "warehouses": "section.warehouses",
+    "external": "section.external",
+    "financial": "section.financial",
+    "maintenance": "section.maintenance",
+    "hr": "section.hr",
+    "contracts": "section.contracts",
+    "reinforcement": "section.reinforcement",
+}
+
+
+def _custom_tabs_for_section(section: str, lang: str | None = None) -> list[dict]:
+    """تبويبات مخصصة ظاهرة للمستخدم لقسم واحد."""
+    if not session.get("user_id"):
+        return []
+    need_section = _SECTION_PERM.get(section)
+    if need_section and not permissions.can(need_section):
         return []
     lang = lang or (session.get("lang") or "ar")
     out = []
-    for tab in db.list_ops_custom_tabs(visible_only=True):
+    for tab in db.list_app_custom_tabs(section=section, visible_only=True):
         need = (tab.get("required_perm") or "").strip()
         if need and not permissions.has_perm(need):
             continue
         title = (tab.get("title_en") or "").strip() if lang == "en" else (tab.get("title_ar") or "").strip()
         if lang == "en" and not title:
             title = (tab.get("title_ar") or "").strip()
-        href = db.ops_custom_tab_href(tab)
-        out.append(
-            {
-                **tab,
-                "title": title,
-                "href": href,
-            }
-        )
+        out.append({**tab, "title": title, "href": db.app_custom_tab_href(tab)})
     return out
+
+
+def _ops_custom_tabs_for_nav(lang: str | None = None) -> list[dict]:
+    return _custom_tabs_for_section("ops", lang)
+
+
+def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]]:
+    if not session.get("user_id"):
+        return {}
+    lang = lang or (session.get("lang") or "ar")
+    by_sec: dict[str, list[dict]] = {}
+    for tab in db.list_app_custom_tabs(visible_only=True):
+        section = (tab.get("section") or "").strip()
+        need_section = _SECTION_PERM.get(section)
+        if need_section and not permissions.can(need_section):
+            continue
+        need = (tab.get("required_perm") or "").strip()
+        if need and not permissions.has_perm(need):
+            continue
+        title = (tab.get("title_en") or "").strip() if lang == "en" else (tab.get("title_ar") or "").strip()
+        if lang == "en" and not title:
+            title = (tab.get("title_ar") or "").strip()
+        by_sec.setdefault(section, []).append(
+            {**tab, "title": title, "href": db.app_custom_tab_href(tab)}
+        )
+    return by_sec
 
 
 @app.context_processor
@@ -242,6 +281,7 @@ def inject_globals():
     def can(*perms):
         return permissions.can(*perms)
 
+    tabs_by_section = _app_custom_tabs_by_section(lang) if session.get("user_id") else {}
     return {
         "settings": g.get("settings") or db.get_settings(),
         "lists": g.get("lists") or db.get_lists(),
@@ -257,7 +297,8 @@ def inject_globals():
         "has_perm": permissions.has_perm,
         "is_pdf_ref": media_svc.is_pdf_ref,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
-        "ops_custom_tabs": _ops_custom_tabs_for_nav(lang) if session.get("user_id") else [],
+        "ops_custom_tabs": tabs_by_section.get("ops") or [],
+        "app_custom_tabs_by_section": tabs_by_section,
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
         "hosting": backup_svc.hosting_info(),
     }
@@ -579,9 +620,9 @@ def ops_home():
         {"label": _t("الفرق الأولية"), "href": url_for("ops_primary_teams")},
         {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
     ]
-    if permissions.can("ops.tabs.manage"):
+    if permissions.can("app.tabs.manage") or permissions.can("ops.tabs.manage"):
         tools.append(
-            {"label": _t("إدارة التبويبات"), "href": url_for("ops_custom_tabs_manage")}
+            {"label": _t("إدارة التبويبات"), "href": url_for("app_custom_tabs_manage")}
         )
 
     conn = db.connect()
@@ -602,16 +643,33 @@ def ops_home():
     )
 
 
-@app.route("/ops/tabs/manage", methods=["GET", "POST"])
+def _tabs_manage_perm_choices():
+    return [
+        ("", _t("صلاحية القسم فقط")),
+        ("tickets.read", permissions.PERM_LABELS["tickets.read"]),
+        ("tickets.write", permissions.PERM_LABELS["tickets.write"]),
+        ("modules.read", permissions.PERM_LABELS["modules.read"]),
+        ("modules.write", permissions.PERM_LABELS["modules.write"]),
+        ("teams.write", permissions.PERM_LABELS["teams.write"]),
+        ("export", permissions.PERM_LABELS["export"]),
+    ]
+
+
+def _tabs_section_choices():
+    return [(key, SECTION_META[key]["title"]) for key in db.APP_TAB_SECTIONS if key in SECTION_META]
+
+
+@app.route("/contracts-admin/tabs", methods=["GET", "POST"])
 @login_required
-def ops_custom_tabs_manage():
-    """إدارة تبويبات العمليات المخصصة — للمضيف/مدير النظام فقط."""
+def app_custom_tabs_manage():
+    """إدارة التبويبات المخصصة لكل أقسام التطبيق — تبويب داخل إدارة العقود."""
     if request.method == "POST":
         action = (request.form.get("action") or "").strip()
         if action == "add":
             try:
-                db.save_ops_custom_tab(
+                db.save_app_custom_tab(
                     {
+                        "section": request.form.get("section") or "ops",
                         "title_ar": request.form.get("title_ar"),
                         "title_en": request.form.get("title_en"),
                         "slug": request.form.get("slug"),
@@ -625,13 +683,18 @@ def ops_custom_tabs_manage():
                 )
                 flash(_t("تم إضافة التبويب"), "ok")
                 _after_data_change()
-            except ValueError:
-                flash(_t("عنوان التبويب بالعربية مطلوب"), "danger")
+            except ValueError as exc:
+                msg = str(exc)
+                if msg == "section_invalid":
+                    flash(_t("اختر قسماً صالحاً للتبويب"), "danger")
+                else:
+                    flash(_t("عنوان التبويب بالعربية مطلوب"), "danger")
         elif action == "update":
             try:
-                db.save_ops_custom_tab(
+                db.save_app_custom_tab(
                     {
                         "id": request.form.get("id"),
+                        "section": request.form.get("section") or "ops",
                         "title_ar": request.form.get("title_ar"),
                         "title_en": request.form.get("title_en"),
                         "slug": request.form.get("slug"),
@@ -645,47 +708,76 @@ def ops_custom_tabs_manage():
                 )
                 flash(_t("تم حفظ التبويب"), "ok")
                 _after_data_change()
-            except ValueError:
-                flash(_t("عنوان التبويب بالعربية مطلوب"), "danger")
+            except ValueError as exc:
+                msg = str(exc)
+                if msg == "section_invalid":
+                    flash(_t("اختر قسماً صالحاً للتبويب"), "danger")
+                else:
+                    flash(_t("عنوان التبويب بالعربية مطلوب"), "danger")
         elif action == "delete":
             if not _delete_password_ok():
-                return _reject_bad_delete_password(url_for("ops_custom_tabs_manage"))
+                return _reject_bad_delete_password(url_for("app_custom_tabs_manage"))
             tab_id = request.form.get("id")
-            if tab_id and db.delete_ops_custom_tab(int(tab_id)):
+            if tab_id and db.delete_app_custom_tab(int(tab_id)):
                 flash(_t("تم حذف التبويب"), "ok")
                 _after_data_change()
             else:
                 flash(_t("تعذّر حذف التبويب"), "danger")
-        return redirect(url_for("ops_custom_tabs_manage"))
+        return redirect(url_for("app_custom_tabs_manage"))
 
-    rows = db.list_ops_custom_tabs(visible_only=False)
+    rows = db.list_app_custom_tabs(visible_only=False)
     for r in rows:
-        r["href"] = db.ops_custom_tab_href(r)
-    # صلاحيات اختيارية لربط ظهور التبويب
-    perm_choices = [
-        ("", _t("قسم العمليات فقط")),
-        ("tickets.read", permissions.PERM_LABELS["tickets.read"]),
-        ("tickets.write", permissions.PERM_LABELS["tickets.write"]),
-        ("modules.read", permissions.PERM_LABELS["modules.read"]),
-        ("modules.write", permissions.PERM_LABELS["modules.write"]),
-        ("teams.write", permissions.PERM_LABELS["teams.write"]),
-        ("export", permissions.PERM_LABELS["export"]),
-    ]
+        r["href"] = db.app_custom_tab_href(r)
+        meta = SECTION_META.get(r.get("section") or "")
+        r["section_title"] = (meta or {}).get("title") or r.get("section") or "—"
     return render_template(
-        "ops_custom_tabs.html",
+        "app_custom_tabs.html",
         rows=rows,
-        perm_choices=perm_choices,
+        perm_choices=_tabs_manage_perm_choices(),
+        section_choices=_tabs_section_choices(),
+        section="contracts",
+        section_modules=modules_for_section("contracts"),
+        section_meta=_smeta(SECTION_META["contracts"]),
+        tabs_manage_active=True,
     )
+
+
+@app.route("/ops/tabs/manage", methods=["GET", "POST"])
+@login_required
+def ops_custom_tabs_manage():
+    """توافق: التوجيه إلى إدارة التبويبات داخل إدارة العقود."""
+    return redirect(url_for("app_custom_tabs_manage"), code=302)
 
 
 @app.route("/ops/tabs/<slug>")
 @login_required
 def ops_custom_tab_view(slug):
-    """صفحة نائبة/توجيه لتبويب عمليات مخصص — تُملأ لاحقاً أو تُوجّه لمسار موجود."""
-    tab = db.get_ops_custom_tab(slug)
+    """صفحة نائبة/توجيه لتبويب عمليات مخصص."""
+    return _render_custom_tab_page("ops", slug)
+
+
+@app.route("/tabs/<section>/<slug>")
+@login_required
+def app_custom_tab_view(section, slug):
+    """صفحة نائبة/توجيه لتبويب مخصص في أي قسم."""
+    return _render_custom_tab_page(section, slug)
+
+
+def _render_custom_tab_page(section: str, slug: str):
+    section = (section or "").strip().lower()
+    tab = db.get_app_custom_tab(slug, section=section)
     if not tab or not int(tab.get("is_visible") or 0):
         flash(_t("التبويب غير موجود أو مخفي"), "danger")
-        return redirect(url_for("ops_home"))
+        home = SECTION_META.get(section, {}).get("home") or "ops_home"
+        try:
+            return redirect(url_for(home))
+        except Exception:
+            return redirect(url_for("ops_home"))
+    need_section = _SECTION_PERM.get(section)
+    if need_section and not permissions.can(need_section):
+        return permissions.deny_redirect(
+            _t("ليس لديك صلاحية: {label}", label=_t(permissions.PERM_LABELS.get(need_section, need_section)))
+        )
     need = (tab.get("required_perm") or "").strip()
     if need and not permissions.has_perm(need):
         return permissions.deny_redirect(
@@ -699,10 +791,13 @@ def ops_custom_tab_view(slug):
     if lang == "en" and not title:
         title = (tab.get("title_ar") or "").strip()
     return render_template(
-        "ops_custom_tab_page.html",
+        "app_custom_tab_page.html",
         tab=tab,
         tab_title=title,
         active_slug=tab.get("slug"),
+        section=section,
+        section_modules=modules_for_section(section) if section in SECTION_META else [],
+        section_meta=_smeta(SECTION_META.get(section)) if section in SECTION_META else None,
     )
 
 
@@ -4433,26 +4528,31 @@ def api_jump_destinations():
     from flask import jsonify
 
     items = list(review_engine.jump_destinations())
-    # تبويبات العمليات المخصصة + صفحة إدارتها
-    if permissions.can("ops.tabs.manage"):
+    # إدارة التبويبات العامة + التبويبات المخصصة لكل الأقسام
+    if permissions.can("app.tabs.manage") or permissions.can("ops.tabs.manage"):
         items.append(
             {
-                "title": "إدارة تبويبات العمليات",
-                "path": "/ops/tabs/manage",
-                "group": "عمليات",
-                "keywords": "تبويب tabs manage ops",
+                "title": "إدارة التبويبات",
+                "path": "/contracts-admin/tabs",
+                "group": "عقود",
+                "keywords": "تبويب tabs manage contracts",
             }
         )
-    for tab in db.list_ops_custom_tabs(visible_only=True):
+    for tab in db.list_app_custom_tabs(visible_only=True):
+        section = (tab.get("section") or "").strip()
+        need_section = _SECTION_PERM.get(section)
+        if need_section and not permissions.can(need_section):
+            continue
         need = (tab.get("required_perm") or "").strip()
         if need and not permissions.has_perm(need):
             continue
+        sec_title = (SECTION_META.get(section) or {}).get("title") or section
         items.append(
             {
                 "title": tab.get("title_ar") or tab.get("slug") or "تبويب",
-                "path": db.ops_custom_tab_href(tab),
-                "group": "عمليات",
-                "keywords": f"{tab.get('slug') or ''} {tab.get('title_en') or ''} تبويب",
+                "path": db.app_custom_tab_href(tab),
+                "group": sec_title,
+                "keywords": f"{tab.get('slug') or ''} {tab.get('title_en') or ''} {section} تبويب",
             }
         )
     items = permissions.filter_jump_items(items)

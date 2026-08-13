@@ -1195,6 +1195,11 @@ VALUE_EN = {
     'لم يُربط محتوى بعد. عيّن مساراً داخلياً (مثل /tickets) أو رابطاً من إدارة التبويبات، أو ابنِ الصفحة على هذا المسار:': 'No content linked yet. Set an internal path (e.g. /tickets) or URL from Manage tabs, or build the page on this path:',
     'مثال: متابعة خاصة': 'e.g. Special follow-up',
     'للتطوير لاحقاً — لا تظهر للمستخدمين': 'For later development — not shown to users',
+    'أضف تبويبات يدوية لأي قسم في النظام — تظهر في الشريط الفرعي لذلك القسم. اترك المسار فارغاً لصفحة نائبة يمكن ربطها لاحقاً.': 'Add manual tabs for any app section — they appear in that section’s sub-nav. Leave the path empty for a placeholder page you can wire later.',
+    'صلاحية القسم فقط': 'Section permission only',
+    'اختر قسماً صالحاً للتبويب': 'Choose a valid section for the tab',
+    'لم يُربط محتوى بعد. عيّن مساراً داخلياً أو رابطاً من إدارة التبويبات، أو ابنِ الصفحة على هذا المسار:': 'No content linked yet. Set an internal path or URL from Manage tabs, or build the page on this path:',
+    'قسم النظام': 'App section',
 }
 
 def tr(lang, key, **kwargs):

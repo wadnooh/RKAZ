@@ -35,7 +35,8 @@ PERM_LABELS = {
     "cashflow.write": "تعديل التدفق النقدي",
     "teams.write": "إدارة فرق المهام",
     "users.manage": "إدارة المستخدمين",
-    "ops.tabs.manage": "إدارة تبويبات العمليات",
+    "ops.tabs.manage": "إدارة تبويبات العمليات",  # توافق قديم — يُفضّل app.tabs.manage
+    "app.tabs.manage": "إدارة التبويبات",
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",
@@ -82,7 +83,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "audit.read",
             "export",
             "search",
-            # بدون users.manage / ops.tabs.manage — خاص بمدير النظام (المضيف)
+            # بدون users.manage / app.tabs.manage / ops.tabs.manage — خاص بمدير النظام (المضيف)
         }
     ),
     "مدخل بيانات": {
@@ -384,14 +385,21 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
-    if ep == "ops_custom_tabs_manage":
-        if not has_perm("section.ops"):
-            return "section.ops"
-        return None if has_perm("ops.tabs.manage") else "ops.tabs.manage"
+    if ep in {"app_custom_tabs_manage", "ops_custom_tabs_manage"}:
+        # الإدارة من داخل إدارة العقود — للمضيف فقط
+        if not has_perm("section.contracts"):
+            return "section.contracts"
+        if has_perm("app.tabs.manage") or has_perm("ops.tabs.manage"):
+            return None
+        return "app.tabs.manage"
 
     if ep == "ops_custom_tab_view":
         if not has_perm("section.ops"):
             return "section.ops"
+        return None
+
+    if ep == "app_custom_tab_view":
+        # يُتحقق من صلاحية القسم داخل المسار نفسه
         return None
 
     if ep in {"audit_log_home", "audit_log_page"}:
@@ -447,13 +455,14 @@ def _perm_for_path(path: str) -> str | None:
         ("/financial", "section.financial"),
         ("/maintenance", "section.maintenance"),
         ("/hr", "section.hr"),
+        ("/contracts-admin/tabs", "app.tabs.manage"),
         ("/contracts-admin", "section.contracts"),
         ("/reinforcement", "section.reinforcement"),
         ("/tickets", "tickets.read"),
         ("/cashflow", "section.financial"),
         ("/teams", "section.ops"),
         ("/export", "export"),
-        ("/ops/tabs/manage", "ops.tabs.manage"),
+        ("/ops/tabs/manage", "app.tabs.manage"),
         ("/ops", "section.ops"),
         ("/search", "search"),
     )

@@ -1,5 +1,6 @@
 {# شريط فرعي داخل المستودعات — بنفس أسلوب العمليات والصيانة #}
 {% set wh_active = warehouse_active if warehouse_active is defined else 'home' %}
+{% set p = request.path or '' %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1" data-tab-strip-key="warehouse_rakaz_tabs">
     <a class="btn ghost{% if wh_active=='home' %} primary{% endif %}" href="{{ url_for('warehouses_home') }}">{{ _('لوحة المستودع') }}</a>
@@ -9,5 +10,8 @@
     <a class="btn ghost{% if wh_active=='projects' %} primary{% endif %}" href="{{ url_for('warehouse_projects') }}">{{ _('المشاريع') }}</a>
     <a class="btn ghost{% if wh_active=='contractors' %} primary{% endif %}" href="{{ url_for('module_list', name='contractor_supplies') }}">{{ _('مواد موردة من مقاول') }}</a>
     <a class="btn ghost{% if wh_active=='balances' %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>
+    {% for tab in (app_custom_tabs_by_section or {}).get('warehouses') or [] %}
+    <a class="btn ghost{% if wh_active==('custom:' ~ tab.slug) or p == tab.href or p.startswith('/tabs/warehouses/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
+    {% endfor %}
   </div>
 </div>

@@ -15,8 +15,5 @@
     {% for tab in ops_custom_tabs or [] %}
     <a class="btn ghost{% if active==('custom:' ~ tab.slug) or (active_slug is defined and active_slug==tab.slug) or p == tab.href or p.startswith('/ops/tabs/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
     {% endfor %}
-    {% if can('ops.tabs.manage') %}
-    <a class="btn ghost{% if active=='ops_tabs_manage' %} primary{% endif %}" href="{{ url_for('ops_custom_tabs_manage') }}">{{ _('إدارة التبويبات') }}</a>
-    {% endif %}
   </div>
 </div>

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_section_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('إدارة التبويبات') }}</h2>
+      <div class="meta">{{ _('أضف تبويبات يدوية لأي قسم في النظام — تظهر في الشريط الفرعي لذلك القسم. اترك المسار فارغاً لصفحة نائبة يمكن ربطها لاحقاً.') }}</div>
+    </div>
+  </div>
+
+  <form method="post" class="form-grid">
+    <input type="hidden" name="action" value="add">
+    <div class="field">
+      <label>{{ _('قسم النظام') }}</label>
+      <select name="section" required>
+        {% for val, label in section_choices %}
+        <option value="{{ val }}" {% if val=='ops' %}selected{% endif %}>{{ _(label) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field"><label>{{ _('العنوان (عربي)') }}</label><input name="title_ar" required placeholder="{{ _('مثال: متابعة خاصة') }}"></div>
+    <div class="field"><label>{{ _('العنوان (إنجليزي)') }}</label><input name="title_en" placeholder="Special follow-up"></div>
+    <div class="field"><label>{{ _('المعرّف (slug)') }}</label><input name="slug" placeholder="special-followup" pattern="[a-zA-Z0-9_-]*"></div>
+    <div class="field"><label>{{ _('المسار أو الرابط') }}</label><input name="target_path" placeholder="/module/... أو https://... أو فارغ"></div>
+    <div class="field"><label>{{ _('الترتيب') }}</label><input type="number" name="sort_order" value="100"></div>
+    <div class="field"><label>{{ _('أيقونة (اختياري)') }}</label><input name="icon" placeholder="•" maxlength="8"></div>
+    <div class="field">
+      <label>{{ _('صلاحية الظهور') }}</label>
+      <select name="required_perm">
+        {% for val, label in perm_choices %}
+        <option value="{{ val }}">{% if val %}{{ _(label) }}{% else %}{{ label }}{% endif %}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>{{ _('ظاهر؟') }}</label>
+      <select name="is_visible">
+        <option value="1">{{ _('نعم') }}</option>
+        <option value="0">{{ _('لا') }}</option>
+      </select>
+    </div>
+    <div class="field" style="grid-column:1/-1"><label>{{ _('ملاحظات') }}</label><input name="notes" placeholder="{{ _('للتطوير لاحقاً — لا تظهر للمستخدمين') }}"></div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">{{ _('+ إضافة تبويب') }}</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('الترتيب') }}</th>
+          <th>{{ _('القسم') }}</th>
+          <th>{{ _('العنوان') }}</th>
+          <th>{{ _('المعرّف') }}</th>
+          <th>{{ _('المسار') }}</th>
+          <th>{{ _('الظهور') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td colspan="7" style="padding-top:14px;padding-bottom:14px;">
+            <details>
+              <summary style="cursor:pointer;list-style:none;">
+                <div class="actions" style="flex-wrap:wrap;gap:8px;align-items:center;">
+                  <span class="badge info">{{ r.sort_order }}</span>
+                  <span class="badge">{{ r.section_title }}</span>
+                  <strong>{% if r.icon %}{{ r.icon }} {% endif %}{{ r.title_ar }}{% if r.title_en %} <span class="meta">/ {{ r.title_en }}</span>{% endif %}</strong>
+                  <span class="meta">{{ r.slug }}</span>
+                  <a class="btn ghost" href="{{ r.href }}">{{ _('فتح') }}</a>
+                  {% if r.is_visible %}<span class="badge ok">{{ _('ظاهر') }}</span>{% else %}<span class="badge danger">{{ _('مخفي') }}</span>{% endif %}
+                </div>
+              </summary>
+              <form method="post" class="form-grid" style="margin-top:12px;">
+                <input type="hidden" name="action" value="update">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <div class="field">
+                  <label>{{ _('قسم النظام') }}</label>
+                  <select name="section" required>
+                    {% for val, label in section_choices %}
+                    <option value="{{ val }}" {% if (r.section or '')==val %}selected{% endif %}>{{ _(label) }}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="field"><label>{{ _('العنوان (عربي)') }}</label><input name="title_ar" value="{{ r.title_ar }}" required></div>
+                <div class="field"><label>{{ _('العنوان (إنجليزي)') }}</label><input name="title_en" value="{{ r.title_en or '' }}"></div>
+                <div class="field"><label>{{ _('المعرّف (slug)') }}</label><input name="slug" value="{{ r.slug }}" pattern="[a-zA-Z0-9_-]*"></div>
+                <div class="field"><label>{{ _('المسار أو الرابط') }}</label><input name="target_path" value="{{ r.target_path or '' }}"></div>
+                <div class="field"><label>{{ _('الترتيب') }}</label><input type="number" name="sort_order" value="{{ r.sort_order or 100 }}"></div>
+                <div class="field"><label>{{ _('أيقونة (اختياري)') }}</label><input name="icon" value="{{ r.icon or '' }}" maxlength="8"></div>
+                <div class="field">
+                  <label>{{ _('صلاحية الظهور') }}</label>
+                  <select name="required_perm">
+                    {% for val, label in perm_choices %}
+                    <option value="{{ val }}" {% if (r.required_perm or '')==val %}selected{% endif %}>{% if val %}{{ _(label) }}{% else %}{{ label }}{% endif %}</option>
+                    {% endfor %}
+                  </select>
+                </div>
+                <div class="field">
+                  <label>{{ _('ظاهر؟') }}</label>
+                  <select name="is_visible">
+                    <option value="1" {% if r.is_visible %}selected{% endif %}>{{ _('نعم') }}</option>
+                    <option value="0" {% if not r.is_visible %}selected{% endif %}>{{ _('لا') }}</option>
+                  </select>
+                </div>
+                <div class="field" style="grid-column:1/-1"><label>{{ _('ملاحظات') }}</label><input name="notes" value="{{ r.notes or '' }}"></div>
+                <div class="actions" style="grid-column:1/-1">
+                  <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
+                </div>
+              </form>
+              <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف التبويب') }}" style="margin-top:8px;">
+                <input type="hidden" name="action" value="delete">
+                <input type="hidden" name="id" value="{{ r.id }}">
+                <input type="hidden" name="delete_password" value="">
+                <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف التبويب') }}</button>
+              </form>
+            </details>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد تبويبات مخصصة بعد — أضف أول تبويب من النموذج أعلاه.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
