@@ -385,7 +385,7 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
-    if ep in {"programmer_device_setup", "programmer_verify"}:
+    if ep in {"programmer_device_setup", "programmer_verify", "programmer_magic"}:
         # صفحات أمان المبرمج — لمدير النظام فقط
         return None if has_perm("users.manage") else "users.manage"
 

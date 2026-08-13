@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""يولّد رمز موافقة لمرة واحدة لتعديلات المبرمج من جهاز غير رئيسي.
+"""يولّد رمز موافقة لمرة واحدة (بديل عند تعذّر البريد).
 
-الاستخدام على VPS:
+المسار المفضّل: زر «أرسل رمز التحقق» في الواجهة → بريد المبرمج المعتمد.
+هذا السكربت احتياطي عبر SSH فقط:
+
   cd /opt/rekaz
   sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/programmer_approve.py
-
-الرمز صالح ~10 دقائق ويُستهلك بعد أول استخدام ناجح في الواجهة.
 """
 
 from __future__ import annotations
@@ -37,13 +37,12 @@ def main() -> int:
     from webapp import programmer_guard as prog_guard
 
     db.ensure_schema()
-    if not prog_guard.change_pin():
-        print("WARNING: PROGRAMMER_CHANGE_PIN is not set in the environment.", file=sys.stderr)
+    emails = ", ".join(prog_guard.programmer_emails())
+    print(f"Preferred path: email OTP to {emails}")
+    print("Fallback one-time approval code:")
     code, expires = prog_guard.create_approve_code_record()
-    print("Programmer approval code (one-time):")
     print(code)
     print(f"Expires (UTC): {expires.strftime('%Y-%m-%d %H:%M:%S')}")
-    print("Enter it on: /admin/programmer/verify together with password + CHANGE_PIN.")
     return 0
 
 

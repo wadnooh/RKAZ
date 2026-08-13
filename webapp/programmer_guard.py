@@ -1,7 +1,11 @@
-"""حماية مستوى المبرمج: الجهاز الرئيسي + تحقق صارم من جهاز آخر.
+"""حماية مستوى المبرمج: الجهاز الرئيسي + تحقق صارم عبر بريد المبرمج.
 
 عمليات الإدارة الهيكلية فقط (مستخدمون، تبويبات، بنود عقد، …).
 إدخال الأعطال والبيانات اليومية للموظفين لا يتأثر.
+
+بريد الموافقة المعتمد فقط:
+  wadnooh@gmail.com
+  wadnooh@wadnooh.com
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ from functools import wraps
 from flask import flash, redirect, request, session, url_for
 
 from webapp import db
+from webapp import mailer
 from webapp import permissions
 from webapp.i18n import _ as i18n_phrase
 
@@ -25,6 +30,13 @@ COOKIE_MAX_AGE = 60 * 60 * 24 * 400  # ~400 يوماً
 ELEVATION_MINUTES = 30
 APPROVE_TTL_MINUTES = 10
 APPROVE_CODE_LEN = 8
+OTP_SEND_COOLDOWN_SEC = 60
+
+# بريد المبرمج فقط — لا يُقبل غيره للموافقة
+DEFAULT_PROGRAMMER_EMAILS = (
+    "wadnooh@gmail.com",
+    "wadnooh@wadnooh.com",
+)
 
 # POST يغيّر إعدادات النظام / الهيكل — وليس بيانات تشغيل يومية
 PRIVILEGED_POST_ENDPOINTS = frozenset(
@@ -57,8 +69,33 @@ def change_pin() -> str:
     return (os.environ.get("PROGRAMMER_CHANGE_PIN") or "").strip()
 
 
+def programmer_emails() -> list[str]:
+    raw = (os.environ.get("PROGRAMMER_EMAILS") or "").strip()
+    if raw:
+        emails = [e.strip().lower() for e in raw.replace(";", ",").split(",") if e.strip()]
+    else:
+        emails = list(DEFAULT_PROGRAMMER_EMAILS)
+    # لا تسمح بتجاوز القائمة الافتراضية بأخرى فقط — ادمج واحتفظ بالمعتمدة
+    allowed = {e.lower() for e in DEFAULT_PROGRAMMER_EMAILS}
+    out = []
+    for e in emails:
+        el = e.lower()
+        if el in allowed and el not in out:
+            out.append(el)
+    return out or list(DEFAULT_PROGRAMMER_EMAILS)
+
+
+def masked_programmer_emails() -> list[str]:
+    """عرض جزئي للواجهة بدون تسريب كامل إن لزم — هنا العناوين معروفة للمالك."""
+    return programmer_emails()
+
+
 def secrets_configured() -> bool:
     return bool(bootstrap_code() and change_pin())
+
+
+def smtp_ready() -> bool:
+    return mailer.smtp_configured()
 
 
 def is_programmer(role: str | None = None) -> bool:
@@ -70,7 +107,6 @@ def _hash_secret(value: str) -> str:
 
 
 def hash_device_token(token: str) -> str:
-    # ربط التجزئة بـ SECRET_KEY حتى لا تُنقل الكوكيز بين بيئات مختلفة بسهولة
     secret = (os.environ.get("SECRET_KEY") or "rakaz-khurais-emergency-2026").encode("utf-8")
     return hmac.new(secret, (token or "").encode("utf-8"), hashlib.sha256).hexdigest()
 
@@ -80,7 +116,6 @@ def new_device_token() -> str:
 
 
 def new_approve_code() -> str:
-    # أحرف/أرقام واضحة للطباعة يدوياً
     alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
     return "".join(secrets.choice(alphabet) for _ in range(APPROVE_CODE_LEN))
 
@@ -103,7 +138,6 @@ def is_main_device() -> bool:
     device = find_trusted_device(main_only=True)
     if not device:
         return False
-    # الجهاز الرئيسي مربوط بحساب المبرمج الذي سجّله
     uid = session.get("user_id")
     if uid and device.get("user_id") and int(device["user_id"]) != int(uid):
         return False
@@ -127,7 +161,6 @@ def is_elevated() -> bool:
 
 
 def can_mutate_control_plane() -> bool:
-    """هل يُسمح للمبرمج الحالي بتنفيذ تعديل هيكلي؟"""
     if not session.get("user_id") or not is_programmer():
         return False
     return is_main_device() or is_elevated()
@@ -166,7 +199,6 @@ def clear_device_cookie(resp):
 
 
 def register_main_device(*, label: str = "", user_agent: str = "", ip: str = "") -> str:
-    """يسجّل الجهاز الحالي كجهاز رئيسي ويعيد التوكن الصريح للكوكي."""
     token = new_device_token()
     db.upsert_programmer_main_device(
         user_id=int(session["user_id"]),
@@ -182,7 +214,6 @@ def register_main_device(*, label: str = "", user_agent: str = "", ip: str = "")
 def create_approve_code_record(code: str | None = None) -> tuple[str, datetime]:
     code = code or new_approve_code()
     expires = datetime.utcnow() + timedelta(minutes=APPROVE_TTL_MINUTES)
-    # صيغة متوافقة مع مقارنة CURRENT_TIMESTAMP في SQLite
     expires_sql = expires.strftime("%Y-%m-%d %H:%M:%S")
     db.create_programmer_approve_code(_hash_secret(code.upper()), expires_sql)
     return code, expires
@@ -195,15 +226,57 @@ def consume_approve_code(code: str) -> bool:
     return db.consume_programmer_approve_code(_hash_secret(code))
 
 
+def _otp_send_wait_seconds() -> int:
+    last = session.get("programmer_otp_sent_at")
+    if last is None:
+        return 0
+    try:
+        left = OTP_SEND_COOLDOWN_SEC - (time.time() - float(last))
+    except (TypeError, ValueError):
+        return 0
+    return max(0, int(left))
+
+
+def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
+    """يولّد رمزاً ويرسله لبريد المبرمج المعتمد فقط."""
+    if not is_programmer():
+        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
+    wait = _otp_send_wait_seconds()
+    if wait > 0:
+        return False, _t("انتظر {sec} ثانية قبل إعادة إرسال الرمز.", sec=wait)
+    if not smtp_ready():
+        return False, _t(
+            "البريد غير مضبوط على السيرفر. استخدم البديل عبر SSH: python tools/programmer_approve.py"
+        )
+    code, expires = create_approve_code_record()
+    emails = programmer_emails()
+    base = (os.environ.get("APP_BASE_URL") or request.url_root or "").rstrip("/")
+    magic = f"{base}{url_for('programmer_magic', token=code)}"
+    verify_url = f"{base}{url_for('programmer_verify', next=next_path or '/')}"
+    subject = "رمز تحقق مبرمج ركاز — لمرة واحدة"
+    body = (
+        "رمز التحقق لمرة واحدة لتعديل إداري من جهاز غير رئيسي:\n\n"
+        f"  {code}\n\n"
+        f"صالح حتى (UTC): {expires.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"صفحة التحقق: {verify_url}\n"
+        f"رابط سريع (وأنت مسجّل كـ admin): {magic}\n\n"
+        "إن لم تطلب هذا الرمز فتجاهل الرسالة.\n"
+    )
+    ok, err = mailer.send_email(to_addrs=emails, subject=subject, body=body)
+    if not ok:
+        return False, _t("تعذّر إرسال البريد: {err}", err=err)
+    session["programmer_otp_sent_at"] = time.time()
+    return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد.")
+
+
 def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, str]:
-    """تحقق صارم من جهاز ثانوي. يعيد (ok, رسالة_خطأ)."""
+    """تحقق صارم: كلمة المرور + PIN + رمز البريد (أو رمز SSH الاحتياطي)."""
     if not is_programmer():
         return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
     if not change_pin():
         return False, _t("PROGRAMMER_CHANGE_PIN غير مضبوط على السيرفر — راجع التوثيق")
     if not hmac.compare_digest((pin or "").strip(), change_pin()):
         return False, _t("رمز التغيير غير صحيح")
-    # كلمة مرور حساب المبرمج الحالي
     conn = db.connect()
     try:
         user = conn.execute("SELECT * FROM users WHERE id=?", (session.get("user_id"),)).fetchone()
@@ -212,8 +285,20 @@ def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, 
     if not user or (user["password"] or "") != (password or ""):
         return False, _t("كلمة المرور غير صحيحة")
     if not consume_approve_code(approve_code):
-        return False, _t("رمز الموافقة من السيرفر غير صالح أو منتهٍ")
+        return False, _t("رمز التحقق من البريد غير صالح أو منتهٍ")
     return True, ""
+
+
+def consume_magic_token(token: str) -> tuple[bool, str]:
+    if not is_programmer():
+        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
+    if not consume_approve_code(token):
+        return False, _t("رابط الموافقة غير صالح أو منتهٍ")
+    return True, ""
+
+
+def otp_send_wait_seconds() -> int:
+    return _otp_send_wait_seconds()
 
 
 def verify_bootstrap(code: str) -> tuple[bool, str]:
@@ -235,12 +320,10 @@ def request_needs_programmer_gate() -> bool:
 
 
 def gate_control_plane_mutation():
-    """يُستدعى من before_request. يعيد Response أو None."""
     if not request_needs_programmer_gate():
         return None
     if not session.get("user_id"):
         return None
-    # غير المبرمج: نظام الصلاحيات يرفض users.manage أصلاً
     if not is_programmer():
         return None
     if can_mutate_control_plane():
@@ -253,8 +336,6 @@ def gate_control_plane_mutation():
 
 
 def require_programmer_control(fn):
-    """Decorator اختياري لمسارات POST الإدارية."""
-
     @wraps(fn)
     def wrapper(*args, **kwargs):
         if is_programmer() and (request.method or "").upper() == "POST" and not can_mutate_control_plane():
@@ -277,6 +358,8 @@ def template_context() -> dict:
             "programmer_can_mutate": False,
             "programmer_main_registered": main_device_registered(),
             "programmer_elevation_seconds": 0,
+            "programmer_emails": [],
+            "programmer_smtp_ready": smtp_ready(),
         }
     return {
         "programmer_is_admin": True,
@@ -285,4 +368,6 @@ def template_context() -> dict:
         "programmer_can_mutate": can_mutate_control_plane(),
         "programmer_main_registered": main_device_registered(),
         "programmer_elevation_seconds": elevation_remaining_seconds(),
+        "programmer_emails": masked_programmer_emails(),
+        "programmer_smtp_ready": smtp_ready(),
     }

@@ -70,13 +70,19 @@ AWS_S3_PREFIX=rekaz-backups
 AWS_S3_AUTO_RESTORE=1
 PROGRAMMER_BOOTSTRAP_CODE=...   # تسجيل الجهاز الرئيسي للمبرمج
 PROGRAMMER_CHANGE_PIN=...       # تحقق صارم من جهاز ثانوي
+PROGRAMMER_EMAILS=wadnooh@gmail.com,wadnooh@wadnooh.com
+SMTP_HOST=...
+SMTP_PORT=...
+SMTP_USER=...
+SMTP_PASS=...
+SMTP_FROM=...
 ```
 
 `TRIAL_MODE=1` لا يلغي ثبات القرص (`RAKAZ_DATA_DIR`). الحفظ تلقائي صامت بدون واجهة للمستخدم.
 بعد الاعتماد النهائي يمكن ضبط `TRIAL_MODE=0`.
 
-حماية التحكم الإداري (جهاز المبرمج): انظر [`للعميل/حماية_جهاز_المبرمج.md`](للعميل/حماية_جهاز_المبرمج.md).
-توليد رمز موافقة لمرة واحدة:
+حماية التحكم الإداري (جهاز المبرمج + OTP بريد): انظر [`للعميل/حماية_جهاز_المبرمج.md`](للعميل/حماية_جهاز_المبرمج.md).
+توليد رمز موافقة احتياطي (عند تعذّر البريد):
 
 ```bash
 cd /opt/rekaz

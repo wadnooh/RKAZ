@@ -2956,7 +2956,7 @@ def programmer_device_setup():
 @app.route("/admin/programmer/verify", methods=["GET", "POST"])
 @login_required
 def programmer_verify():
-    """تحقق صارم لتعديل إداري من جهاز غير رئيسي."""
+    """تحقق صارم لتعديل إداري من جهاز غير رئيسي (OTP بريد المبرمج)."""
     if not prog_guard.is_programmer():
         return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
@@ -2979,6 +2979,13 @@ def programmer_verify():
         return redirect(url_for("programmer_device_setup", next=nxt))
 
     if request.method == "POST":
+        action = (request.form.get("action") or "verify").strip()
+        if action == "send_otp":
+            ok, msg = prog_guard.send_email_otp(next_path=nxt)
+            flash(msg, "ok" if ok else "danger")
+            if ok:
+                db.log_audit(current_user_name(), "إرسال OTP مبرمج", "أمان", session.get("user_id"))
+            return redirect(url_for("programmer_verify", next=nxt))
         ok, err = prog_guard.verify_strict(
             password=request.form.get("password") or "",
             pin=request.form.get("change_pin") or "",
@@ -3003,7 +3010,32 @@ def programmer_verify():
         next_url=nxt,
         elevation_minutes=prog_guard.ELEVATION_MINUTES,
         secrets_ok=prog_guard.secrets_configured(),
+        smtp_ready=prog_guard.smtp_ready(),
+        programmer_emails=prog_guard.masked_programmer_emails(),
+        otp_wait_seconds=prog_guard.otp_send_wait_seconds(),
     )
+
+
+@app.route("/admin/programmer/magic/<token>")
+@login_required
+def programmer_magic(token):
+    """رابط موافقة لمرة واحدة من بريد المبرمج — يرفع الصلاحية المؤقتة إن كان المستخدم admin."""
+    if not prog_guard.is_programmer():
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
+    ok, err = prog_guard.consume_magic_token(token)
+    if not ok:
+        flash(err, "danger")
+        return redirect(url_for("programmer_verify"))
+    prog_guard.grant_elevation()
+    db.log_audit(current_user_name(), "تحقق مبرمج (رابط بريد)", "أمان", session.get("user_id"))
+    flash(
+        _t(
+            "تم التحقق عبر البريد — تعديلات إدارية لمدة {mins} دقيقة.",
+            mins=prog_guard.ELEVATION_MINUTES,
+        ),
+        "ok",
+    )
+    return redirect(url_for("users_list"))
 
 
 @app.route("/admin/audit-log")

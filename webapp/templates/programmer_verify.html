@@ -17,13 +17,37 @@
   </p>
   {% endif %}
 
+  {% if not smtp_ready %}
+  <p class="badge danger" style="display:block;margin-bottom:12px;">
+    {{ _('إرسال البريد غير جاهز. بعد ضبط SMTP يُفضَّل رمز البريد؛ والبديل: SSH ← tools/programmer_approve.py') }}
+  </p>
+  {% endif %}
+
   <p class="meta" style="margin-bottom:14px;line-height:1.8;">
-    {{ _('من جهاز غير رئيسي يلزم الثلاثة معاً: كلمة مرور حسابك + رمز التغيير (من البيئة) + رمز موافقة لمرة واحدة يُولَّد على السيرفر.') }}
+    {{ _('من جهاز غير رئيسي: أرسل رمز تحقق إلى بريد المبرمج المعتمد، ثم أدخل كلمة المرور + رمز التغيير + الرمز الوارد في البريد.') }}
     {{ _('بعد النجاح يمكنك التعديل لمدة {mins} دقيقة.', mins=elevation_minutes) }}
   </p>
+  <p class="meta" style="margin-bottom:14px;">
+    {{ _('بريد الموافقة فقط:') }}
+    {% for e in programmer_emails %}<code>{{ e }}</code>{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+
+  <form method="post" class="form-grid" style="max-width:520px;margin-bottom:16px;">
+    <input type="hidden" name="next" value="{{ next_url }}">
+    <input type="hidden" name="action" value="send_otp">
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn ghost" type="submit" {% if not secrets_ok or not smtp_ready %}disabled{% endif %}>
+        {{ _('أرسل رمز التحقق إلى بريدي') }}
+      </button>
+      {% if otp_wait_seconds %}
+      <span class="meta">{{ _('انتظر {sec} ث', sec=otp_wait_seconds) }}</span>
+      {% endif %}
+    </div>
+  </form>
 
   <form method="post" class="form-grid" style="max-width:520px;">
     <input type="hidden" name="next" value="{{ next_url }}">
+    <input type="hidden" name="action" value="verify">
     <div class="field" style="grid-column:1/-1">
       <label>{{ _('كلمة مرور حساب المبرمج') }}</label>
       <input name="password" type="password" autocomplete="current-password" required>
@@ -33,10 +57,11 @@
       <input name="change_pin" type="password" autocomplete="off" required>
     </div>
     <div class="field" style="grid-column:1/-1">
-      <label>{{ _('رمز الموافقة من السيرفر') }}</label>
-      <input name="approve_code" autocomplete="off" required placeholder="XXXXXXXX" style="letter-spacing:0.12em;text-transform:uppercase;">
+      <label>{{ _('رمز التحقق من البريد') }}</label>
+      <input name="approve_code" autocomplete="one-time-code" required placeholder="XXXXXXXX" style="letter-spacing:0.12em;text-transform:uppercase;">
       <div class="meta" style="margin-top:6px;">
-        {{ _('على VPS:') }} <code>python tools/programmer_approve.py</code>
+        {{ _('يصل الرمز إلى بريد المبرمج. بديل SSH عند تعذّر البريد:') }}
+        <code>python tools/programmer_approve.py</code>
       </div>
     </div>
     <div class="actions" style="grid-column:1/-1">
