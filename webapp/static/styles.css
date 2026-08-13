@@ -184,6 +184,16 @@ body {
   padding-inline: clamp(12px, 1.4vw, 40px);
   box-sizing: border-box;
 }
+/* Report / quality list surfaces: always use full viewport width */
+.quality-hub,
+.quality-hub .table-wrap,
+.quality-hub .quality-table,
+.tickets-page,
+.tickets-page .tickets-table-wrap {
+  width: 100%;
+  max-width: none;
+  box-sizing: border-box;
+}
 .tickets-page .tickets-filters {
   width: 100%;
 }

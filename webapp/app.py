@@ -5,6 +5,7 @@ import json
 import os
 from datetime import datetime, timedelta
 from functools import wraps
+from pathlib import Path
 
 from flask import (
     Flask,
@@ -293,6 +294,15 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
     return by_sec
 
 
+def _static_asset_version() -> str:
+    """Cache-bust static CSS/JS so layout updates (e.g. ultra-wide) reach clients despite nginx expires."""
+    try:
+        css = Path(app.root_path) / "static" / "styles.css"
+        return str(int(css.stat().st_mtime))
+    except OSError:
+        return "1"
+
+
 @app.context_processor
 def inject_globals():
     lang = session.get("lang") or "ar"
@@ -329,6 +339,7 @@ def inject_globals():
         "app_custom_tabs_by_section": tabs_by_section,
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
         "hosting": backup_svc.hosting_info(),
+        "asset_v": _static_asset_version(),
     }
 
 
