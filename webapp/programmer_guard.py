@@ -295,6 +295,38 @@ def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
     return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد.")
 
 
+def send_bootstrap_email() -> tuple[bool, str]:
+    """يرسل رمز التهيئة PROGRAMMER_BOOTSTRAP_CODE لبريد المبرمج لتسجيل الجهاز الرئيسي."""
+    if not is_programmer():
+        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
+    wait = _otp_send_wait_seconds()
+    if wait > 0:
+        return False, _t("انتظر {sec} ثانية قبل إعادة إرسال رمز التهيئة.", sec=wait)
+    code = bootstrap_code()
+    if not code:
+        return False, _t("PROGRAMMER_BOOTSTRAP_CODE غير مضبوط على السيرفر — راجع التوثيق")
+    if not smtp_ready():
+        return False, _t(
+            "البريد غير جاهز. اضبط SMTP أو انسخ رمز التهيئة من السيرفر عبر SSH."
+        )
+    emails = programmer_emails()
+    base = (os.environ.get("APP_BASE_URL") or request.url_root or "").rstrip("/")
+    device_url = f"{base}{url_for('programmer_device_setup')}"
+    subject = "رمز تهيئة جهاز المبرمج الرئيسي — ركاز"
+    body = (
+        "رمز التهيئة لتسجيل الجهاز الرئيسي للمبرمج:\n\n"
+        f"  {code}\n\n"
+        f"أدخله في صفحة جهاز المبرمج الرئيسي:\n{device_url}\n\n"
+        "هذا الرمز سري — لا تشاركه.\n"
+        "إن لم تطلب هذا الرمز فتجاهل الرسالة.\n"
+    )
+    ok, err = mailer.send_email(to_addrs=emails, subject=subject, body=body)
+    if not ok:
+        return False, _t("تعذّر إرسال البريد: {err}", err=err)
+    session["programmer_otp_sent_at"] = time.time()
+    return True, _t("تم إرسال رمز التهيئة إلى بريد المبرمج المعتمد.")
+
+
 def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, str]:
     """تحقق صارم من جهاز ثانوي: كلمة المرور + PIN + رمز البريد (إلزامي عند عمل SMTP)."""
     if not is_programmer():
