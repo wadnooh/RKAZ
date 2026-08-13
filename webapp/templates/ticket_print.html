@@ -295,6 +295,7 @@
           <h2>{{ _('بيانات العطل') }}</h2>
           <div class="meta-grid">
             <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ ticket.ticket_no }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('أمر العمل') }}</div><div class="v">{{ ticket.work_order or '—' }}</div></div>
             <div class="meta-item"><div class="k">{{ _('تاريخ الاستلام') }}</div><div class="v">{{ ticket.receive_date or '—' }}</div></div>
             <div class="meta-item"><div class="k">{{ _('وقت الاستلام') }}</div><div class="v">{{ ticket.receive_time or '—' }}</div></div>
             <div class="meta-item"><div class="k">{{ _('الحي') }}</div><div class="v">{{ ticket.district or '—' }}</div></div>

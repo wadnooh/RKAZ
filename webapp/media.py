@@ -1,4 +1,4 @@
-"""رفع وعرض صور سجل الصور — S3 إن وُجد، وإلا قرص محلي."""
+"""رفع وعرض مرفقات سجل الصور — صور أو PDF — عبر S3 إن وُجد، وإلا قرص محلي."""
 
 from __future__ import annotations
 
@@ -14,15 +14,18 @@ from werkzeug.utils import secure_filename
 from webapp import backup as backup_svc
 from webapp import db
 
-# أنواع مقبولة وحد أقصى ~6 ميجا للصورة الواحدة
-ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+# أنواع مقبولة وحد أقصى ~10 ميجا للملف الواحد
+ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
 ALLOWED_MIME = {
     "image/jpeg",
     "image/jpg",
     "image/png",
     "image/webp",
+    "application/pdf",
 }
-MAX_IMAGE_BYTES = 6 * 1024 * 1024
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+# توافق مع الاستيرادات القديمة
+MAX_IMAGE_BYTES = MAX_UPLOAD_BYTES
 
 PHOTO_FIELDS = (
     "before_shot",
@@ -33,6 +36,14 @@ PHOTO_FIELDS = (
 )
 
 _SAFE = re.compile(r"[^\w\-]+", re.UNICODE)
+
+_CONTENT_TYPES = {
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".png": "image/png",
+    ".webp": "image/webp",
+    ".pdf": "application/pdf",
+}
 
 
 def uploads_root() -> Path:
@@ -54,8 +65,22 @@ def is_media_ref(value: str | None) -> bool:
     return v.startswith("/media/s3/") or v.startswith("/media/local/")
 
 
+def is_pdf_ref(value: str | None) -> bool:
+    v = (value or "").strip()
+    if not is_media_ref(v):
+        return False
+    return Path(v.split("?")[0]).suffix.lower() == ".pdf"
+
+
+def is_image_ref(value: str | None) -> bool:
+    v = (value or "").strip().lower()
+    if not is_media_ref(v):
+        return False
+    return Path(v.split("?")[0]).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}
+
+
 def photo_field_filled(value: str | None) -> bool:
-    """مكتمل إن وُجدت صورة مرفوعة، أو قيمة قديمة «نعم»."""
+    """مكتمل إن وُجد مرفق مرفوع، أو قيمة قديمة «نعم»."""
     v = (value or "").strip()
     if not v or v == "لا":
         return False
@@ -69,52 +94,62 @@ def photos_complete(row: dict) -> bool:
 
 
 def media_url(value: str | None) -> str | None:
-    """رابط عرض للصورة إن كانت مرفوعة."""
+    """رابط عرض للمرفق إن كان مرفوعاً."""
     v = (value or "").strip()
     return v if is_media_ref(v) else None
 
 
-def _ext_for(file: FileStorage) -> str:
-    name = secure_filename(file.filename or "") or "image"
+def _kind_from_bytes(data: bytes) -> str | None:
+    if data[:4] == b"%PDF":
+        return "pdf"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpeg"
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if len(data) > 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
+def _ext_for(file: FileStorage, *, kind: str | None = None) -> str:
+    name = secure_filename(file.filename or "") or "file"
     ext = Path(name).suffix.lower()
     if ext == ".jpeg":
         ext = ".jpg"
     if ext in ALLOWED_EXT:
         return ext
     mime = (file.mimetype or "").lower().strip()
-    if mime in ("image/jpeg", "image/jpg"):
+    if mime in ("image/jpeg", "image/jpg") or kind == "jpeg":
         return ".jpg"
-    if mime == "image/png":
+    if mime == "image/png" or kind == "png":
         return ".png"
-    if mime == "image/webp":
+    if mime == "image/webp" or kind == "webp":
         return ".webp"
-    raise ValueError("صيغة الصورة غير مدعومة (jpg / png / webp)")
+    if mime == "application/pdf" or kind == "pdf":
+        return ".pdf"
+    raise ValueError("صيغة الملف غير مدعومة (jpg / png / webp / pdf)")
 
 
 def validate_image(file: FileStorage) -> bytes:
+    """يتحقق من صورة أو PDF ويعيد البايتات."""
     if not file or not (file.filename or "").strip():
         raise ValueError("لم يُختر ملف")
     mime = (file.mimetype or "").lower().strip()
-    if mime and mime not in ALLOWED_MIME and not mime.startswith("image/"):
-        raise ValueError("الملف ليس صورة صالحة")
+    if mime and mime not in ALLOWED_MIME and not mime.startswith("image/") and mime != "application/pdf":
+        raise ValueError("نوع الملف غير مدعوم (صور أو PDF فقط)")
     data = file.read()
     if not data:
         raise ValueError("الملف فارغ")
-    if len(data) > MAX_IMAGE_BYTES:
-        raise ValueError("حجم الصورة يتجاوز 6 ميجابايت")
-    # إعادة المؤشر إن احتيج لاحقاً
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError("حجم الملف يتجاوز 10 ميجابايت")
     try:
         file.stream.seek(0)
     except Exception:
         pass
-    _ext_for(file)  # يتحقق من الامتداد
-    # تحقق بسيط من التوقيع
-    if not (
-        data[:3] == b"\xff\xd8\xff"  # jpeg
-        or data[:8] == b"\x89PNG\r\n\x1a\n"  # png
-        or (len(data) > 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP")
-    ):
-        raise ValueError("محتوى الملف ليس صورة jpg/png/webp")
+    kind = _kind_from_bytes(data)
+    if not kind:
+        raise ValueError("محتوى الملف ليس صورة jpg/png/webp أو PDF")
+    _ext_for(file, kind=kind)
     return data
 
 
@@ -129,17 +164,14 @@ def save_photo(
     field: str,
     ticket_no: str | None = None,
 ) -> str:
-    """يحفظ الصورة ويعيد مسار عرض `/media/...` للتخزين في الحقل."""
+    """يحفظ الصورة أو PDF ويعيد مسار عرض `/media/...` للتخزين في الحقل."""
     if field not in PHOTO_FIELDS:
         raise ValueError("حقل صورة غير معروف")
     data = validate_image(file)
-    ext = _ext_for(file)
+    kind = _kind_from_bytes(data)
+    ext = _ext_for(file, kind=kind)
     rel = f"{_safe_ticket(ticket_no)}/{field}_{uuid.uuid4().hex}{ext}"
-    content_type = {
-        ".jpg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }.get(ext, "application/octet-stream")
+    content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
 
     if backup_svc.s3_configured():
         key = f"{photos_s3_prefix()}/{rel}".replace("\\", "/")
@@ -166,19 +198,13 @@ def load_media(storage: str, key: str) -> tuple[io.BytesIO, str, str]:
     key = (key or "").replace("\\", "/").lstrip("/")
     if ".." in key.split("/"):
         raise ValueError("مسار غير صالح")
-    name = Path(key).name or "image"
+    name = Path(key).name or "file"
     ext = Path(name).suffix.lower()
-    mime = {
-        ".jpg": "image/jpeg",
-        ".jpeg": "image/jpeg",
-        ".png": "image/png",
-        ".webp": "image/webp",
-    }.get(ext, "application/octet-stream")
+    mime = _CONTENT_TYPES.get(ext, "application/octet-stream")
 
     if storage == "s3":
         if not backup_svc.s3_configured():
             raise FileNotFoundError("S3 غير مُعد")
-        # أمان: المفاتيح يجب أن تكون تحت بادئة الصور
         prefix = photos_s3_prefix() + "/"
         if not key.startswith(prefix) and not key.startswith("rekaz-photos/"):
             raise PermissionError("مفتاح S3 خارج مجلد الصور")
@@ -193,7 +219,7 @@ def load_media(storage: str, key: str) -> tuple[io.BytesIO, str, str]:
         path = (uploads_root() / key).resolve()
         root = uploads_root().resolve()
         if not str(path).startswith(str(root)) or not path.is_file():
-            raise FileNotFoundError("الصورة غير موجودة")
+            raise FileNotFoundError("الملف غير موجود")
         return io.BytesIO(path.read_bytes()), mime, name
 
     raise ValueError("نوع تخزين غير معروف")
@@ -209,7 +235,7 @@ def apply_photo_uploads(
     """
     يدمج ملفات الرفع مع بيانات النموذج.
     - ملف الرفع: file_<field>
-    - clear_flags[field]=True لمسح الصورة
+    - clear_flags[field]=True لمسح المرفق
     """
     tno = ticket_no or (form_data.get("ticket_no") if form_data else None)
     clears = clear_flags or {}

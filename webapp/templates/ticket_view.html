@@ -10,7 +10,7 @@
   <div class="toolbar" style="margin-bottom:8px;">
     <div>
       <h2 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('خطوات المعاملة') }}</h2>
-      <div class="meta">{{ _('احفظ كل مرحلة للانتقال تلقائياً للخطوة التالية') }}</div>
+      <div class="meta">{{ _('تنقّل بين الخطوات يدوياً من الشريط أعلاه — الحفظ لا ينقلك تلقائياً') }}</div>
     </div>
   </div>
   <nav class="ticket-steps" aria-label="{{ _('خطوات تعديل العطل') }}">
@@ -31,7 +31,7 @@
       <h2 class="section-title">{% if editing %}{{ _('تعديل العطل') }}{% else %}{{ _('عرض العطل') }}{% endif %} — {{ ticket.ticket_no }}</h2>
       <div class="meta">
         {% if editing %}
-        {% if step=='data' %}{{ _('الخطوة 1: بيانات المعاملة — احفظ للانتقال لإضافة الكمية') }}{% else %}{{ _('وضع التعديل — يمكن التنقل بين الخطوات أعلاه') }}{% endif %}
+        {% if step=='data' %}{{ _('الخطوة 1: بيانات المعاملة') }}{% else %}{{ _('وضع التعديل — يمكن التنقل بين الخطوات أعلاه') }}{% endif %}
         {% else %}
         {{ _('تفاصيل العطل والسجلات المرتبطة به (بنود/كميات، صور، تمتير) — للعرض فقط حتى طلب التعديل') }}
         {% if not can_mutate %}<br>{{ _('لا تملك صلاحية التعديل (يلزم: إضافة/تعديل الأعطال والبنود).') }}{% endif %}
@@ -56,18 +56,13 @@
   </div>
 
   {% if can('section.quality') %}
-  <div class="card" style="margin:0 0 12px;padding:14px 16px;">
-    <div class="toolbar" style="margin:0 0 8px;">
-      <div>
-        <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('مسار التنسيقات والجودة') }}</h3>
-        <div class="meta">{{ _('العطل يبدأ من التنسيقات الجديدة ثم متابعة التصاريح ثم الإخلاءات') }}</div>
-      </div>
-    </div>
+  <div class="qflow-card card">
     {% set ticket_no = ticket.ticket_no %}
     {% set linked_section = 'ops' %}
     {% set district = ticket.district or '' %}
     {% set location = ticket.district or '' %}
     {% set work_desc = ticket.work_type or ticket.notes or '' %}
+    {% set work_order = ticket.work_order or '' %}
     {% include "_quality_workflow_actions.html" %}
   </div>
   {% endif %}
@@ -81,11 +76,17 @@
 
   {% if editing and can('tickets.write') %}
   <form method="post" action="{{ url_for('ticket_edit', ticket_id=ticket.id) }}" class="form-grid">
+    <input type="hidden" name="step" value="{{ step or 'data' }}">
     <div class="field"><label>{{ _('رقم العطل (SEC)') }}</label><input name="ticket_no" value="{{ ticket.ticket_no or '' }}" required></div>
     <div class="field">
       <label>{{ _('كود ركاز (ER)') }}</label>
       <input name="rekaz_code" value="{{ ticket.rekaz_code or '' }}" placeholder="ER-…">
       <div class="meta">{{ _('يمكن تعديله يدوياً') }}</div>
+    </div>
+    <div class="field">
+      <label>{{ _('أمر العمل') }}</label>
+      <input name="work_order" value="{{ ticket.work_order or '' }}" placeholder="{{ _('رقم أمر العمل') }}">
+      <div class="meta">{{ _('يُربط تلقائياً بالمستودع والمستخلصات والرخص والسلامة') }}</div>
     </div>
     <div class="field"><label>{{ _('تاريخ الاستلام') }}</label><input type="date" name="receive_date" value="{{ ticket.receive_date or '' }}"></div>
     <div class="field"><label>{{ _('وقت الاستلام') }}</label><input type="time" name="receive_time" value="{{ ticket.receive_time or '' }}"></div>
@@ -151,7 +152,6 @@
       <label>{{ _('حالة المستخلص') }}</label>
       <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if ticket.invoice_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
-    <div class="field"><label>{{ _('أمر العمل') }}</label><input name="work_order" value="{{ ticket.work_order or '' }}"></div>
     <div class="field"><label>{{ _('رقم الفاتورة') }}</label><input name="invoice_no" value="{{ ticket.invoice_no or '' }}"></div>
     <div class="field">
       <label>{{ _('حالة SAP') }}</label>
@@ -161,13 +161,14 @@
     <div class="field full"><label>{{ _('ملاحظات') }}</label><textarea name="notes">{{ ticket.notes or '' }}</textarea></div>
     <div class="actions full" style="grid-column:1/-1">
       <button class="btn primary" type="submit">{{ _('حفظ المعاملة') }}</button>
-      <span class="meta">{{ _('بعد الحفظ → إضافة الكمية') }}</span>
+      <span class="meta">{{ _('يبقى التعديل في نفس الصفحة بعد الحفظ') }}</span>
     </div>
   </form>
   {% else %}
   <div class="meta-grid">
     <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ ticket.ticket_no }}</div></div>
     <div class="meta-item"><div class="k">{{ _('كود ركاز (ER)') }}</div><div class="v"><strong>{{ ticket.rekaz_code or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('أمر العمل') }}</div><div class="v"><strong>{{ ticket.work_order or '—' }}</strong></div></div>
     <div class="meta-item"><div class="k">{{ _('التاريخ / الوقت') }}</div><div class="v">{{ ticket.receive_date or '—' }} — {{ ticket.receive_time or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(ticket.status) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الحي') }}</div><div class="v">{{ ticket.district or '—' }}</div></div>
@@ -369,7 +370,11 @@
           {% for key, label in [('before_shot',_('قبل')),('during_shot',_('أثناء')),('after_shot',_('بعد')),('quantities_shot',_('كميات')),('location_shot',_('موقع'))] %}
           <td>
             {% if p[key] and p[key].startswith('/media/') %}
+              {% if is_pdf_ref(p[key]) %}
+              <a class="photo-pdf-chip" href="{{ p[key] }}" target="_blank" rel="noopener">PDF</a>
+              {% else %}
               <a href="{{ p[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ p[key] }}" alt="{{ label }}"></a>
+              {% endif %}
             {% elif p[key] == 'نعم' %}
               <span class="badge ok">{{ tv("نعم") }}</span>
             {% else %}
@@ -457,12 +462,12 @@
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('حركات المستودع') }}</h3>
       <div class="meta">
         {% if editing and step=='warehouse' %}<strong>{{ _('الخطوة الحالية: المستودع') }}</strong> — {% endif %}
-        {{ related.warehouse_tx|length }} {{ _('حركة — الصرف مربوط برقم العطل / كود ER') }}
+        {{ related.warehouse_tx|length }} {{ _('حركة — الصرف مربوط برقم العطل / أمر العمل / كود ER') }}
       </div>
     </div>
     <div class="actions">
       {% if editing and can('tickets.write') and can('modules.write') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, **{'from': 'ops'}) }}">{{ _('+ صرف / حركة') }}</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none, **{'from': 'ops'}) }}">{{ _('+ صرف / حركة') }}</a>
       {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
@@ -529,13 +534,13 @@
   </div>
   <div class="actions">
     {% if can('section.financial') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no) }}">{{ _('+ مستخلص') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none) }}">{{ _('+ مستخلص') }}</a>
     {% endif %}
     {% if can('section.warehouses') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, **{'from': 'ops'}) }}">{{ _('+ حركة مستودع') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none, **{'from': 'ops'}) }}">{{ _('+ حركة مستودع') }}</a>
     {% endif %}
     {% if can('section.safety') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no) }}">{{ _('+ تصريح سلامة') }}</a>
+    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none) }}">{{ _('+ تصريح سلامة') }}</a>
     {% endif %}
   </div>
   {% elif not editing %}

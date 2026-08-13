@@ -231,6 +231,7 @@ def inject_globals():
         "tv": tv,
         "can": can,
         "has_perm": permissions.has_perm,
+        "is_pdf_ref": media_svc.is_pdf_ref,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
         "hosting": backup_svc.hosting_info(),
@@ -616,6 +617,11 @@ def quality_workflow_go():
     district = (request.args.get("district") or "").strip()
     location = (request.args.get("location") or "").strip()
     work_desc = (request.args.get("work_desc") or "").strip()
+    work_order = (request.args.get("work_order") or "").strip()
+    if ticket_no and not work_order:
+        tref = db.resolve_ticket_ref(ticket_no)
+        if tref:
+            work_order = (tref.get("work_order") or "").strip()
 
     wf = db.quality_workflow_for_ref(
         ticket_no=ticket_no,
@@ -632,6 +638,7 @@ def quality_workflow_go():
         "district": district or None,
         "location": location or None,
         "work_desc": work_desc or None,
+        "work_order": work_order or None,
     }
     # أزل المفاتيح الفارغة من رابط الإضافة
     common = {k: v for k, v in common.items() if v}
@@ -735,7 +742,7 @@ def contractors_home():
     return render_template(
         "section_hub.html",
         title=_t("المقاولين"),
-        subtitle=_t("متابعة أعمال المقاولين وربطها بأعطال المكتب."),
+        subtitle=_t("متابعة أعمال المقاولين ومواد موردة للمستودع وربطها بأعطال المكتب."),
         links=links,
         section="contractors",
         section_modules=modules_for_section("contractors"),
@@ -913,6 +920,25 @@ def safety_home():
     )
 
 
+@app.route("/reinforcement")
+@login_required
+def reinforcement_home():
+    db.ensure_schema()
+    links = section_links("reinforcement")
+    departments = db.list_reinforcement_departments(active_only=False)
+    return render_template(
+        "reinforcement_home.html",
+        title=_t("التعزيز - اسكيمات"),
+        subtitle=_t("إدارة أقسام التعزيز يدوياً (مثل صيانة العدادات وصيانة المحطات) ومتابعة معاملاتها."),
+        links=links,
+        departments=departments,
+        section="reinforcement",
+        section_modules=modules_for_section("reinforcement"),
+        section_meta=_smeta(SECTION_META["reinforcement"]),
+        total_count=sum(i.get("count") or 0 for i in links),
+    )
+
+
 @app.route("/warehouses")
 @login_required
 def warehouses_home():
@@ -930,12 +956,33 @@ def warehouses_home():
         "ops_tx": db.count_warehouse_tx_by_source("ops"),
         "projects": _count("projects"),
         "projects_tx": db.count_warehouse_tx_by_source("projects"),
-        "items": _count("warehouse_items"),
+        "items_count": _count("warehouse_items"),
     }
+    qty_totals = db.warehouse_movements_totals()
     return render_template(
         "warehouses_home.html",
         counts=counts,
         recent_tx=recent_tx,
+        qty_totals=qty_totals,
+    )
+
+
+@app.route("/warehouses/summary")
+@login_required
+def warehouse_movements_summary():
+    """صفحة إجمالي كميات الوارد والمنصرف والمتبقي بدون تفصيل الحركات."""
+    db.backfill_warehouse_tx_sources()
+    source = (request.args.get("source") or "").strip().lower()
+    if source not in ("", "ops", "constructions", "projects", "external", "contractors"):
+        source = ""
+    totals = db.warehouse_movements_totals(source or None)
+    by_source = db.warehouse_movements_totals_by_source()
+    return render_template(
+        "warehouse_movements_summary.html",
+        totals=totals,
+        by_source=by_source,
+        source_filter=source,
+        warehouse_active="summary",
     )
 
 
@@ -1026,9 +1073,9 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         sql = "SELECT * FROM tickets WHERE 1=1"
         params = []
         if q:
-            sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ?)"
+            sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR work_order LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ?)"
             like = f"%{q}%"
-            params.extend([like, like, like, like, like])
+            params.extend([like, like, like, like, like, like])
         if status:
             sql += " AND status=?"
             params.append(status)
@@ -1815,6 +1862,172 @@ def external_purchases_home():
     )
 
 
+@app.route("/module/external_purchases/<int:row_id>/lines/add", methods=["POST"])
+@login_required
+def purchase_line_add(row_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    item_no = (request.form.get("item_no") or "").strip()
+    qty_raw = (request.form.get("qty") or "").strip()
+    price_raw = (request.form.get("unit_price") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    try:
+        qty = float(qty_raw) if qty_raw != "" else 0.0
+    except ValueError:
+        flash(_t("الكمية غير صالحة"), "danger")
+        return redirect(url_for("module_edit", name="external_purchases", row_id=row_id))
+    try:
+        unit_price = float(price_raw) if price_raw != "" else 0.0
+    except ValueError:
+        unit_price = 0.0
+    try:
+        db.add_purchase_line(row_id, item_no=item_no, qty=qty, unit_price=unit_price, notes=notes)
+        flash(_t("تمت إضافة الصنف"), "ok")
+        db.log_audit(current_user_name(), "إضافة صنف شراء", "المشتريات الخارجية", row_id, f"{item_no} × {qty}")
+        _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="external_purchases", row_id=row_id))
+
+
+@app.route("/module/external_purchases/lines/<int:line_id>/delete", methods=["POST"])
+@login_required
+def purchase_line_delete(line_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    line = conn.execute("SELECT purchase_id FROM external_purchase_lines WHERE id=?", (line_id,)).fetchone()
+    purchase_id = line["purchase_id"] if line else None
+    conn.close()
+    if not purchase_id:
+        flash(_t("السطر غير موجود"), "danger")
+        return redirect(url_for("module_list", name="external_purchases"))
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("module_edit", name="external_purchases", row_id=purchase_id))
+    try:
+        db.delete_purchase_line(line_id)
+        flash(_t("تم حذف الصنف"), "ok")
+        db.log_audit(current_user_name(), "حذف صنف شراء", "المشتريات الخارجية", purchase_id, str(line_id))
+        _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="external_purchases", row_id=purchase_id))
+
+
+@app.route("/module/external_purchases/<int:row_id>/receive", methods=["POST"])
+@login_required
+def purchase_receive_warehouse(row_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    try:
+        result = db.receive_purchase_to_warehouse(row_id)
+        if result.get("already"):
+            flash(_t("الطلب مرحّل مسبقاً بسند {no}", no=result.get("voucher_no")), "ok")
+        else:
+            flash(
+                _t(
+                    "تم ترحيل {n} صنفاً للمستودع بسند {no}",
+                    n=result.get("created") or 0,
+                    no=result.get("voucher_no"),
+                ),
+                "ok",
+            )
+            db.log_audit(
+                current_user_name(),
+                "ترحيل شراء للمستودع",
+                "المشتريات الخارجية",
+                row_id,
+                result.get("voucher_no") or "",
+            )
+            _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="external_purchases", row_id=row_id))
+
+
+@app.route("/module/contractor_supplies/<int:row_id>/lines/add", methods=["POST"])
+@login_required
+def contractor_supply_line_add(row_id):
+    if not permissions.can("section.contractors") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    item_no = (request.form.get("item_no") or "").strip()
+    qty_raw = (request.form.get("qty") or "").strip()
+    price_raw = (request.form.get("unit_price") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    try:
+        qty = float(qty_raw) if qty_raw != "" else 0.0
+    except ValueError:
+        flash(_t("الكمية غير صالحة"), "danger")
+        return redirect(url_for("module_edit", name="contractor_supplies", row_id=row_id))
+    try:
+        unit_price = float(price_raw) if price_raw != "" else 0.0
+    except ValueError:
+        unit_price = 0.0
+    try:
+        db.add_contractor_supply_line(row_id, item_no=item_no, qty=qty, unit_price=unit_price, notes=notes)
+        flash(_t("تمت إضافة الصنف"), "ok")
+        db.log_audit(current_user_name(), "إضافة مادة موردة", "مواد موردة من مقاول", row_id, f"{item_no} × {qty}")
+        _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="contractor_supplies", row_id=row_id))
+
+
+@app.route("/module/contractor_supplies/lines/<int:line_id>/delete", methods=["POST"])
+@login_required
+def contractor_supply_line_delete(line_id):
+    if not permissions.can("section.contractors") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    line = conn.execute("SELECT supply_id FROM contractor_supply_lines WHERE id=?", (line_id,)).fetchone()
+    supply_id = line["supply_id"] if line else None
+    conn.close()
+    if not supply_id:
+        flash(_t("السطر غير موجود"), "danger")
+        return redirect(url_for("module_list", name="contractor_supplies"))
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("module_edit", name="contractor_supplies", row_id=supply_id))
+    try:
+        db.delete_contractor_supply_line(line_id)
+        flash(_t("تم حذف الصنف"), "ok")
+        db.log_audit(current_user_name(), "حذف مادة موردة", "مواد موردة من مقاول", supply_id, str(line_id))
+        _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="contractor_supplies", row_id=supply_id))
+
+
+@app.route("/module/contractor_supplies/<int:row_id>/receive", methods=["POST"])
+@login_required
+def contractor_supply_receive_warehouse(row_id):
+    if not permissions.can("section.contractors") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    try:
+        result = db.receive_contractor_supply_to_warehouse(row_id)
+        if result.get("already"):
+            flash(_t("التوريد مرحّل مسبقاً بسند {no}", no=result.get("voucher_no")), "ok")
+        else:
+            flash(
+                _t(
+                    "تم ترحيل {n} صنفاً للمستودع بسند {no}",
+                    n=result.get("created") or 0,
+                    no=result.get("voucher_no"),
+                ),
+                "ok",
+            )
+            db.log_audit(
+                current_user_name(),
+                "ترحيل مواد مقاول للمستودع",
+                "مواد موردة من مقاول",
+                row_id,
+                result.get("voucher_no") or "",
+            )
+            _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="contractor_supplies", row_id=row_id))
+
+
 @app.route("/financial")
 @login_required
 def financial_home():
@@ -2042,9 +2255,9 @@ def tickets_list():
     sql = "SELECT * FROM tickets WHERE 1=1"
     params = []
     if q:
-        sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ? OR agent LIKE ?)"
+        sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR work_order LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ? OR agent LIKE ?)"
         like = f"%{q}%"
-        params.extend([like, like, like, like, like, like])
+        params.extend([like, like, like, like, like, like, like])
     if status:
         sql += " AND status = ?"
         params.append(status)
@@ -2120,9 +2333,9 @@ def ticket_new():
                 f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
             )
             new_id = cur.lastrowid
-            flash(_t("تم إنشاء العطل بنجاح — كود ركاز {code} — الخطوة التالية: إضافة الكمية", code=data.get("rekaz_code")), "ok")
+            flash(_t("تم إنشاء العطل بنجاح — كود ركاز {code}", code=data.get("rekaz_code")), "ok")
             _after_data_change()
-            return _ticket_edit_redirect(new_id, "boq")
+            return _ticket_edit_redirect(new_id, "data")
         except Exception as exc:
             flash(_t("تعذر الحفظ: {exc}", exc=exc), "danger")
         finally:
@@ -2292,7 +2505,7 @@ def ticket_edit(ticket_id):
             f"UPDATE tickets SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?",
             [data[f] for f in TICKET_FIELDS] + [ticket_id],
         )
-        db.sync_warehouse_tx_work_order_for_ticket(
+        db.sync_ticket_work_order_to_related(
             data.get("ticket_no") or dict(row).get("ticket_no") or "",
             data.get("work_order") or "",
             data.get("rekaz_code") or "",
@@ -2308,10 +2521,15 @@ def ticket_edit(ticket_id):
             conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
-        flash(_t("تم حفظ المعاملة — انتقل لإضافة الكمية"), "ok")
+        flash(_t("تم حفظ المعاملة"), "ok")
         _flash_excavation_link(link_res)
         _after_data_change()
-        return _ticket_edit_redirect(ticket_id, "boq")
+        # ابقَ في نفس خطوة التعديل — بدون نقل تلقائي للمستودع أو خطوة أخرى
+        stay = (request.form.get("step") or request.args.get("step") or "data").strip()
+        allowed = {s[0] for s in _ticket_wizard_steps()}
+        if stay not in allowed:
+            stay = "data"
+        return _ticket_edit_redirect(ticket_id, stay)
     conn.close()
     # التعديل يتم على صفحة العرض الكاملة (صور / بنود / …) بعد طلب التعديل
     return _ticket_edit_redirect(ticket_id, request.args.get("step") or "data")
@@ -2608,7 +2826,7 @@ def _warehouse_form_ctx():
         return "wh_constructions"
     if ctx in ("wh_projects", "warehouse_projects"):
         return "wh_projects"
-    if ctx in ("constructions", "projects", "warehouses"):
+    if ctx in ("constructions", "projects", "warehouses", "contractors"):
         return ctx
     return "warehouses"
 
@@ -2622,6 +2840,8 @@ def _warehouse_source_from_ctx(form_ctx: str) -> str:
         "wh_constructions": "constructions",
         "projects": "projects",
         "wh_projects": "projects",
+        "contractors": "contractors",
+        "wh_contractors": "contractors",
     }.get((form_ctx or "").strip().lower(), "")
 
 
@@ -2631,14 +2851,16 @@ def _warehouse_create_contexts():
         "ops",
         "constructions",
         "projects",
+        "contractors",
         "wh_ops",
         "wh_constructions",
         "wh_projects",
+        "wh_contractors",
     )
 
 
 def _warehouse_main_sections():
-    return ("ops", "constructions", "projects")
+    return ("ops", "constructions", "projects", "contractors")
 
 
 def _warehouse_source_label(section: str) -> str:
@@ -2646,12 +2868,14 @@ def _warehouse_source_label(section: str) -> str:
         "ops": _t("العمليات والصيانة"),
         "constructions": _t("الإنشاءات"),
         "projects": _t("المشاريع"),
+        "contractors": _t("مواد موردة من مقاول"),
+        "external": _t("المشتريات الخارجية"),
         "warehouses": _t("المستودعات"),
     }.get(section or "", section or "")
 
 
 def _redirect_after_module(name, data, form_ctx=None):
-    """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل والخطوة التالية في المعالج."""
+    """بعد حفظ سجل مرتبط بعطل: العودة لصفحة العطل في نفس الخطوة (بدون نقل تلقائي)."""
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
     if name == "primary_team_orders":
@@ -2690,7 +2914,7 @@ def _redirect_after_module(name, data, form_ctx=None):
             if source == "projects":
                 return redirect(url_for("warehouse_projects", view="movements"))
             return redirect(url_for("warehouses_home"))
-        # من الصفحة الرئيسية (معالج العطل)
+        # من الصفحة الرئيسية (معالج العطل) — ابقَ في خطوة المستودع بدون قفز تلقائي
         if (
             form_ctx == "ops"
             and tno
@@ -2701,13 +2925,8 @@ def _redirect_after_module(name, data, form_ctx=None):
             row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
             conn.close()
             if row:
-                nxt = "done"
-                allowed = {s[0] for s in _ticket_wizard_steps()}
-                if nxt not in allowed:
-                    nxt = "done"
-                label = dict(_ticket_wizard_steps()).get(nxt, nxt)
-                flash(_t("تم الحفظ — الخطوة التالية: {label}", label=label), "ok")
-                return _ticket_edit_redirect(row["id"], nxt)
+                flash(_t("تم الحفظ"), "ok")
+                return _ticket_edit_redirect(row["id"], "warehouse" if permissions.can("section.warehouses") else "done")
         if form_ctx == "constructions":
             return redirect(url_for("module_list", name="construction_works"))
         if form_ctx == "projects":
@@ -2716,23 +2935,23 @@ def _redirect_after_module(name, data, form_ctx=None):
             return redirect(url_for("warehouse_ops"))
         return redirect(url_for("warehouses_home"))
 
-    next_after = {
-        "quantities": "photos",
-        "photos": "metering",
-        "metering": "warehouse" if permissions.can("section.warehouses") else "done",
+    # بعد حفظ سجلات مرتبطة بالعطل: ارجع لنفس الخطوة بدون انتقال تلقائي
+    stay_after = {
+        "quantities": "boq",
+        "photos": "photos",
+        "metering": "metering",
     }
-    if tno and name in next_after:
+    if tno and name in stay_after:
         conn = db.connect()
         row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
         conn.close()
         if row:
-            nxt = next_after[name]
+            stay = stay_after[name]
             allowed = {s[0] for s in _ticket_wizard_steps()}
-            if nxt not in allowed:
-                nxt = "done"
-            label = dict(_ticket_wizard_steps()).get(nxt, nxt)
-            flash(_t("تم الحفظ — الخطوة التالية: {label}", label=label), "ok")
-            return _ticket_edit_redirect(row["id"], nxt)
+            if stay not in allowed:
+                stay = "data"
+            flash(_t("تم الحفظ"), "ok")
+            return _ticket_edit_redirect(row["id"], stay)
     if tno:
         return redirect(url_for("module_list", name=name, ticket_no=tno))
     return redirect(url_for("module_list", name=name))
@@ -2841,8 +3060,28 @@ def module_list(name):
         for r in rows:
             r["remaining"] = float(r.get("value") or 0) - float(r.get("collected") or 0)
     if name == "external_purchases":
+        summaries = db.purchase_lines_summary([r["id"] for r in rows if r.get("id")])
         for r in rows:
-            r["total"] = (float(r.get("qty") or 0) * float(r.get("unit_price") or 0))
+            sm = summaries.get(int(r["id"]), {})
+            r["line_count"] = sm.get("line_count") or 0
+            r["items_summary"] = sm.get("first_item") or r.get("item_name") or "—"
+            if sm.get("line_count", 0) > 1:
+                r["items_summary"] = f"{sm.get('first_item') or '—'} (+{sm['line_count'] - 1})"
+            r["total"] = sm.get("total")
+            if r["total"] is None:
+                r["total"] = float(r.get("qty") or 0) * float(r.get("unit_price") or 0)
+            r["received"] = bool((r.get("received_voucher_no") or "").strip())
+    if name == "contractor_supplies":
+        summaries = db.contractor_supply_lines_summary([r["id"] for r in rows if r.get("id")])
+        for r in rows:
+            sm = summaries.get(int(r["id"]), {})
+            r["line_count"] = sm.get("line_count") or 0
+            r["qty_total"] = sm.get("qty_total") or 0
+            r["items_summary"] = sm.get("first_item") or "—"
+            if sm.get("line_count", 0) > 1:
+                r["items_summary"] = f"{sm.get('first_item') or '—'} (+{sm['line_count'] - 1})"
+            r["total"] = sm.get("total") or 0
+            r["received"] = bool((r.get("received_voucher_no") or "").strip())
     item_filter = (request.args.get("item_no") or "").strip()
     ticket_filter = (request.args.get("ticket_no") or "").strip()
     source_filter = (request.args.get("source") or "").strip().lower()
@@ -2862,6 +3101,9 @@ def module_list(name):
         ]
     if ticket_filter and any(f[0] == "ticket_no" for f in module.get("fields", [])):
         rows = [r for r in rows if (r.get("ticket_no") or "") == ticket_filter]
+    dept_filter = (request.args.get("department") or "").strip()
+    if dept_filter and name == "reinforcement_works":
+        rows = [r for r in rows if (r.get("department") or "").strip() == dept_filter]
     excavation_filter = (request.args.get("excavation") or "").strip() in {"1", "yes", "true"}
     if excavation_filter and name in ("coordination", "quality_clearances"):
         excav_tickets = set(db.collect_excavation_ticket_nos())
@@ -2889,6 +3131,8 @@ def module_list(name):
         section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
         warehouse_source=source_filter if name == "warehouse_tx" else None,
+        department_filter=dept_filter if name == "reinforcement_works" else "",
+        reinforcement_departments=db.list_reinforcement_departments(active_only=False) if name == "reinforcement_works" else [],
     )
 
 
@@ -2916,8 +3160,13 @@ def module_new(name):
     if request.args.get("ticket_no") and "ticket_no" in prefill:
         prefill["ticket_no"] = request.args.get("ticket_no")
         ticket = db.resolve_ticket_ref(prefill["ticket_no"], conn)
-        if ticket and "rekaz_code" in prefill:
-            prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+        if ticket:
+            if "rekaz_code" in prefill and not (prefill.get("rekaz_code") or "").strip():
+                prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+            if "work_order" in prefill and not (prefill.get("work_order") or "").strip():
+                prefill["work_order"] = (ticket.get("work_order") or "").strip()
+            if request.args.get("work_order") and "work_order" in prefill:
+                prefill["work_order"] = (request.args.get("work_order") or "").strip()
         if name == "metering":
             boq_approved_total = _metering_boq_approved_total(prefill["ticket_no"], conn)
             if boq_approved_total is not None and prefill.get("approved_value") in ("", None):
@@ -2931,7 +3180,7 @@ def module_new(name):
         elif not (prefill.get("coord_kind") or "").strip():
             prefill["coord_kind"] = "تنسيق جديد"
     # ربط مسار الجودة من العمليات / الإنشاءات / المشاريع
-    for key in ("linked_section", "project_code", "construction_work_no", "district", "location", "work_desc", "authority"):
+    for key in ("linked_section", "project_code", "construction_work_no", "district", "location", "work_desc", "authority", "work_order"):
         if key in prefill and request.args.get(key):
             prefill[key] = (request.args.get(key) or "").strip()
     if "linked_section" in prefill and request.args.get("linked_section"):
@@ -2968,10 +3217,11 @@ def module_new(name):
             prefill["source_ref"] = prefill["ticket_no"]
         if prefill.get("ticket_no"):
             ticket = db.resolve_ticket_ref(prefill["ticket_no"], conn)
-            if ticket and (ticket.get("work_order") or "").strip():
-                prefill["work_order"] = ticket.get("work_order")
-            elif ticket and "rekaz_code" in prefill and not (prefill.get("rekaz_code") or "").strip():
-                prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+            if ticket:
+                if "rekaz_code" in prefill and not (prefill.get("rekaz_code") or "").strip():
+                    prefill["rekaz_code"] = ticket.get("rekaz_code") or ""
+                if (ticket.get("work_order") or "").strip():
+                    prefill["work_order"] = ticket.get("work_order")
         prefill = db.apply_warehouse_tx_work_order(prefill, conn)
         if source in ("constructions", "projects", "ops"):
             requested_type = (request.args.get("tx_type") or "").strip()
@@ -3075,6 +3325,20 @@ def module_new(name):
                 data["clearance_no"] = data["rekaz_code"]
         if name == "projects" and not (data.get("project_code") or "").strip():
             data["project_code"] = db.next_series_code("pr", conn)
+        if name == "contractor_supplies":
+            if not (data.get("supply_no") or "").strip():
+                data["supply_no"] = db.next_series_code("cs", conn)
+            if not (data.get("supply_date") or "").strip():
+                data["supply_date"] = datetime.now().strftime("%Y-%m-%d")
+            if not (data.get("status") or "").strip():
+                data["status"] = "جديد"
+        if name == "reinforcement_works":
+            if not (data.get("work_no") or "").strip():
+                data["work_no"] = db.next_series_code("rf", conn)
+            if not (data.get("work_date") or "").strip():
+                data["work_date"] = datetime.now().strftime("%Y-%m-%d")
+            if not (data.get("status") or "").strip():
+                data["status"] = "جديد"
         if name == "new_coordinations":
             if not (data.get("coord_no") or "").strip():
                 data["coord_no"] = db.next_series_code("nc", conn)
@@ -3157,6 +3421,10 @@ def module_new(name):
                 ),
                 "ok",
             )
+        elif name == "external_purchases":
+            flash(_t("تم حفظ الطلب — أضف الأصناف من المستودع ثم رحّلها."), "ok")
+        elif name == "contractor_supplies":
+            flash(_t("تم حفظ التوريد — أضف المواد من المستودع ثم رحّلها."), "ok")
         else:
             flash(_t("تمت الإضافة"), "ok")
         _flash_excavation_link(link_res)
@@ -3170,8 +3438,20 @@ def module_new(name):
                 "ok",
             )
         _after_data_change()
+        if name == "external_purchases":
+            return redirect(url_for("module_edit", name=name, row_id=new_id))
+        if name == "contractor_supplies":
+            if not (data.get("supply_no") or "").strip():
+                # تأكد من رقم توريد بعد الإدراج إن كان فارغاً
+                pass
+            return redirect(url_for("module_edit", name=name, row_id=new_id))
         return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
+    reinforcement_departments = (
+        db.list_reinforcement_departments(active_only=True)
+        if name == "reinforcement_works"
+        else []
+    )
     boq_items = []
     if request.args.get("item_no") and "item_no" in prefill:
         prefill["item_no"] = request.args.get("item_no")
@@ -3179,6 +3459,8 @@ def module_new(name):
             prefill = db.enrich_warehouse_tx_from_item(prefill)
         if name == "quantities":
             prefill = db.enrich_quantity_from_boq(prefill, conn)
+    if name == "reinforcement_works" and request.args.get("department") and "department" in prefill:
+        prefill["department"] = request.args.get("department")
     if name == "primary_team_orders":
         # الإضافة من صفحة العمليات ← الفرق الأولية فقط
         conn.close()
@@ -3193,6 +3475,7 @@ def module_new(name):
         tickets=tickets,
         ticket_options=ticket_options,
         warehouse_items=warehouse_items,
+        reinforcement_departments=reinforcement_departments,
         boq_items=boq_items,
         mode="new",
         section=section,
@@ -3302,6 +3585,16 @@ def module_edit(name, row_id):
             data["rekaz_code"] = db.next_series_code("rr", conn)
         if name == "projects" and not (data.get("project_code") or "").strip():
             data["project_code"] = db.next_series_code("pr", conn)
+        if name == "contractor_supplies":
+            if not (data.get("supply_no") or "").strip():
+                data["supply_no"] = dict(row).get("supply_no") or db.next_series_code("cs", conn)
+            if not (data.get("status") or "").strip():
+                data["status"] = dict(row).get("status") or "جديد"
+        if name == "reinforcement_works":
+            if not (data.get("work_no") or "").strip():
+                data["work_no"] = dict(row).get("work_no") or db.next_series_code("rf", conn)
+            if not (data.get("status") or "").strip():
+                data["status"] = dict(row).get("status") or "جديد"
         if name == "new_coordinations":
             if not (data.get("coord_no") or "").strip():
                 data["coord_no"] = dict(row).get("coord_no") or db.next_series_code("nc", conn)
@@ -3376,13 +3669,41 @@ def module_edit(name, row_id):
             edit_ctx = "warehouses"
         return _redirect_after_module(name, data, form_ctx=edit_ctx)
     data = dict(row)
-    warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
+    warehouse_items = (
+        db.list_warehouse_items()
+        if name in ("warehouse_tx", "external_purchases", "contractor_supplies")
+        else []
+    )
     boq_items = []
     boq_approved_total = None
     if name == "metering":
         boq_approved_total = _metering_boq_approved_total(data.get("ticket_no"), conn)
         if boq_approved_total is not None and data.get("approved_value") in (None, ""):
             data["approved_value"] = boq_approved_total
+    quality_workflow = None
+    purchase_lines = []
+    supply_lines = []
+    if name == "construction_works":
+        quality_workflow = db.quality_workflow_for_ref(
+            ticket_no=data.get("ticket_no"),
+            construction_work_no=data.get("work_no"),
+            linked_section="constructions",
+            conn=conn,
+        )
+    elif name == "projects":
+        quality_workflow = db.quality_workflow_for_ref(
+            ticket_no=data.get("ticket_no"),
+            project_code=data.get("project_code"),
+            linked_section="projects",
+            conn=conn,
+        )
+    elif name == "external_purchases":
+        purchase_lines = db.list_purchase_lines(row_id, conn=conn)
+    elif name == "contractor_supplies":
+        supply_lines = db.list_contractor_supply_lines(row_id, conn=conn)
+    reinforcement_departments = []
+    if name == "reinforcement_works":
+        reinforcement_departments = db.list_reinforcement_departments(active_only=False, conn=conn)
     conn.close()
     section = module.get("section")
     return render_template(
@@ -3401,6 +3722,10 @@ def module_edit(name, row_id):
         photo_storage=media_svc.storage_backend() if name == "photos" else None,
         photo_ephemeral=backup_svc.is_trial_free() if name == "photos" else False,
         boq_approved_total=boq_approved_total,
+        quality_workflow=quality_workflow,
+        purchase_lines=purchase_lines,
+        supply_lines=supply_lines,
+        reinforcement_departments=reinforcement_departments,
         form_ctx=(
             _warehouse_form_ctx() or "warehouses"
             if name == "warehouse_tx"

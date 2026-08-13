@@ -65,13 +65,17 @@ DEFAULT_LISTS = {
         "إرجاع للكهرباء",
         "إرجاع للمجمعة",
         "وارد من موقع العمل",
+        "وارد من مشتريات خارجية",
+        "وارد مواد موردة من مقاول",
         "رصيد افتتاحي",
     ],
     "purchase_status": ["جديد", "معتمد", "تم الشراء", "ملغي"],
+    "contractor_supply_status": ["جديد", "معتمد", "تم التوريد", "ملغي"],
     "custody_status": ["مسلمة", "مرتجعة", "مفقودة"],
     "vehicle_status": ["عاملة", "صيانة", "متوقفة"],
     "equipment_status": ["جاهزة", "صيانة", "تخريد"],
     "contract_status": ["ساري", "منتهي", "موقوف"],
+    "yes_no_active": ["نشط", "موقوف"],
     "hr_departments": ["العمليات", "المستودعات", "الجودة", "السلامة", "المالية", "الموارد البشرية", "الإدارة"],
     "hr_status": ["على رأس العمل", "إجازة", "منتهي"],
     "user_roles": ["admin", "مشرف", "مدخل بيانات", "مراقب"],
@@ -218,6 +222,72 @@ EXTRA_TABLE_DDL = {
             notes TEXT
         )
     """,
+    "external_purchase_lines": """
+        CREATE TABLE IF NOT EXISTS external_purchase_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            purchase_id INTEGER NOT NULL,
+            purchase_no TEXT,
+            item_no TEXT,
+            item_name TEXT,
+            unit TEXT,
+            qty REAL,
+            unit_price REAL,
+            line_total REAL,
+            warehouse_tx_id INTEGER,
+            notes TEXT
+        )
+    """,
+    "contractor_supplies": """
+        CREATE TABLE IF NOT EXISTS contractor_supplies (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supply_no TEXT,
+            supply_date TEXT,
+            contractor TEXT,
+            ticket_no TEXT,
+            work_no TEXT,
+            status TEXT,
+            notes TEXT,
+            received_voucher_no TEXT
+        )
+    """,
+    "contractor_supply_lines": """
+        CREATE TABLE IF NOT EXISTS contractor_supply_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            supply_id INTEGER NOT NULL,
+            supply_no TEXT,
+            item_no TEXT,
+            item_name TEXT,
+            unit TEXT,
+            qty REAL,
+            unit_price REAL,
+            line_total REAL,
+            warehouse_tx_id INTEGER,
+            notes TEXT
+        )
+    """,
+    "reinforcement_departments": """
+        CREATE TABLE IF NOT EXISTS reinforcement_departments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            dept_name TEXT,
+            dept_code TEXT,
+            status TEXT,
+            notes TEXT
+        )
+    """,
+    "reinforcement_works": """
+        CREATE TABLE IF NOT EXISTS reinforcement_works (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            work_no TEXT,
+            work_date TEXT,
+            department TEXT,
+            work_type TEXT,
+            location TEXT,
+            ticket_no TEXT,
+            status TEXT,
+            value REAL,
+            notes TEXT
+        )
+    """,
     "new_coordinations": """
         CREATE TABLE IF NOT EXISTS new_coordinations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -339,6 +409,19 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "construction_works" in existing or "construction_works" in created:
             if _ensure_column(conn, "construction_works", "ticket_no"):
                 created.append("construction_works.ticket_no")
+        if "external_purchases" in existing or "external_purchases" in created:
+            if _ensure_column(conn, "external_purchases", "received_voucher_no"):
+                created.append("external_purchases.received_voucher_no")
+            migrated = migrate_external_purchase_lines(conn)
+            if migrated:
+                created.append(f"external_purchase_lines_migrate:{migrated}")
+        if "contractor_supplies" in existing or "contractor_supplies" in created:
+            if _ensure_column(conn, "contractor_supplies", "received_voucher_no"):
+                created.append("contractor_supplies.received_voucher_no")
+        if "reinforcement_departments" in existing or "reinforcement_departments" in created:
+            seeded = seed_reinforcement_departments(conn)
+            if seeded:
+                created.append(f"reinforcement_departments_seed:{seeded}")
         if "new_coordinations" in existing or "new_coordinations" in created:
             if _ensure_column(conn, "new_coordinations", "coord_kind"):
                 created.append("new_coordinations.coord_kind")
@@ -373,6 +456,12 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             n_scrub = scrub_ticket_numbers_from_warehouse_work_orders(conn)
             if n_scrub:
                 created.append(f"warehouse_tx.work_order_scrub:{n_scrub}")
+        if "safety_permits" in existing or "safety_permits" in created:
+            if _ensure_column(conn, "safety_permits", "work_order"):
+                created.append("safety_permits.work_order")
+        if "invoices" in existing or "invoices" in created:
+            if _ensure_column(conn, "invoices", "work_order"):
+                created.append("invoices.work_order")
         # إصلاح مضاعفة نسبة الطوارئ على بنود العقد (مرة واحدة في القيمة النهائية فقط)
         if "ticket_boq_lines" in existing or "ticket_boq_lines" in created:
             n_boq = repair_boq_emergency_double_count(conn)
@@ -587,6 +676,7 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             permit_no TEXT,
             ticket_no TEXT,
+            work_order TEXT,
             permit_date TEXT,
             location TEXT,
             issuer TEXT,
@@ -987,6 +1077,8 @@ def next_series_code(series: str, conn=None) -> str:
         "pr": ("PR", "pr_next", "pr_prefix"),
         "nc": ("NC", "nc_next", "nc_prefix"),
         "rl": ("RL", "rl_next", "rl_prefix"),
+        "cs": ("CS", "cs_next", "cs_prefix"),
+        "rf": ("RF", "rf_next", "rf_prefix"),
     }
     if series not in defaults:
         raise ValueError(f"سلسلة غير معروفة: {series}")
@@ -1020,6 +1112,14 @@ def next_series_code(series: str, conn=None) -> str:
             taken = conn.execute(
                 "SELECT 1 FROM issued_licenses WHERE lower(license_no)=lower(?) LIMIT 1", (code,)
             ).fetchone()
+        elif series == "cs":
+            taken = conn.execute(
+                "SELECT 1 FROM contractor_supplies WHERE lower(supply_no)=lower(?) LIMIT 1", (code,)
+            ).fetchone()
+        elif series == "rf":
+            taken = conn.execute(
+                "SELECT 1 FROM reinforcement_works WHERE lower(work_no)=lower(?) LIMIT 1", (code,)
+            ).fetchone()
         if not taken:
             conn.execute(
                 "INSERT INTO settings(key,value) VALUES (?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
@@ -1040,7 +1140,7 @@ def count_warehouse_tx_by_source(source: str | None = None, conn=None) -> int:
     own = conn is None
     conn = conn or connect()
     source = (source or "").strip().lower()
-    if source in ("ops", "constructions", "projects"):
+    if source in ("ops", "constructions", "projects", "external", "contractors"):
         n = conn.execute(
             "SELECT COUNT(*) FROM warehouse_tx WHERE lower(coalesce(source_section,''))=?",
             (source,),
@@ -1131,40 +1231,85 @@ def sync_warehouse_tx_work_order_for_ticket(
     conn=None,
 ) -> int:
     """يحدّث أمر العمل في حركات المستودع المرتبطة بالعطل عند تغييره من الصفحة الرئيسية."""
+    return sync_ticket_work_order_to_related(ticket_no, work_order, rekaz_code, conn)
+
+
+def sync_ticket_work_order_to_related(
+    ticket_no: str,
+    work_order: str,
+    rekaz_code: str = "",
+    conn=None,
+) -> int:
+    """ينسخ أمر العمل من العطل إلى المستودع والمستخلصات والرخص المرتبطة."""
     tno = (ticket_no or "").strip()
     if not tno:
         return 0
     own = conn is None
     conn = conn or connect()
     try:
-        _ensure_column(conn, "warehouse_tx", "work_order")
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
         wo = (work_order or "").strip()
         # لا تكتب رقم العطل في عمود أمر العمل
         if wo and _is_ticket_identifier(wo, conn, {"ticket_no": tno, "rekaz_code": rekaz_code or ""}):
             wo = ""
         code = (rekaz_code or "").strip()
-        if code:
+        total = 0
+
+        if "warehouse_tx" in tables:
+            _ensure_column(conn, "warehouse_tx", "work_order")
+            if code:
+                cur = conn.execute(
+                    """
+                    UPDATE warehouse_tx
+                    SET work_order=?
+                    WHERE ticket_no=?
+                       OR (source_section='ops' AND source_ref=?)
+                       OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
+                    """,
+                    (wo, tno, tno, code),
+                )
+            else:
+                cur = conn.execute(
+                    """
+                    UPDATE warehouse_tx
+                    SET work_order=?
+                    WHERE ticket_no=?
+                       OR (source_section='ops' AND source_ref=?)
+                    """,
+                    (wo, tno, tno),
+                )
+            total += int(cur.rowcount or 0)
+
+        if "invoices" in tables:
+            _ensure_column(conn, "invoices", "work_order")
             cur = conn.execute(
-                """
-                UPDATE warehouse_tx
-                SET work_order=?
-                WHERE ticket_no=?
-                   OR (source_section='ops' AND source_ref=?)
-                   OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?))
-                """,
-                (wo, tno, tno, code),
+                "UPDATE invoices SET work_order=? WHERE ticket_no=?",
+                (wo, tno),
             )
-        else:
+            total += int(cur.rowcount or 0)
+
+        if "issued_licenses" in tables:
+            _ensure_column(conn, "issued_licenses", "work_order")
             cur = conn.execute(
-                """
-                UPDATE warehouse_tx
-                SET work_order=?
-                WHERE ticket_no=?
-                   OR (source_section='ops' AND source_ref=?)
-                """,
-                (wo, tno, tno),
+                "UPDATE issued_licenses SET work_order=? WHERE ticket_no=?",
+                (wo, tno),
             )
-        return int(cur.rowcount or 0)
+            total += int(cur.rowcount or 0)
+
+        if "safety_permits" in tables:
+            _ensure_column(conn, "safety_permits", "work_order")
+            cur = conn.execute(
+                "UPDATE safety_permits SET work_order=? WHERE ticket_no=?",
+                (wo, tno),
+            )
+            total += int(cur.rowcount or 0)
+
+        return total
     finally:
         if own:
             conn.commit()
@@ -2029,6 +2174,20 @@ def transfer_new_coordination_to_license(
     ltype = (license_type or "").strip() or ("حفر" if is_excavation_text(coord.get("work_desc"), coord.get("notes")) else "أخرى")
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+    # أمر العمل الحقيقي من العطل إن وُجد — لا تستخدم رقم العطل كأمر عمل
+    wo = ""
+    tno = (coord.get("ticket_no") or "").strip()
+    if tno:
+        ticket = resolve_ticket_ref(tno, conn)
+        if ticket:
+            wo = (ticket.get("work_order") or "").strip()
+            if wo and _is_ticket_identifier(wo, conn, {"ticket_no": tno, "rekaz_code": ticket.get("rekaz_code") or ""}):
+                wo = ""
+    if not wo:
+        cref = (coord.get("construction_work_no") or "").strip()
+        if cref and (not tno or cref != tno):
+            wo = cref
+
     cur = conn.execute(
         """
         INSERT INTO issued_licenses(
@@ -2055,7 +2214,7 @@ def transfer_new_coordination_to_license(
             coord.get("work_desc") or "",
             (coord.get("notes") or "")[:500],
             coord.get("district") or "",
-            coord.get("construction_work_no") or coord.get("ticket_no") or "",
+            wo,
             lic_no,
             "متابعة بعد الإصدار",
         ),
@@ -2984,6 +3143,136 @@ def warehouse_balance_detail(item_no):
     }
 
 
+def warehouse_movements_totals(source_section: str | None = None, conn=None) -> dict:
+    """إجمالي كميات الوارد / المنصرف / المتبقي بدون تفصيل المواد."""
+    own = conn is None
+    conn = conn or connect()
+    params: list = []
+    where = "1=1"
+    section = (source_section or "").strip().lower()
+    if section in ("ops", "constructions", "projects", "external", "contractors"):
+        where = "lower(coalesce(source_section,''))=?"
+        params.append(section)
+    rows = conn.execute(
+        f"SELECT tx_type, qty FROM warehouse_tx WHERE {where}",
+        params,
+    ).fetchall()
+    if own:
+        conn.close()
+    inbound = outbound = 0.0
+    for r in rows:
+        qty = float(r["qty"] or 0)
+        sign = warehouse_tx_sign(r["tx_type"])
+        if sign > 0:
+            inbound += qty
+        elif sign < 0:
+            outbound += qty
+    return {
+        "inbound": inbound,
+        "outbound": outbound,
+        "balance": inbound - outbound,
+        "tx_count": len(rows),
+        "source_section": section or "all",
+    }
+
+
+def warehouse_movements_totals_by_source(conn=None) -> list[dict]:
+    """إجماليات الكميات مجمّعة حسب القسم المصدر."""
+    own = conn is None
+    conn = conn or connect()
+    sections = [
+        ("ops", "العمليات والصيانة"),
+        ("constructions", "الإنشاءات"),
+        ("projects", "المشاريع"),
+        ("external", "المشتريات الخارجية"),
+        ("contractors", "مواد موردة من مقاول"),
+        ("", "غير مصنّف"),
+    ]
+    out = []
+    for key, label in sections:
+        if key:
+            totals = warehouse_movements_totals(key, conn=conn)
+        else:
+            rows = conn.execute(
+                """
+                SELECT tx_type, qty FROM warehouse_tx
+                WHERE trim(coalesce(source_section,''))=''
+                   OR lower(trim(source_section)) NOT IN ('ops','constructions','projects','external','contractors')
+                """
+            ).fetchall()
+            inbound = outbound = 0.0
+            for r in rows:
+                qty = float(r["qty"] or 0)
+                sign = warehouse_tx_sign(r["tx_type"])
+                if sign > 0:
+                    inbound += qty
+                elif sign < 0:
+                    outbound += qty
+            totals = {
+                "inbound": inbound,
+                "outbound": outbound,
+                "balance": inbound - outbound,
+                "tx_count": len(rows),
+                "source_section": "other",
+            }
+        if totals["tx_count"] <= 0 and key == "":
+            continue
+        totals["label"] = label
+        totals["key"] = key or "other"
+        out.append(totals)
+    if own:
+        conn.close()
+    return out
+
+
+def seed_reinforcement_departments(conn=None) -> int:
+    """بذور أقسام افتراضية إن كان الجدول فارغاً — يمكن إضافة المزيد يدوياً."""
+    own = conn is None
+    conn = conn or connect()
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "reinforcement_departments" not in tables:
+        if own:
+            conn.close()
+        return 0
+    n = conn.execute("SELECT COUNT(*) FROM reinforcement_departments").fetchone()[0]
+    if int(n or 0) > 0:
+        if own:
+            conn.close()
+        return 0
+    seeds = [
+        ("صيانة العدادات", "METER", "نشط", "قسم افتراضي — يمكن تعديله أو إضافة أقسام أخرى"),
+        ("صيانة المحطات", "STATION", "نشط", "قسم افتراضي — يمكن تعديله أو إضافة أقسام أخرى"),
+    ]
+    for name, code, status, notes in seeds:
+        conn.execute(
+            "INSERT INTO reinforcement_departments(dept_name, dept_code, status, notes) VALUES (?,?,?,?)",
+            (name, code, status, notes),
+        )
+    if own:
+        conn.commit()
+        conn.close()
+    return len(seeds)
+
+
+def list_reinforcement_departments(active_only: bool = True, conn=None) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "reinforcement_departments" not in tables:
+        if own:
+            conn.close()
+        return []
+    sql = "SELECT * FROM reinforcement_departments"
+    params: list = []
+    if active_only:
+        sql += " WHERE status IS NULL OR trim(status)='' OR status='نشط' OR status='نعم'"
+    sql += " ORDER BY dept_name"
+    rows = rows_to_dicts(conn.execute(sql, params).fetchall())
+    if own:
+        conn.close()
+    return rows
+
+
 def list_warehouse_items():
     conn = connect()
     rows = rows_to_dicts(conn.execute("SELECT * FROM warehouse_items ORDER BY item_no").fetchall())
@@ -2999,6 +3288,512 @@ def clear_warehouse_balances() -> int:
     conn.commit()
     conn.close()
     return int(deleted)
+
+
+def migrate_external_purchase_lines(conn=None) -> int:
+    """ينقل أصناف الطلبات القديمة (صنف واحد في الرأس) إلى جدول الأسطر."""
+    own = conn is None
+    conn = conn or connect()
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+    if "external_purchases" not in tables:
+        if own:
+            conn.close()
+        return 0
+    if "external_purchase_lines" not in tables:
+        conn.execute(EXTRA_TABLE_DDL["external_purchase_lines"])
+    moved = 0
+    rows = rows_to_dicts(conn.execute("SELECT * FROM external_purchases").fetchall())
+    for po in rows:
+        pid = po.get("id")
+        has_lines = conn.execute(
+            "SELECT 1 FROM external_purchase_lines WHERE purchase_id=? LIMIT 1",
+            (pid,),
+        ).fetchone()
+        if has_lines:
+            continue
+        name = (po.get("item_name") or "").strip()
+        qty = po.get("qty")
+        price = po.get("unit_price")
+        if not name and qty in (None, "", 0) and price in (None, "", 0):
+            continue
+        try:
+            q = float(qty or 0)
+        except (TypeError, ValueError):
+            q = 0.0
+        try:
+            p = float(price or 0)
+        except (TypeError, ValueError):
+            p = 0.0
+        conn.execute(
+            """
+            INSERT INTO external_purchase_lines(
+              purchase_id, purchase_no, item_no, item_name, unit, qty, unit_price, line_total
+            ) VALUES (?,?,?,?,?,?,?,?)
+            """,
+            (
+                pid,
+                po.get("purchase_no") or "",
+                "",
+                name or "صنف قديم",
+                "",
+                q,
+                p,
+                round(q * p, 2),
+            ),
+        )
+        moved += 1
+    if own:
+        conn.commit()
+        conn.close()
+    return moved
+
+
+def list_purchase_lines(purchase_id: int, conn=None) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    rows = rows_to_dicts(
+        conn.execute(
+            "SELECT * FROM external_purchase_lines WHERE purchase_id=? ORDER BY id",
+            (purchase_id,),
+        ).fetchall()
+    )
+    if own:
+        conn.close()
+    return rows
+
+
+def purchase_lines_summary(purchase_ids: list[int] | None = None, conn=None) -> dict[int, dict]:
+    """ملخص أصناف الطلبات: العدد والإجمالي وأول اسم مادة."""
+    own = conn is None
+    conn = conn or connect()
+    out: dict[int, dict] = {}
+    if purchase_ids is not None and not purchase_ids:
+        if own:
+            conn.close()
+        return out
+    sql = """
+        SELECT purchase_id,
+               COUNT(*) AS line_count,
+               COALESCE(SUM(COALESCE(line_total, qty * unit_price)), 0) AS total,
+               MIN(item_name) AS first_item
+        FROM external_purchase_lines
+    """
+    params: list = []
+    if purchase_ids is not None:
+        placeholders = ",".join("?" * len(purchase_ids))
+        sql += f" WHERE purchase_id IN ({placeholders})"
+        params.extend(purchase_ids)
+    sql += " GROUP BY purchase_id"
+    for r in rows_to_dicts(conn.execute(sql, params).fetchall()):
+        out[int(r["purchase_id"])] = {
+            "line_count": int(r["line_count"] or 0),
+            "total": float(r["total"] or 0),
+            "first_item": r.get("first_item") or "",
+        }
+    if own:
+        conn.close()
+    return out
+
+
+def add_purchase_line(
+    purchase_id: int,
+    *,
+    item_no: str,
+    qty: float,
+    unit_price: float | None = None,
+    notes: str = "",
+    conn=None,
+) -> dict:
+    own = conn is None
+    conn = conn or connect()
+    po = conn.execute("SELECT * FROM external_purchases WHERE id=?", (purchase_id,)).fetchone()
+    if not po:
+        if own:
+            conn.close()
+        raise ValueError("طلب الشراء غير موجود")
+    if (po["received_voucher_no"] if "received_voucher_no" in po.keys() else None):
+        if own:
+            conn.close()
+        raise ValueError("تم ترحيل الطلب للمستودع — لا يمكن تعديل الأصناف")
+    item_no = (item_no or "").strip()
+    if not item_no:
+        if own:
+            conn.close()
+        raise ValueError("اختر مادة من المستودع")
+    item = conn.execute(
+        "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+        (item_no,),
+    ).fetchone()
+    if not item:
+        if own:
+            conn.close()
+        raise ValueError(f"رقم المادة «{item_no}» غير موجود في المستودع")
+    try:
+        q = float(qty)
+    except (TypeError, ValueError):
+        q = 0.0
+    if q <= 0:
+        if own:
+            conn.close()
+        raise ValueError("أدخل كمية صحيحة")
+    try:
+        price = float(unit_price) if unit_price not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        price = 0.0
+    line_total = round(q * price, 2)
+    cur = conn.execute(
+        """
+        INSERT INTO external_purchase_lines(
+          purchase_id, purchase_no, item_no, item_name, unit, qty, unit_price, line_total, notes
+        ) VALUES (?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            purchase_id,
+            po["purchase_no"] or "",
+            item["item_no"],
+            item["item_name"] or "",
+            item["unit"] or "",
+            q,
+            price,
+            line_total,
+            (notes or "").strip(),
+        ),
+    )
+    # حدّث ملخص الرأس للتوافق مع القوائم القديمة
+    conn.execute(
+        """
+        UPDATE external_purchases
+        SET item_name=?, qty=?, unit_price=?
+        WHERE id=?
+        """,
+        (item["item_name"] or "", q, price, purchase_id),
+    )
+    line_id = cur.lastrowid
+    if own:
+        conn.commit()
+        conn.close()
+    return {"id": line_id, "item_no": item["item_no"], "qty": q, "line_total": line_total}
+
+
+def delete_purchase_line(line_id: int, conn=None) -> None:
+    own = conn is None
+    conn = conn or connect()
+    line = conn.execute("SELECT * FROM external_purchase_lines WHERE id=?", (line_id,)).fetchone()
+    if not line:
+        if own:
+            conn.close()
+        raise ValueError("السطر غير موجود")
+    po = conn.execute("SELECT * FROM external_purchases WHERE id=?", (line["purchase_id"],)).fetchone()
+    if po and (dict(po).get("received_voucher_no") or "").strip():
+        if own:
+            conn.close()
+        raise ValueError("تم ترحيل الطلب للمستودع — لا يمكن حذف الأصناف")
+    if line["warehouse_tx_id"]:
+        if own:
+            conn.close()
+        raise ValueError("الصنف مرحّل للمستودع")
+    conn.execute("DELETE FROM external_purchase_lines WHERE id=?", (line_id,))
+    if own:
+        conn.commit()
+        conn.close()
+
+
+def receive_purchase_to_warehouse(purchase_id: int, conn=None) -> dict:
+    """يرحّل أصناف طلب الشراء كوارد للمستودع (مرة واحدة)."""
+    own = conn is None
+    conn = conn or connect()
+    po = conn.execute("SELECT * FROM external_purchases WHERE id=?", (purchase_id,)).fetchone()
+    if not po:
+        if own:
+            conn.close()
+        raise ValueError("طلب الشراء غير موجود")
+    po = dict(po)
+    if (po.get("received_voucher_no") or "").strip():
+        if own:
+            conn.close()
+        return {"already": True, "voucher_no": po["received_voucher_no"], "created": 0}
+    lines = list_purchase_lines(purchase_id, conn=conn)
+    if not lines:
+        if own:
+            conn.close()
+        raise ValueError("أضف صنفاً واحداً على الأقل قبل الترحيل للمستودع")
+    missing = [ln for ln in lines if not (ln.get("item_no") or "").strip()]
+    if missing:
+        if own:
+            conn.close()
+        raise ValueError("كل الأصناف يجب أن تكون مربوطة برقم مادة من المستودع")
+    voucher = next_warehouse_voucher_no(conn)
+    tx_date = (po.get("purchase_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+    tx_type = "وارد من مشتريات خارجية"
+    created = 0
+    for ln in lines:
+        if ln.get("warehouse_tx_id"):
+            continue
+        cur = conn.execute(
+            """
+            INSERT INTO warehouse_tx(
+              voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+              recipient, sender, ticket_no, rekaz_code, source_section, source_ref, work_order, region, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                voucher,
+                tx_date,
+                tx_type,
+                ln.get("item_no") or "",
+                ln.get("item_name") or "",
+                ln.get("unit") or "",
+                float(ln.get("qty") or 0),
+                "المستودع",
+                po.get("supplier") or "مشتريات خارجية",
+                po.get("ticket_no") or "",
+                "",
+                "external",
+                po.get("purchase_no") or str(purchase_id),
+                "",
+                "",
+                (ln.get("notes") or po.get("notes") or "").strip(),
+            ),
+        )
+        conn.execute(
+            "UPDATE external_purchase_lines SET warehouse_tx_id=? WHERE id=?",
+            (cur.lastrowid, ln["id"]),
+        )
+        created += 1
+    conn.execute(
+        """
+        UPDATE external_purchases
+        SET received_voucher_no=?, status=CASE
+              WHEN status IS NULL OR trim(status)='' OR status='جديد' OR status='معتمد' THEN 'تم الشراء'
+              ELSE status END
+        WHERE id=?
+        """,
+        (voucher, purchase_id),
+    )
+    if own:
+        conn.commit()
+        conn.close()
+    return {"already": False, "voucher_no": voucher, "created": created}
+
+
+def list_contractor_supply_lines(supply_id: int, conn=None) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    rows = rows_to_dicts(
+        conn.execute(
+            "SELECT * FROM contractor_supply_lines WHERE supply_id=? ORDER BY id",
+            (supply_id,),
+        ).fetchall()
+    )
+    if own:
+        conn.close()
+    return rows
+
+
+def contractor_supply_lines_summary(supply_ids: list[int] | None = None, conn=None) -> dict[int, dict]:
+    own = conn is None
+    conn = conn or connect()
+    out: dict[int, dict] = {}
+    if supply_ids is not None and not supply_ids:
+        if own:
+            conn.close()
+        return out
+    sql = """
+        SELECT supply_id,
+               COUNT(*) AS line_count,
+               COALESCE(SUM(COALESCE(line_total, qty * unit_price)), 0) AS total,
+               COALESCE(SUM(COALESCE(qty, 0)), 0) AS qty_total,
+               MIN(item_name) AS first_item
+        FROM contractor_supply_lines
+    """
+    params: list = []
+    if supply_ids is not None:
+        placeholders = ",".join("?" * len(supply_ids))
+        sql += f" WHERE supply_id IN ({placeholders})"
+        params.extend(supply_ids)
+    sql += " GROUP BY supply_id"
+    for r in rows_to_dicts(conn.execute(sql, params).fetchall()):
+        out[int(r["supply_id"])] = {
+            "line_count": int(r["line_count"] or 0),
+            "total": float(r["total"] or 0),
+            "qty_total": float(r["qty_total"] or 0),
+            "first_item": r.get("first_item") or "",
+        }
+    if own:
+        conn.close()
+    return out
+
+
+def add_contractor_supply_line(
+    supply_id: int,
+    *,
+    item_no: str,
+    qty: float,
+    unit_price: float | None = None,
+    notes: str = "",
+    conn=None,
+) -> dict:
+    own = conn is None
+    conn = conn or connect()
+    row = conn.execute("SELECT * FROM contractor_supplies WHERE id=?", (supply_id,)).fetchone()
+    if not row:
+        if own:
+            conn.close()
+        raise ValueError("سجل التوريد غير موجود")
+    if (dict(row).get("received_voucher_no") or "").strip():
+        if own:
+            conn.close()
+        raise ValueError("تم ترحيل التوريد للمستودع — لا يمكن تعديل الأصناف")
+    item_no = (item_no or "").strip()
+    if not item_no:
+        if own:
+            conn.close()
+        raise ValueError("اختر مادة من المستودع")
+    item = conn.execute(
+        "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+        (item_no,),
+    ).fetchone()
+    if not item:
+        if own:
+            conn.close()
+        raise ValueError(f"رقم المادة «{item_no}» غير موجود في المستودع")
+    try:
+        q = float(qty)
+    except (TypeError, ValueError):
+        q = 0.0
+    if q <= 0:
+        if own:
+            conn.close()
+        raise ValueError("أدخل كمية صحيحة")
+    try:
+        price = float(unit_price) if unit_price not in (None, "") else 0.0
+    except (TypeError, ValueError):
+        price = 0.0
+    line_total = round(q * price, 2)
+    cur = conn.execute(
+        """
+        INSERT INTO contractor_supply_lines(
+          supply_id, supply_no, item_no, item_name, unit, qty, unit_price, line_total, notes
+        ) VALUES (?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            supply_id,
+            row["supply_no"] or "",
+            item["item_no"],
+            item["item_name"] or "",
+            item["unit"] or "",
+            q,
+            price,
+            line_total,
+            (notes or "").strip(),
+        ),
+    )
+    line_id = cur.lastrowid
+    if own:
+        conn.commit()
+        conn.close()
+    return {"id": line_id, "item_no": item["item_no"], "qty": q, "line_total": line_total}
+
+
+def delete_contractor_supply_line(line_id: int, conn=None) -> None:
+    own = conn is None
+    conn = conn or connect()
+    line = conn.execute("SELECT * FROM contractor_supply_lines WHERE id=?", (line_id,)).fetchone()
+    if not line:
+        if own:
+            conn.close()
+        raise ValueError("السطر غير موجود")
+    header = conn.execute("SELECT * FROM contractor_supplies WHERE id=?", (line["supply_id"],)).fetchone()
+    if header and (dict(header).get("received_voucher_no") or "").strip():
+        if own:
+            conn.close()
+        raise ValueError("تم ترحيل التوريد للمستودع — لا يمكن حذف الأصناف")
+    if line["warehouse_tx_id"]:
+        if own:
+            conn.close()
+        raise ValueError("الصنف مرحّل للمستودع")
+    conn.execute("DELETE FROM contractor_supply_lines WHERE id=?", (line_id,))
+    if own:
+        conn.commit()
+        conn.close()
+
+
+def receive_contractor_supply_to_warehouse(supply_id: int, conn=None) -> dict:
+    """يرحّل مواد موردة من مقاول كوارد للمستودع (مرة واحدة)."""
+    own = conn is None
+    conn = conn or connect()
+    row = conn.execute("SELECT * FROM contractor_supplies WHERE id=?", (supply_id,)).fetchone()
+    if not row:
+        if own:
+            conn.close()
+        raise ValueError("سجل التوريد غير موجود")
+    header = dict(row)
+    if (header.get("received_voucher_no") or "").strip():
+        if own:
+            conn.close()
+        return {"already": True, "voucher_no": header["received_voucher_no"], "created": 0}
+    lines = list_contractor_supply_lines(supply_id, conn=conn)
+    if not lines:
+        if own:
+            conn.close()
+        raise ValueError("أضف صنفاً واحداً على الأقل قبل الترحيل للمستودع")
+    missing = [ln for ln in lines if not (ln.get("item_no") or "").strip()]
+    if missing:
+        if own:
+            conn.close()
+        raise ValueError("كل الأصناف يجب أن تكون مربوطة برقم مادة من المستودع")
+    voucher = next_warehouse_voucher_no(conn)
+    tx_date = (header.get("supply_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+    tx_type = "وارد مواد موردة من مقاول"
+    created = 0
+    for ln in lines:
+        if ln.get("warehouse_tx_id"):
+            continue
+        cur = conn.execute(
+            """
+            INSERT INTO warehouse_tx(
+              voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+              recipient, sender, ticket_no, rekaz_code, source_section, source_ref, work_order, region, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                voucher,
+                tx_date,
+                tx_type,
+                ln.get("item_no") or "",
+                ln.get("item_name") or "",
+                ln.get("unit") or "",
+                float(ln.get("qty") or 0),
+                "المستودع",
+                header.get("contractor") or "مقاول",
+                header.get("ticket_no") or "",
+                "",
+                "contractors",
+                header.get("supply_no") or str(supply_id),
+                header.get("work_no") or "",
+                "",
+                (ln.get("notes") or header.get("notes") or "").strip(),
+            ),
+        )
+        conn.execute(
+            "UPDATE contractor_supply_lines SET warehouse_tx_id=? WHERE id=?",
+            (cur.lastrowid, ln["id"]),
+        )
+        created += 1
+    conn.execute(
+        """
+        UPDATE contractor_supplies
+        SET received_voucher_no=?, status=CASE
+              WHEN status IS NULL OR trim(status)='' OR status='جديد' OR status='معتمد' THEN 'تم التوريد'
+              ELSE status END
+        WHERE id=?
+        """,
+        (voucher, supply_id),
+    )
+    if own:
+        conn.commit()
+        conn.close()
+    return {"already": False, "voucher_no": voucher, "created": created}
 
 
 def enrich_warehouse_tx_from_item(data: dict) -> dict:

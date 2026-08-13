@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block content %}
+{% set warehouse_active = 'summary' %}
+{% include "_warehouse_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('إجمالي حركات الكميات') }}</h2>
+      <div class="meta">{{ _('ملخص الوارد والمنصرف والمتبقي — بدون تفصيل المواد أو السندات') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('لوحة المستودع') }}</a>
+    </div>
+  </div>
+
+  <div class="actions" style="margin-bottom:14px;flex-wrap:wrap;" data-tab-strip="1">
+    <a class="btn ghost{% if not source_filter %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary') }}">{{ _('الكل') }}</a>
+    <a class="btn ghost{% if source_filter=='ops' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='ops') }}">{{ _('العمليات والصيانة') }}</a>
+    <a class="btn ghost{% if source_filter=='constructions' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='constructions') }}">{{ _('الإنشاءات') }}</a>
+    <a class="btn ghost{% if source_filter=='projects' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='projects') }}">{{ _('المشاريع') }}</a>
+    <a class="btn ghost{% if source_filter=='external' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='external') }}">{{ _('المشتريات الخارجية') }}</a>
+    <a class="btn ghost{% if source_filter=='contractors' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='contractors') }}">{{ _('مواد موردة من مقاول') }}</a>
+  </div>
+
+  <div class="stats-grid warehouse-qty-summary">
+    <div class="stat-card">
+      <div>{{ _('إجمالي الكمية الواردة') }}</div>
+      <strong>{{ '%.2f'|format(totals.inbound or 0) }}</strong>
+      <div class="meta">{{ _('مجموع حركات الوارد') }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('إجمالي الكمية المنصرفة') }}</div>
+      <strong>{{ '%.2f'|format(totals.outbound or 0) }}</strong>
+      <div class="meta">{{ _('مجموع حركات المنصرف / الإرجاع') }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('المتبقي') }}</div>
+      <strong>{{ '%.2f'|format(totals.balance or 0) }}</strong>
+      <div class="meta">{{ _('الوارد − المنصرف') }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('عدد الحركات') }}</div>
+      <strong>{{ totals.tx_count or 0 }}</strong>
+      <div class="meta">{{ _('سجل حركة في الفلتر الحالي') }}</div>
+    </div>
+  </div>
+</div>
+
+{% if not source_filter %}
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الإجمالي حسب القسم') }}</h3>
+      <div class="meta">{{ _('أرقام مجمّعة فقط — بدون قائمة مواد') }}</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('القسم') }}</th>
+          <th>{{ _('الوارد') }}</th>
+          <th>{{ _('المنصرف') }}</th>
+          <th>{{ _('المتبقي') }}</th>
+          <th>{{ _('عدد الحركات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in by_source %}
+        <tr>
+          <td>
+            {% if row.key == 'other' %}
+              {{ row.label }}
+            {% else %}
+              <a href="{{ url_for('warehouse_movements_summary', source=row.key) }}">{{ row.label }}</a>
+            {% endif %}
+          </td>
+          <td>{{ '%.2f'|format(row.inbound or 0) }}</td>
+          <td>{{ '%.2f'|format(row.outbound or 0) }}</td>
+          <td><strong>{{ '%.2f'|format(row.balance or 0) }}</strong></td>
+          <td>{{ row.tx_count or 0 }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" class="meta">{{ _('لا توجد حركات مستودع بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

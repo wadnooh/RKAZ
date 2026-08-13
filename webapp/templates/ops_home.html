@@ -54,6 +54,7 @@
       <thead>
         <tr>
           <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('أمر العمل') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('الحي') }}</th>
           <th>{{ _('العطل') }}</th>
@@ -67,6 +68,7 @@
         {% for t in recent_tickets %}
         <tr>
           <td><strong>{{ t.ticket_no }}</strong></td>
+          <td><strong>{{ t.work_order or '—' }}</strong></td>
           <td>{{ t.receive_date or '—' }}</td>
           <td>{{ t.district or '—' }}</td>
           <td>{{ t.fault_type or '—' }}</td>
@@ -91,7 +93,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="meta">لا توجد أعطال بعد. {% if can('tickets.write') %}<a href="{{ url_for('ticket_new') }}">{{ _('أضف عطلاً جديداً') }}</a>{% endif %}</td></tr>
+        <tr><td colspan="9" class="meta">لا توجد أعطال بعد. {% if can('tickets.write') %}<a href="{{ url_for('ticket_new') }}">{{ _('أضف عطلاً جديداً') }}</a>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -18,6 +18,11 @@
       <input name="rekaz_code" value="{{ row.rekaz_code or '' }}" placeholder="{% if mode=='new' %}{{ _('يُولَّد تلقائياً عند الحفظ') }}{% else %}ER-…{% endif %}">
       <div class="meta">{% if mode=='new' %}{{ _('اتركه فارغاً للتوليد التلقائي (ER-1، ER-2…)') }}{% else %}{{ _('يمكن تعديله يدوياً') }}{% endif %}</div>
     </div>
+    <div class="field">
+      <label>{{ _('أمر العمل') }}</label>
+      <input name="work_order" value="{{ row.work_order or '' }}" placeholder="{{ _('رقم أمر العمل') }}">
+      <div class="meta">{{ _('يُربط تلقائياً بالمستودع والمستخلصات والرخص والسلامة') }}</div>
+    </div>
     <div class="field"><label>{{ _('تاريخ الاستلام') }}</label><input type="date" name="receive_date" value="{{ row.receive_date or '' }}"></div>
     <div class="field"><label>{{ _('وقت الاستلام') }}</label><input type="time" name="receive_time" value="{{ row.receive_time or '' }}"></div>
     <div class="field"><label>{{ _('الحي') }}</label><input name="district" value="{{ row.district or '' }}"></div>
@@ -82,7 +87,6 @@
       <label>{{ _('حالة المستخلص') }}</label>
       <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if row.invoice_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
-    <div class="field"><label>{{ _('أمر العمل') }}</label><input name="work_order" value="{{ row.work_order or '' }}"></div>
     <div class="field"><label>{{ _('رقم الفاتورة') }}</label><input name="invoice_no" value="{{ row.invoice_no or '' }}"></div>
     <div class="field">
       <label>{{ _('حالة SAP') }}</label>

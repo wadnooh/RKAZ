@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block content %}
+{% include "_section_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ title }}</h2>
+      <div class="meta">{{ subtitle }}</div>
+    </div>
+    <div class="actions">
+      {% if can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='reinforcement_departments') }}">{{ _('+ قسم جديد') }}</a>
+      <a class="btn ghost" href="{{ url_for('module_new', name='reinforcement_works') }}">{{ _('+ معاملة') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="actions" style="margin-bottom:14px;" data-tab-strip="1">
+    {% for item in links %}
+    <a class="btn ghost" href="{{ item.href }}">{{ item.label }}{% if item.count is defined %} ({{ item.count }}){% endif %}</a>
+    {% endfor %}
+  </div>
+
+  <div class="toolbar" style="margin:8px 0 10px;">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('أقسام التعزيز') }}</h3>
+      <div class="meta">{{ _('تُضاف وتُعدَّل يدوياً — اختر قسماً لعرض معاملاته') }}</div>
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    {% for d in departments %}
+    <div class="stat-card">
+      <div>{{ d.dept_name }}</div>
+      <strong>{{ d.dept_code or '—' }}</strong>
+      <div class="meta">
+        {% if d.status == 'موقوف' or d.status == 'لا' %}{{ _('موقوف') }}{% else %}{{ _('نشط') }}{% endif %}
+      </div>
+      <div class="actions" style="margin-top:10px;">
+        <a class="btn primary" href="{{ url_for('module_list', name='reinforcement_works', department=d.dept_name) }}">{{ _('المعاملات') }}</a>
+        {% if can('modules.write') %}
+        <a class="btn ghost" href="{{ url_for('module_edit', name='reinforcement_departments', row_id=d.id) }}">{{ _('تعديل') }}</a>
+        <a class="btn ghost" href="{{ url_for('module_new', name='reinforcement_works', department=d.dept_name) }}">{{ _('+ معاملة') }}</a>
+        {% endif %}
+      </div>
+    </div>
+    {% else %}
+    <div class="stat-card">
+      <div>{{ _('لا توجد أقسام بعد') }}</div>
+      <strong>—</strong>
+      <div class="meta">{{ _('أضف قسماً يدوياً مثل صيانة العدادات أو صيانة المحطات') }}</div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}

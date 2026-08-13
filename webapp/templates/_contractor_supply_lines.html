@@ -1,0 +1,218 @@
+{# مواد موردة من مقاول — أصناف مرتبطة بالمستودع #}
+{% set lines = supply_lines if supply_lines is defined else [] %}
+{% set received = (row.received_voucher_no or '')|trim %}
+{% set items = warehouse_items if warehouse_items is defined else [] %}
+
+<div class="card purchase-lines-card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('المواد الموردة') }}</h3>
+      <div class="meta">{{ _('أضف مواد من دليل المستودع ثم رحّل التوريد لزيادة الرصيد كوارد من مقاول') }}</div>
+    </div>
+    <div class="actions">
+      {% if received %}
+      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=received) }}">{{ _('سند المستودع') }} {{ received }}</a>
+      <span class="badge ok">{{ _('مرحّل للمستودع') }}</span>
+      {% elif mode == 'edit' and can('modules.write') and lines %}
+      <form method="post" action="{{ url_for('contractor_supply_receive_warehouse', row_id=row.id) }}" style="display:inline;">
+        <button class="btn primary" type="submit">{{ _('ترحيل إلى المستودع') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if mode == 'new' %}
+  <p class="meta">{{ _('احفظ رأس التوريد أولاً، ثم أضف المواد من صفحة التعديل.') }}</p>
+  {% else %}
+
+  {% if not received and can('modules.write') %}
+  <form method="post" action="{{ url_for('contractor_supply_line_add', row_id=row.id) }}" class="form-grid" style="align-items:end;margin-bottom:14px;" id="supplyLineAddForm">
+    <div class="field" style="grid-column:span 2;position:relative;">
+      <label>{{ _('بحث برقم المادة (المستودع)') }}</label>
+      <input type="text" id="supplyItemSearch" autocomplete="off" dir="ltr" style="text-align:left"
+             placeholder="{{ _('مثال: 10001234') }}">
+      <div id="supplyItemSuggest" class="item-suggest" hidden></div>
+      <div class="meta" id="supplyItemPreview" style="margin-top:6px;"></div>
+      <input type="hidden" name="item_no" id="supplyItemNo" required>
+    </div>
+    <div class="field">
+      <label>{{ _('الكمية') }}</label>
+      <input type="number" name="qty" id="supplyQty" step="0.01" min="0" value="1" required>
+    </div>
+    <div class="field">
+      <label>{{ _('سعر الوحدة') }}</label>
+      <input type="number" name="unit_price" id="supplyUnitPrice" step="0.01" min="0" value="0">
+    </div>
+    <div class="field">
+      <button class="btn primary" type="submit" style="width:100%;">{{ _('+ إضافة مادة') }}</button>
+    </div>
+  </form>
+  {% endif %}
+
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('رقم المادة') }}</th>
+          <th>{{ _('اسم المادة') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('سعر الوحدة') }}</th>
+          <th>{{ _('الإجمالي') }}</th>
+          {% if not received and can('modules.write') %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(total=0, qty=0) %}
+        {% for ln in lines %}
+        {% set lt = ln.line_total if ln.line_total is not none else ((ln.qty or 0) * (ln.unit_price or 0)) %}
+        {% set ns.total = ns.total + (lt or 0) %}
+        {% set ns.qty = ns.qty + (ln.qty or 0) %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td dir="ltr" style="text-align:left">{{ ln.item_no or '—' }}</td>
+          <td>{{ ln.item_name or '—' }}</td>
+          <td>{{ ln.unit or '—' }}</td>
+          <td>{{ ln.qty if ln.qty is not none else '—' }}</td>
+          <td>{{ ln.unit_price|money if ln.unit_price is not none else '—' }}</td>
+          <td>{{ lt|money }}</td>
+          {% if not received and can('modules.write') %}
+          <td class="actions">
+            <form method="post" action="{{ url_for('contractor_supply_line_delete', line_id=ln.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف الصنف') }}">
+              <input type="hidden" name="delete_password" value="">
+              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="8" class="meta">{{ _('لا توجد مواد بعد — ابحث برقم المادة من المستودع لإضافتها.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if lines %}
+      <tfoot>
+        <tr>
+          <td colspan="4" style="text-align:left;font-weight:800;">{{ _('إجمالي الكميات') }}: {{ '%.2f'|format(ns.qty) }}</td>
+          <td colspan="2" style="text-align:left;font-weight:800;">{{ _('إجمالي القيمة') }}</td>
+          <td style="font-weight:800;">{{ ns.total|money }}</td>
+          {% if not received and can('modules.write') %}<td></td>{% endif %}
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+{% if mode == 'edit' and not received and can('modules.write') %}
+<style>
+.item-suggest {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2px);
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 10px;
+  max-height: 240px;
+  overflow: auto;
+  box-shadow: 0 8px 24px rgba(16,24,40,.12);
+}
+.item-suggest button {
+  display: block;
+  width: 100%;
+  text-align: right;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border, #eee);
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.item-suggest button:last-child { border-bottom: 0; }
+.item-suggest button:hover,
+.item-suggest button.active {
+  background: color-mix(in srgb, var(--accent, #8a7349) 12%, transparent);
+}
+.item-suggest .sg-code { font-weight: 700; direction: ltr; display: inline-block; margin-left: 8px; }
+.item-suggest .sg-meta { color: var(--muted, #667085); font-size: .92em; }
+</style>
+<script>
+(function () {
+  var ITEMS = {{ items|tojson }};
+  var search = document.getElementById("supplyItemSearch");
+  var suggest = document.getElementById("supplyItemSuggest");
+  var preview = document.getElementById("supplyItemPreview");
+  var itemNo = document.getElementById("supplyItemNo");
+  var form = document.getElementById("supplyLineAddForm");
+  if (!search || !form) return;
+
+  function norm(s) { return String(s || "").trim().toLowerCase(); }
+  function findExact(code) {
+    var n = norm(code);
+    for (var i = 0; i < ITEMS.length; i++) {
+      if (norm(ITEMS[i].item_no) === n) return ITEMS[i];
+    }
+    return null;
+  }
+  function filterItems(q) {
+    q = norm(q);
+    if (!q) return [];
+    var out = [];
+    for (var i = 0; i < ITEMS.length; i++) {
+      var it = ITEMS[i];
+      var hay = norm(it.item_no) + " " + norm(it.item_name);
+      if (hay.indexOf(q) !== -1) out.push(it);
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+  function pick(it) {
+    itemNo.value = it.item_no || "";
+    search.value = it.item_no || "";
+    preview.textContent = (it.item_name || "") + (it.unit ? (" — " + it.unit) : "");
+    suggest.hidden = true;
+  }
+  function renderSuggest(list) {
+    suggest.innerHTML = "";
+    if (!list.length) { suggest.hidden = true; return; }
+    list.forEach(function (it) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      var code = document.createElement("span");
+      code.className = "sg-code";
+      code.textContent = it.item_no || "";
+      var meta = document.createElement("span");
+      meta.className = "sg-meta";
+      meta.textContent = (it.item_name || "") + (it.unit ? (" · " + it.unit) : "");
+      btn.appendChild(code);
+      btn.appendChild(meta);
+      btn.addEventListener("click", function () { pick(it); });
+      suggest.appendChild(btn);
+    });
+    suggest.hidden = false;
+  }
+  search.addEventListener("input", function () {
+    itemNo.value = "";
+    preview.textContent = "";
+    renderSuggest(filterItems(search.value));
+  });
+  search.addEventListener("blur", function () {
+    setTimeout(function () { suggest.hidden = true; }, 180);
+  });
+  form.addEventListener("submit", function (e) {
+    if (!itemNo.value) {
+      var exact = findExact(search.value);
+      if (exact) pick(exact);
+    }
+    if (!itemNo.value) {
+      e.preventDefault();
+      preview.textContent = {{ _('اختر مادة من نتائج البحث')|tojson }};
+    }
+  });
+})();
+</script>
+{% endif %}

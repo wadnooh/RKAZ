@@ -23,6 +23,7 @@ PERM_LABELS = {
     "section.maintenance": "الورشة",
     "section.hr": "الموارد البشرية",
     "section.contracts": "إدارة العقود",
+    "section.reinforcement": "التعزيز - اسكيمات",
     "tickets.read": "عرض الأعطال",
     # يتحكم بتعديل بيانات العطل وبنود العقد والكميات والصور/التمتير المرتبطة بالعطل
     "tickets.write": "إضافة/تعديل الأعطال والبنود",
@@ -58,6 +59,7 @@ SECTION_PERMS = {
     "maintenance": "section.maintenance",
     "hr": "section.hr",
     "contracts": "section.contracts",
+    "reinforcement": "section.reinforcement",
 }
 
 _READ_ALL_SECTIONS = set(SECTION_PERMS.values())
@@ -94,6 +96,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
         "section.financial",
         "section.maintenance",
         "section.hr",
+        "section.reinforcement",
         "tickets.read",
         "tickets.write",
         "modules.read",
@@ -197,6 +200,7 @@ def deny_redirect(message: str | None = None):
         ("maintenance", "section.maintenance"),
         ("hr", "section.hr"),
         ("contracts", "section.contracts"),
+        ("reinforcement", "section.reinforcement"),
     ):
         if has_perm(perm):
             endpoint = {
@@ -212,6 +216,7 @@ def deny_redirect(message: str | None = None):
                 "maintenance": "maintenance_home",
                 "hr": "hr_home",
                 "contracts": "contracts_admin_home",
+                "reinforcement": "reinforcement_home",
             }[section]
             return redirect(url_for(endpoint))
     return redirect(url_for("logout"))
@@ -317,11 +322,19 @@ def required_perm_for_request() -> str | None:
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
         "warehouse_balances": "section.warehouses",
+        "warehouse_movements_summary": "section.warehouses",
         "external_purchases_home": "section.external",
+        "purchase_line_add": "section.external",
+        "purchase_line_delete": "section.external",
+        "purchase_receive_warehouse": "section.external",
+        "contractor_supply_line_add": "section.contractors",
+        "contractor_supply_line_delete": "section.contractors",
+        "contractor_supply_receive_warehouse": "section.contractors",
         "financial_home": "section.financial",
         "maintenance_home": "section.maintenance",
         "hr_home": "section.hr",
         "contracts_admin_home": "section.contracts",
+        "reinforcement_home": "section.reinforcement",
     }
     if ep in section_endpoints:
         need = section_endpoints[ep]
@@ -424,6 +437,7 @@ def _perm_for_path(path: str) -> str | None:
         ("/maintenance", "section.maintenance"),
         ("/hr", "section.hr"),
         ("/contracts-admin", "section.contracts"),
+        ("/reinforcement", "section.reinforcement"),
         ("/tickets", "tickets.read"),
         ("/cashflow", "section.financial"),
         ("/teams", "section.ops"),

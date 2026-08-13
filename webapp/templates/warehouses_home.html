@@ -27,9 +27,14 @@
       <strong>{{ counts.projects }}</strong>
       <div class="meta">{{ _('مشروع') }} — {{ counts.projects_tx }} {{ _('حركة مواد') }}</div>
     </a>
+    <a class="stat-card" href="{{ url_for('warehouse_movements_summary') }}" style="text-decoration:none;color:inherit;">
+      <div>{{ _('إجمالي الكميات') }}</div>
+      <strong>{{ '%.0f'|format(qty_totals.balance or 0) }}</strong>
+      <div class="meta">{{ _('متبقي') }} — {{ _('وارد') }} {{ '%.0f'|format(qty_totals.inbound or 0) }} / {{ _('منصرف') }} {{ '%.0f'|format(qty_totals.outbound or 0) }}</div>
+    </a>
     <a class="stat-card" href="{{ url_for('warehouse_balances') }}" style="text-decoration:none;color:inherit;">
       <div>{{ _('أرصدة المواد') }}</div>
-      <strong>{{ counts.items }}</strong>
+      <strong>{{ counts.items_count }}</strong>
       <div class="meta">{{ _('صنف') }}</div>
     </a>
   </div>
@@ -39,7 +44,7 @@
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('أحدث حركات المواد') }}</h3>
-      <div class="meta">{{ _('من الإنشاءات والعمليات والمشاريع') }}</div>
+      <div class="meta">{{ _('من الإنشاءات والعمليات والمشاريع') }} — <a href="{{ url_for('warehouse_movements_summary') }}">{{ _('عرض الإجمالي بدون تفصيل') }}</a></div>
     </div>
   </div>
   <div class="table-wrap">
@@ -69,6 +74,8 @@
             {% if w.source_section == 'ops' %}{{ _('العمليات والصيانة') }}
             {% elif w.source_section == 'constructions' %}{{ _('الإنشاءات') }}
             {% elif w.source_section == 'projects' %}{{ _('المشاريع') }}
+            {% elif w.source_section == 'contractors' %}{{ _('مواد موردة من مقاول') }}
+            {% elif w.source_section == 'external' %}{{ _('المشتريات الخارجية') }}
             {% else %}{{ w.source_section or '—' }}{% endif %}
           </td>
           <td><strong>{{ w.work_order or '—' }}</strong></td>

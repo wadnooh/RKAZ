@@ -33,7 +33,7 @@
   {% endif %}
 
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
       {% for s in lists.execution_status %}
@@ -50,6 +50,7 @@
         <tr>
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('كود ER') }}</th>
+          <th>{{ _('أمر العمل') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('الحي') }}</th>
           <th>{{ _('المحطة') }}</th>
@@ -67,6 +68,7 @@
         <tr>
           <td><strong>{{ t.ticket_no }}</strong></td>
           <td>{{ t.rekaz_code or '—' }}</td>
+          <td><strong>{{ t.work_order or '—' }}</strong></td>
           <td>{{ t.receive_date or '—' }}</td>
           <td>{{ t.district or '—' }}</td>
           <td>{{ t.station_no or '—' }}</td>
@@ -93,7 +95,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="11">{{ _('لا توجد أعطال') }}</td></tr>
+        <tr><td colspan="12">{{ _('لا توجد أعطال') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

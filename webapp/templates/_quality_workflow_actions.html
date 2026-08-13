@@ -1,4 +1,4 @@
-{# أزرار مسار الجودة: تنسيقات → متابعة تصاريح → إخلاءات #}
+{# مسار الجودة الاحترافي: 1 تنسيقات → 2 تصاريح → 3 إخلاءات #}
 {% set qwf = quality_workflow if quality_workflow is defined else none %}
 {% set tno = ticket_no if ticket_no is defined else (qwf.ticket_no if qwf else '') %}
 {% set work_no = construction_work_no if construction_work_no is defined else (qwf.construction_work_no if qwf else '') %}
@@ -7,37 +7,68 @@
 {% set dist = district if district is defined else '' %}
 {% set loc = location if location is defined else '' %}
 {% set wdesc = work_desc if work_desc is defined else '' %}
+{% set wo = work_order if work_order is defined else '' %}
+{% set stage = qwf.stage if qwf else 'none' %}
+{% set compact = compact if compact is defined else false %}
 {% if can('section.quality') %}
-<div class="quality-workflow-actions">
-  {% if show_title is not defined or show_title %}
-  <div class="meta" style="margin-bottom:8px;">
-    {{ _('مسار الجودة:') }}
-    {{ _('التنسيقات الجديدة') }}
-    → {{ _('متابعة تصاريح العمل') }}
-    → {{ _('الإخلاءات') }}
-    {% if qwf and qwf.stage and qwf.stage != 'none' %}
-      — <strong>
-        {% if qwf.stage == 'coords' %}{{ _('المرحلة الحالية: التنسيقات') }}
-        {% elif qwf.stage == 'permits' %}{{ _('المرحلة الحالية: متابعة التصاريح') }}
-        {% elif qwf.stage == 'evacuations' %}{{ _('المرحلة الحالية: الإخلاءات') }}
-        {% endif %}
-      </strong>
-    {% endif %}
+{% set s1_done = qwf and qwf.has_coord %}
+{% set s2_done = qwf and qwf.has_license %}
+{% set s3_done = qwf and qwf.has_clearance %}
+{% set s1_active = stage == 'coords' or stage == 'none' %}
+{% set s2_active = stage == 'permits' %}
+{% set s3_active = stage == 'evacuations' %}
+<div class="qflow{% if compact %} qflow--compact{% endif %}">
+  {% if not compact and (show_title is not defined or show_title) %}
+  <div class="qflow__head">
+    <div>
+      <div class="qflow__eyebrow">{{ _('مسار التنسيقات والجودة') }}</div>
+      <div class="qflow__title">{{ _('تنقّل المعاملة عبر ثلاث مراحل مرتبة') }}</div>
+    </div>
+    <div class="qflow__badge">
+      {% if stage == 'coords' %}{{ _('المرحلة 1 من 3') }}
+      {% elif stage == 'permits' %}{{ _('المرحلة 2 من 3') }}
+      {% elif stage == 'evacuations' %}{{ _('المرحلة 3 من 3') }}
+      {% else %}{{ _('لم يبدأ بعد') }}{% endif %}
+    </div>
   </div>
   {% endif %}
-  <div class="actions" style="flex-wrap:wrap;">
-    <a class="btn {% if qwf and qwf.stage == 'coords' %}primary{% else %}ghost{% endif %}"
-       href="{{ url_for('quality_workflow_go', stage='coords', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, district=dist or none, location=loc or none, work_desc=wdesc or none) }}">
-      {% if qwf and qwf.has_coord %}{{ _('فتح التنسيقات الجديدة') }}{% else %}{{ _('نقل إلى التنسيقات الجديدة') }}{% endif %}
-    </a>
-    <a class="btn {% if qwf and qwf.stage == 'permits' %}primary{% else %}ghost{% endif %}"
-       href="{{ url_for('quality_workflow_go', stage='permits', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, district=dist or none, location=loc or none, work_desc=wdesc or none) }}">
-      {% if qwf and qwf.has_license %}{{ _('فتح متابعة التصاريح') }}{% else %}{{ _('نقل إلى متابعة التصاريح') }}{% endif %}
-    </a>
-    <a class="btn {% if qwf and qwf.stage == 'evacuations' %}primary{% else %}ghost{% endif %}"
-       href="{{ url_for('quality_workflow_go', stage='evacuations', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none) }}">
-      {% if qwf and qwf.has_clearance %}{{ _('فتح الإخلاءات') }}{% else %}{{ _('نقل إلى الإخلاءات') }}{% endif %}
-    </a>
-  </div>
+
+  <ol class="qflow__steps">
+    <li class="qflow__step{% if s1_done %} is-done{% endif %}{% if s1_active %} is-current{% endif %}">
+      <a class="qflow__link" href="{{ url_for('quality_workflow_go', stage='coords', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, district=dist or none, location=loc or none, work_desc=wdesc or none, work_order=wo or none) }}">
+        <span class="qflow__index">{% if s1_done and not s1_active %}✓{% else %}1{% endif %}</span>
+        <span class="qflow__body">
+          <span class="qflow__label">{{ _('التنسيقات الجديدة') }}</span>
+          <span class="qflow__hint">
+            {% if s1_done %}{{ _('مكتمل — فتح السجل') }}{% else %}{{ _('ابدأ من هنا') }}{% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    <li class="qflow__connector{% if s1_done %} is-done{% endif %}" aria-hidden="true"></li>
+    <li class="qflow__step{% if s2_done %} is-done{% endif %}{% if s2_active %} is-current{% endif %}">
+      <a class="qflow__link" href="{{ url_for('quality_workflow_go', stage='permits', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, district=dist or none, location=loc or none, work_desc=wdesc or none, work_order=wo or none) }}">
+        <span class="qflow__index">{% if s2_done and not s2_active %}✓{% else %}2{% endif %}</span>
+        <span class="qflow__body">
+          <span class="qflow__label">{{ _('متابعة التصاريح') }}</span>
+          <span class="qflow__hint">
+            {% if s2_done %}{{ _('مكتمل — فتح المتابعة') }}{% elif s1_done %}{{ _('الخطوة التالية') }}{% else %}{{ _('بعد التنسيق') }}{% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+    <li class="qflow__connector{% if s2_done %} is-done{% endif %}" aria-hidden="true"></li>
+    <li class="qflow__step{% if s3_done %} is-done{% endif %}{% if s3_active %} is-current{% endif %}">
+      <a class="qflow__link" href="{{ url_for('quality_workflow_go', stage='evacuations', ticket_no=tno or none, construction_work_no=work_no or none, project_code=pr_code or none, linked_section=sec or none, work_order=wo or none) }}">
+        <span class="qflow__index">{% if s3_done and not s3_active %}✓{% else %}3{% endif %}</span>
+        <span class="qflow__body">
+          <span class="qflow__label">{{ _('الإخلاءات') }}</span>
+          <span class="qflow__hint">
+            {% if s3_done %}{{ _('مكتمل — فتح الإخلاء') }}{% elif s2_done %}{{ _('الخطوة التالية') }}{% else %}{{ _('بعد التصاريح') }}{% endif %}
+          </span>
+        </span>
+      </a>
+    </li>
+  </ol>
 </div>
 {% endif %}

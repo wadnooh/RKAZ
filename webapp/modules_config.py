@@ -74,7 +74,7 @@ MODULES = {
             ("collected", "المبلغ المحصل", "number"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["invoice_id", "ticket_no", "period", "value", "sap_status", "collected"],
+        "list_cols": ["invoice_id", "ticket_no", "work_order", "period", "value", "sap_status", "collected"],
     },
     # ---- المقاولين ----
     "contractor_works": {
@@ -93,6 +93,21 @@ MODULES = {
             ("notes", "ملاحظات", "textarea"),
         ],
         "list_cols": ["work_no", "work_date", "contractor", "ticket_no", "work_type", "status", "value"],
+    },
+    "contractor_supplies": {
+        "title": "مواد موردة من مقاول",
+        "table": "contractor_supplies",
+        "section": "contractors",
+        "fields": [
+            ("supply_no", "رقم التوريد", "text"),
+            ("supply_date", "التاريخ", "date"),
+            ("contractor", "المقاول", "text"),
+            ("ticket_no", "رقم العطل", "ticket"),
+            ("work_no", "رقم معاملة المقاول", "text"),
+            ("status", "الحالة", "list:contractor_supply_status"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["supply_no", "supply_date", "contractor", "ticket_no", "status"],
     },
     # ---- الإنشاءات ----
     "construction_works": {
@@ -306,6 +321,7 @@ MODULES = {
         "fields": [
             ("permit_no", "رقم التصريح", "text"),
             ("ticket_no", "رقم العطل", "ticket"),
+            ("work_order", "أمر العمل", "text"),
             ("permit_date", "التاريخ", "date"),
             ("location", "الموقع", "text"),
             ("issuer", "المُصدر", "text"),
@@ -314,7 +330,7 @@ MODULES = {
             ("status", "الحالة", "list:permit_status"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["permit_no", "ticket_no", "permit_date", "location", "status"],
+        "list_cols": ["permit_no", "ticket_no", "work_order", "permit_date", "location", "status"],
     },
     "safety_incidents": {
         "title": "بلاغات السلامة",
@@ -394,14 +410,11 @@ MODULES = {
             ("purchase_no", "رقم الطلب", "text"),
             ("purchase_date", "التاريخ", "date"),
             ("supplier", "المورد", "text"),
-            ("item_name", "المادة", "text"),
-            ("qty", "الكمية", "number"),
-            ("unit_price", "سعر الوحدة", "number"),
             ("status", "الحالة", "list:purchase_status"),
             ("ticket_no", "رقم العطل", "ticket"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["purchase_no", "purchase_date", "supplier", "item_name", "qty", "status"],
+        "list_cols": ["purchase_no", "purchase_date", "supplier", "status"],
     },
     "custody": {
         "title": "العهد",
@@ -483,6 +496,36 @@ MODULES = {
         ],
         "list_cols": ["contract_no", "contract_name", "party", "start_date", "end_date", "status"],
     },
+    # ---- التعزيز - اسكيمات ----
+    "reinforcement_departments": {
+        "title": "أقسام التعزيز",
+        "table": "reinforcement_departments",
+        "section": "reinforcement",
+        "fields": [
+            ("dept_name", "اسم القسم", "text"),
+            ("dept_code", "رمز القسم", "text"),
+            ("status", "الحالة", "list:yes_no_active"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["dept_name", "dept_code", "status"],
+    },
+    "reinforcement_works": {
+        "title": "معاملات التعزيز / اسكيمات",
+        "table": "reinforcement_works",
+        "section": "reinforcement",
+        "fields": [
+            ("work_no", "رقم المعاملة", "text"),
+            ("work_date", "التاريخ", "date"),
+            ("department", "القسم", "reinforcement_dept"),
+            ("work_type", "نوع العمل", "text"),
+            ("location", "الموقع", "text"),
+            ("ticket_no", "رقم العطل", "ticket"),
+            ("status", "الحالة", "list:execution_status"),
+            ("value", "القيمة", "number"),
+            ("notes", "ملاحظات", "textarea"),
+        ],
+        "list_cols": ["work_no", "work_date", "department", "work_type", "location", "status", "value"],
+    },
 }
 
 SECTION_META = {
@@ -498,6 +541,7 @@ SECTION_META = {
     "maintenance": {"title": "الورشة (سيارات - معدات)", "home": "maintenance_home"},
     "hr": {"title": "الموارد البشرية", "home": "hr_home"},
     "contracts": {"title": "إدارة العقود", "home": "contracts_admin_home"},
+    "reinforcement": {"title": "التعزيز - اسكيمات", "home": "reinforcement_home"},
 }
 
 

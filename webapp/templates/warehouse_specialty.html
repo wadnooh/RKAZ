@@ -132,7 +132,7 @@
   {% elif view == 'tickets' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="tickets">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم العطل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
       {% for s in lists.execution_status %}
@@ -173,9 +173,9 @@
           <td class="actions">
             <a class="btn ghost" href="{{ url_for('warehouse_ticket_detail', ticket_id=t.id) }}">{{ _('عرض') }}</a>
             {% if can('modules.write') %}
-            {% set in_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from, 'tx_type': 'وارد من الكهرباء'}) %}
-            {% set out_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from, 'tx_type': 'منصرف للمقاول'}) %}
-            {% set return_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, **{'from': wh_from, 'tx_type': 'إرجاع للكهرباء'}) %}
+            {% set in_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': wh_from, 'tx_type': 'وارد من الكهرباء'}) %}
+            {% set out_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': wh_from, 'tx_type': 'منصرف للمقاول'}) %}
+            {% set return_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': wh_from, 'tx_type': 'إرجاع للكهرباء'}) %}
             {% include '_warehouse_tx_options.html' %}
             {% endif %}
           </td>

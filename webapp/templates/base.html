@@ -61,6 +61,9 @@
     {% if can('section.contractors') %}
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>
     {% endif %}
+    {% if can('section.reinforcement') %}
+    <a class="tab{% if p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %} active{% endif %}" href="{{ url_for('reinforcement_home') }}">{{ tr('nav_reinforcement') }}</a>
+    {% endif %}
     {% if can('section.quality') %}
     <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') or p.startswith('/module/new_coordinations') or p.startswith('/module/issued_licenses') or p.startswith('/new-coordinations') %} active{% endif %}" href="{{ url_for('quality_home') }}">{{ tr('nav_quality') }}</a>
     {% endif %}

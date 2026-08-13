@@ -7,6 +7,9 @@
   {% set quality_tab = 'new_coords' if name == 'new_coordinations' else ('evacuations' if name == 'quality_clearances' else ('permits' if name == 'issued_licenses' else 'new_coords')) %}
   {% set quality_sub = 'coords' if name == 'new_coordinations' else ('initial' if name == 'quality_clearances' else ('active' if name == 'issued_licenses' else 'coords')) %}
   {% include "_quality_subnav.html" %}
+{% elif name == 'contractor_supplies' or (name in ['warehouse_tx','warehouse_items']) %}
+  {% set warehouse_active = 'contractors' if name == 'contractor_supplies' else (warehouse_active if warehouse_active is defined else 'home') %}
+  {% include "_warehouse_subnav.html" %}
 {% else %}
   {% include "_section_subnav.html" %}
 {% endif %}
@@ -21,6 +24,8 @@
         {{ _('حركات مستودع العمليات والصيانة') }}
         {% elif name == 'warehouse_tx' and source_filter == 'projects' %}
         {{ _('حركات مستودع المشاريع') }}
+        {% elif name == 'reinforcement_works' and department_filter %}
+        {{ module.title }} — {{ department_filter }}
         {% else %}
         {{ module.title }}
         {% endif %}
@@ -60,6 +65,12 @@
       {% endif %}
       {% if name == 'issued_licenses' and linked_section_filter %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('عرض الكل') }}</a>
+      {% endif %}
+      {% if name == 'reinforcement_works' %}
+        {% if department_filter %}
+        <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('عرض الكل') }}</a>
+        {% endif %}
+        <a class="btn ghost" href="{{ url_for('reinforcement_home') }}">{{ _('أقسام التعزيز') }}</a>
       {% endif %}
       {% if can_mod_write %}
         {% if name == 'warehouse_items' %}
@@ -114,7 +125,8 @@
           <th>{{ label }}</th>
           {% endif %}
           {% endfor %}
-          {% if name == 'quantities' or name == 'external_purchases' %}<th>{{ _('الإجمالي') }}</th>{% endif %}
+          {% if name == 'quantities' or name == 'external_purchases' or name == 'contractor_supplies' %}<th>{{ _('الإجمالي') }}</th>{% endif %}
+          {% if name == 'external_purchases' or name == 'contractor_supplies' %}<th>{{ _('الأصناف') }}</th><th>{{ _('المستودع') }}</th>{% endif %}
           {% if name == 'photos' %}<th>{{ _('مكتمل؟') }}</th>{% endif %}
           {% if name == 'invoices' %}<th>{{ _('المتبقي') }}</th>{% endif %}
           {% if name == 'warehouse_items' %}<th>{{ _('الرصيد') }}</th>{% endif %}
@@ -131,7 +143,11 @@
               <a href="{{ url_for('tickets_list', q=r[key]) }}">{{ r[key] }}</a>
             {% elif ftype == 'image' %}
               {% if r[key] and r[key].startswith('/media/') %}
+                {% if is_pdf_ref(r[key]) %}
+                <a class="photo-pdf-chip" href="{{ r[key] }}" target="_blank" rel="noopener">PDF</a>
+                {% else %}
                 <a href="{{ r[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ r[key] }}" alt="{{ label }}"></a>
+                {% endif %}
               {% elif r[key] == 'نعم' %}
                 <span class="badge ok">{{ _('نعم') }}</span>
               {% else %}
@@ -154,7 +170,20 @@
           </td>
           {% endif %}
           {% endfor %}
-          {% if name == 'quantities' or name == 'external_purchases' %}<td>{{ r.total|money }}</td>{% endif %}
+          {% if name == 'quantities' or name == 'external_purchases' or name == 'contractor_supplies' %}<td>{{ r.total|money }}</td>{% endif %}
+          {% if name == 'external_purchases' or name == 'contractor_supplies' %}
+          <td>{{ r.items_summary or '—' }} <span class="meta">({{ r.line_count or 0 }})</span></td>
+          <td>
+            {% if r.received %}
+              <span class="badge ok">{{ _('مرحّل') }}</span>
+              {% if r.received_voucher_no %}
+              <a class="meta" href="{{ url_for('warehouse_voucher_detail', voucher_no=r.received_voucher_no) }}">{{ r.received_voucher_no }}</a>
+              {% endif %}
+            {% else %}
+              <span class="badge">{{ _('لم يُرحَّل') }}</span>
+            {% endif %}
+          </td>
+          {% endif %}
           {% if name == 'photos' %}<td>{{ r.complete }}</td>{% endif %}
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
@@ -172,17 +201,21 @@
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}
             {% if can('section.quality') and name == 'construction_works' and r.work_no %}
-            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='coords', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions', district=r.district or r.site or none, location=r.site or none, work_desc=r.work_type or none) }}">{{ _('تنسيقات') }}</a>
-            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='permits', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">{{ _('تصاريح') }}</a>
-            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='evacuations', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">{{ _('إخلاءات') }}</a>
+            <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
+              <a href="{{ url_for('quality_workflow_go', stage='coords', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions', district=r.district or r.site or none, location=r.site or none, work_desc=r.work_type or none) }}">1 {{ _('تنسيق') }}</a>
+              <a href="{{ url_for('quality_workflow_go', stage='permits', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">2 {{ _('تصريح') }}</a>
+              <a href="{{ url_for('quality_workflow_go', stage='evacuations', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">3 {{ _('إخلاء') }}</a>
+            </span>
             {% endif %}
             {% if can_mod_write and name == 'projects' and r.project_code and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}
             {% if can('section.quality') and name == 'projects' and r.project_code %}
-            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='coords', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects', work_desc=r.project_name or none) }}">{{ _('تنسيقات') }}</a>
-            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='permits', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">{{ _('تصاريح') }}</a>
-            <a class="btn ghost" href="{{ url_for('quality_workflow_go', stage='evacuations', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">{{ _('إخلاءات') }}</a>
+            <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
+              <a href="{{ url_for('quality_workflow_go', stage='coords', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects', work_desc=r.project_name or none) }}">1 {{ _('تنسيق') }}</a>
+              <a href="{{ url_for('quality_workflow_go', stage='permits', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">2 {{ _('تصريح') }}</a>
+              <a href="{{ url_for('quality_workflow_go', stage='evacuations', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">3 {{ _('إخلاء') }}</a>
+            </span>
             {% endif %}
             {% if can_mod_delete %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
