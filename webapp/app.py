@@ -2923,7 +2923,7 @@ def _safe_next_path(raw: str | None, fallback: str) -> str:
 def programmer_device_setup():
     """تسجيل الجهاز الرئيسي للمبرمج (مرة واحدة / بعد إعادة التعيين عبر SSH)."""
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
     already = prog_guard.main_device_registered()
     is_this_main = prog_guard.is_main_device()
@@ -2973,7 +2973,7 @@ def programmer_device_setup():
             db.log_audit(current_user_name(), "تحقق مبرمج (جهاز ثانوي)", "أمان", session.get("user_id"))
             flash(
                 _t(
-                    "تم التحقق — يمكنك إجراء تعديلات إدارية لمدة {mins} دقيقة من هذا الجهاز.",
+                    "تم التحقق — يمكنك إجراء تعديلات برمجية لمدة {mins} دقيقة من هذا الجهاز.",
                     mins=prog_guard.ELEVATION_MINUTES,
                 ),
                 "ok",
@@ -3031,9 +3031,9 @@ def programmer_device_setup():
 @app.route("/admin/programmer/verify", methods=["GET", "POST"])
 @login_required
 def programmer_verify():
-    """تحقق صارم لتعديل إداري من جهاز غير رئيسي (OTP بريد المبرمج)."""
+    """تحقق صارم لتعديل برمجي من جهاز غير رئيسي (OTP + رمز التغيير عبر بريد المبرمج)."""
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
 
     if prog_guard.is_main_device():
@@ -3072,7 +3072,7 @@ def programmer_verify():
         db.log_audit(current_user_name(), "تحقق مبرمج (جهاز ثانوي)", "أمان", session.get("user_id"))
         flash(
             _t(
-                "تم التحقق — يمكنك إجراء تعديلات إدارية لمدة {mins} دقيقة من هذا الجهاز.",
+                "تم التحقق — يمكنك إجراء تعديلات برمجية لمدة {mins} دقيقة من هذا الجهاز.",
                 mins=prog_guard.ELEVATION_MINUTES,
             ),
             "ok",
@@ -3096,7 +3096,7 @@ def programmer_verify():
 def programmer_magic(token):
     """الروابط السريعة أُلغيت — التحقق يتم فقط بإدخال رمز البريد في النموذج."""
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
     flash(
         _t("يلزم إدخال رمز التحقق من البريد يدوياً مع كلمة المرور ورمز التغيير."),
         "danger",

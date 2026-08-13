@@ -394,12 +394,10 @@ def required_perm_for_request() -> str | None:
         return None if has_perm("users.manage") else "users.manage"
 
     if ep in {"programmer_device_setup", "programmer_verify", "programmer_magic"}:
-        # صفحات أمان المبرمج — لمدير النظام أو الحساب المخفي فقط
+        # صفحات أمان المبرمج — لحساب المبرمج المعتمد (wadnooh) فقط
         from webapp import db as _db
 
         if _db.is_hidden_username(session.get("username")):
-            return None
-        if normalize_role(session.get("role")) == "admin":
             return None
         return "users.manage"
 

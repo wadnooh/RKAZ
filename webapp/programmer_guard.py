@@ -1,8 +1,10 @@
 """حماية مستوى المبرمج: الجهاز الرئيسي + تحقق صارم عبر بريد المبرمج.
 
-عمليات الإدارة الهيكلية فقط (مستخدمون، تبويبات، بنود عقد، …).
+عمليات البرمجة/الهيكل فقط (تبويبات مخصصة، بنود عقد، …).
+إدارة المستخدمين والصلاحيات والأدوار للمدير العادي دون قفل المبرمج.
 إدخال الأعطال والبيانات اليومية للموظفين لا يتأثر.
 
+واجهة التحقق وجهاز المبرمج: حساب wadnooh فقط.
 بريد الموافقة المعتمد فقط:
   wadnooh@gmail.com
   wadnooh@wadnooh.com
@@ -38,10 +40,9 @@ DEFAULT_PROGRAMMER_EMAILS = (
     "wadnooh@wadnooh.com",
 )
 
-# POST يغيّر إعدادات النظام / الهيكل — وليس بيانات تشغيل يومية
+# POST يغيّر هيكل البرنامج / البرمجة — وليس إدارة مستخدمين أو صلاحيات
 PRIVILEGED_POST_ENDPOINTS = frozenset(
     {
-        "users_list",
         "app_custom_tabs_manage",
         "ops_custom_tabs_manage",
         "contract_boq_import",
@@ -102,8 +103,8 @@ def is_programmer(role: str | None = None) -> bool:
 
 
 def can_access_programmer_device_ui() -> bool:
-    """إظهار تبويب/روابط جهاز المبرمج — admin أو wadnooh فقط."""
-    return bool(session.get("user_id")) and is_programmer()
+    """إظهار تبويب/روابط جهاز المبرمج وتحقق المبرمج — wadnooh فقط."""
+    return bool(session.get("user_id")) and is_hidden_programmer()
 
 
 def is_hidden_programmer() -> bool:
@@ -176,7 +177,8 @@ def is_elevated() -> bool:
 
 
 def can_mutate_control_plane() -> bool:
-    if not session.get("user_id") or not is_programmer():
+    """تعديل هيكل البرنامج: للمبرمج المعتمد (wadnooh) على الجهاز الرئيسي أو بعد رفع مؤقت."""
+    if not session.get("user_id") or not is_hidden_programmer():
         return False
     return is_main_device() or is_elevated()
 
@@ -265,9 +267,9 @@ def _otp_send_wait_seconds() -> int:
 
 
 def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
-    """يولّد رمزاً ويرسله لبريد المبرمج المعتمد فقط (قناة email)."""
-    if not is_programmer():
-        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
+    """يولّد رمزاً ويرسله مع رمز التغيير لبريد المبرمج المعتمد فقط (قناة email)."""
+    if not is_hidden_programmer():
+        return False, _t("هذه الصفحة للمبرمج المعتمد فقط")
     wait = _otp_send_wait_seconds()
     if wait > 0:
         return False, _t("انتظر {sec} ثانية قبل إعادة إرسال رمز التحقق.", sec=wait)
@@ -275,30 +277,34 @@ def send_email_otp(*, next_path: str = "") -> tuple[bool, str]:
         return False, _t(
             "البريد غير جاهز. لا يمكن التحقق من جهاز ثانوي حتى يعمل SMTP، أو استخدم طوارئ SSH فقط عند تعطّل البريد."
         )
+    pin = change_pin()
+    if not pin:
+        return False, _t("PROGRAMMER_CHANGE_PIN غير مضبوط على السيرفر — راجع التوثيق")
     code, expires = create_approve_code_record(channel="email")
     emails = programmer_emails()
     base = (os.environ.get("APP_BASE_URL") or request.url_root or "").rstrip("/")
     verify_url = f"{base}{url_for('programmer_verify', next=next_path or '/')}"
-    subject = "رمز تحقق مبرمج ركاز — لمرة واحدة"
+    subject = "رمز تحقق ورمز تغيير مبرمج ركاز — لمرة واحدة"
     body = (
-        "رمز التحقق لمرة واحدة لتعديل إداري من جهاز غير رئيسي:\n\n"
-        f"  {code}\n\n"
+        "رموز التحقق لتعديل برمجي من جهاز غير رئيسي — أدخل الاثنين في صفحة التحقق مع كلمة المرور:\n\n"
+        f"رمز التحقق (OTP):\n  {code}\n\n"
+        f"رمز التغيير (PROGRAMMER_CHANGE_PIN):\n  {pin}\n\n"
         f"صالح حتى (UTC): {expires.strftime('%Y-%m-%d %H:%M:%S')}\n"
-        f"أدخله في صفحة التحقق مع كلمة المرور ورمز التغيير:\n{verify_url}\n\n"
-        "لا يُقبل أي رمز إلا الوارد في هذا البريد أثناء عمل خدمة البريد.\n"
+        f"صفحة التحقق:\n{verify_url}\n\n"
+        "لا يُقبل أي رمز تحقق إلا الوارد في هذا البريد أثناء عمل خدمة البريد.\n"
         "إن لم تطلب هذا الرمز فتجاهل الرسالة.\n"
     )
     ok, err = mailer.send_email(to_addrs=emails, subject=subject, body=body)
     if not ok:
         return False, _t("تعذّر إرسال البريد: {err}", err=err)
     session["programmer_otp_sent_at"] = time.time()
-    return True, _t("تم إرسال رمز التحقق إلى بريد المبرمج المعتمد.")
+    return True, _t("تم إرسال رمز التحقق ورمز التغيير إلى بريد المبرمج المعتمد.")
 
 
 def send_bootstrap_email() -> tuple[bool, str]:
     """يرسل رمز التهيئة PROGRAMMER_BOOTSTRAP_CODE لبريد المبرمج لتسجيل الجهاز الرئيسي."""
-    if not is_programmer():
-        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
+    if not is_hidden_programmer():
+        return False, _t("هذه الصفحة للمبرمج المعتمد فقط")
     wait = _otp_send_wait_seconds()
     if wait > 0:
         return False, _t("انتظر {sec} ثانية قبل إعادة إرسال رمز التهيئة.", sec=wait)
@@ -329,8 +335,8 @@ def send_bootstrap_email() -> tuple[bool, str]:
 
 def verify_strict(*, password: str, pin: str, approve_code: str) -> tuple[bool, str]:
     """تحقق صارم من جهاز ثانوي: كلمة المرور + PIN + رمز البريد (إلزامي عند عمل SMTP)."""
-    if not is_programmer():
-        return False, _t("هذه الصفحة للمبرمج (مدير النظام) فقط")
+    if not is_hidden_programmer():
+        return False, _t("هذه الصفحة للمبرمج المعتمد فقط")
     if not change_pin():
         return False, _t("PROGRAMMER_CHANGE_PIN غير مضبوط على السيرفر — راجع التوثيق")
     if not hmac.compare_digest((pin or "").strip(), change_pin()):
@@ -392,22 +398,29 @@ def gate_control_plane_mutation():
         return None
     if not session.get("user_id"):
         return None
-    if not is_programmer():
-        return None
     if can_mutate_control_plane():
         return None
-    if not main_device_registered():
-        return redirect(url_for("programmer_device_setup", next=request.path))
-    return redirect(url_for("programmer_verify", next=request.path))
+    # واجهة الجهاز/التحقق للمبرمج المعتمد فقط — غيرُه يُرفض مباشرة
+    if can_access_programmer_device_ui():
+        if not main_device_registered():
+            return redirect(url_for("programmer_device_setup", next=request.path))
+        return redirect(url_for("programmer_verify", next=request.path))
+    return permissions.deny_redirect(
+        _t("هذا التعديل برمجي ويتطلب جهاز المبرمج المعتمد — إدارة المستخدمين والصلاحيات متاحة للمدير دون هذا القفل.")
+    )
 
 
 def require_programmer_control(fn):
     @wraps(fn)
     def wrapper(*args, **kwargs):
-        if is_programmer() and (request.method or "").upper() == "POST" and not can_mutate_control_plane():
-            if not main_device_registered():
-                return redirect(url_for("programmer_device_setup", next=request.path))
-            return redirect(url_for("programmer_verify", next=request.path))
+        if (request.method or "").upper() == "POST" and not can_mutate_control_plane():
+            if can_access_programmer_device_ui():
+                if not main_device_registered():
+                    return redirect(url_for("programmer_device_setup", next=request.path))
+                return redirect(url_for("programmer_verify", next=request.path))
+            return permissions.deny_redirect(
+                _t("هذا التعديل برمجي ويتطلب جهاز المبرمج المعتمد.")
+            )
         return fn(*args, **kwargs)
 
     return wrapper
@@ -415,7 +428,7 @@ def require_programmer_control(fn):
 
 def template_context() -> dict:
     show_device = can_access_programmer_device_ui()
-    if not session.get("user_id") or not is_programmer():
+    if not show_device:
         return {
             "programmer_is_admin": False,
             "programmer_show_device_tab": False,
@@ -429,7 +442,7 @@ def template_context() -> dict:
         }
     return {
         "programmer_is_admin": True,
-        "programmer_show_device_tab": show_device,
+        "programmer_show_device_tab": True,
         "programmer_main_device": is_main_device(),
         "programmer_elevated": is_elevated(),
         "programmer_can_mutate": can_mutate_control_plane(),
