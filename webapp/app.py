@@ -354,7 +354,7 @@ def money(n):
         return f"0.00 {_t('ر.س')}"
 
 
-def _summary_card(title, value, subtitle="", *, money=False, href=None):
+def _summary_card(title, value, subtitle="", *, money=False, href=None, active=False):
     """بطاقة ملخص بنفس أسلوب إجمالي الكميات في المستودعات."""
     return {
         "title": title,
@@ -362,6 +362,7 @@ def _summary_card(title, value, subtitle="", *, money=False, href=None):
         "subtitle": subtitle or "",
         "money": bool(money),
         "href": href or None,
+        "active": bool(active),
     }
 
 
@@ -383,6 +384,111 @@ def _sum_money_field(rows, *keys):
                 total += num
                 break
     return total
+
+
+def _missing_amount_flag(raw=None):
+    """هل طلب المستخدم فلتر السجلات بدون مبلغ؟"""
+    if raw is None:
+        raw = request.args.get("missing_amount")
+    return str(raw or "").strip().lower() in {"1", "yes", "true", "on"}
+
+
+def _row_missing_amount(row, *keys):
+    """True إذا لم يُدخل أي مبلغ في الحقول المحددة."""
+    if not keys:
+        return False
+    for key in keys:
+        if _to_float_safe(row.get(key)) is not None:
+            return False
+    return True
+
+
+def _count_missing_amount(rows, *keys):
+    if not keys:
+        return 0
+    return sum(1 for r in rows or [] if _row_missing_amount(r, *keys))
+
+
+def _filter_missing_amount_rows(rows, *keys):
+    if not keys:
+        return list(rows or [])
+    return [r for r in (rows or []) if _row_missing_amount(r, *keys)]
+
+
+def _request_query_args(*drop, **overrides):
+    """يبني dict لمعاملات الرابط مع الحفاظ على الفلاتر الحالية."""
+    args = {
+        k: v
+        for k, v in request.args.to_dict(flat=True).items()
+        if v is not None and str(v).strip() != ""
+    }
+    for key in drop:
+        args.pop(key, None)
+    for key, val in overrides.items():
+        if val is None or str(val).strip() == "":
+            args.pop(key, None)
+        else:
+            args[key] = val
+    return args
+
+
+def _url_with_filters(endpoint, *drop, **overrides):
+    return url_for(endpoint, **_request_query_args(*drop, **overrides))
+
+
+def _missing_amount_card(
+    count,
+    *,
+    endpoint,
+    active=False,
+    endpoint_kwargs=None,
+):
+    """بطاقة قابلة للنقر لتصفية السجلات بدون مبلغ."""
+    endpoint_kwargs = dict(endpoint_kwargs or {})
+    if active:
+        href = _url_with_filters(endpoint, "missing_amount", **endpoint_kwargs)
+        subtitle = _t("فلتر نشط — اضغط لإلغاء التصفية")
+    else:
+        href = _url_with_filters(
+            endpoint, missing_amount="1", **endpoint_kwargs
+        )
+        subtitle = _t("اضغط لعرض السجلات بدون مبلغ")
+    return _summary_card(
+        _t("بدون مبلغ"),
+        count,
+        subtitle,
+        href=href,
+        active=active,
+    )
+
+
+def _simple_xlsx_export(title, headers, rows, field_keys, download_name):
+    """تصدير Excel بسيط للصفوف المفلترة."""
+    from openpyxl import Workbook
+    from webapp import excel_brand as brand
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = (title or "Export")[:31]
+    ncol = len(headers)
+    header_row = brand.apply_brand_header(ws, title=title, ncol=ncol)
+    brand.write_header_row(ws, headers, header_row)
+    start = header_row + 1
+    for offset, row in enumerate(rows or []):
+        r = start + offset
+        for col, key in enumerate(field_keys, start=1):
+            val = row.get(key) if isinstance(row, dict) else None
+            ws.cell(row=r, column=col, value="" if val is None else val)
+    end = start + len(rows or []) - 1 if rows else header_row
+    if rows:
+        brand.style_data_rows(ws, start_row=start, end_row=end, ncol=ncol)
+    data = brand.save_workbook_bytes(wb)
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=download_name,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
 
 
 def _latest_row(rows, *date_keys):
@@ -512,6 +618,10 @@ def build_list_summary_cards(
     date_keys=(),
     detail_key=None,
     filter_hint=None,
+    missing_amount_count=None,
+    missing_amount_active=False,
+    missing_amount_endpoint=None,
+    missing_amount_endpoint_kwargs=None,
 ):
     """يبني بطاقات ملخص من الصفوف المعروضة (بعد الفلترة)."""
     rows = list(rows or [])
@@ -529,6 +639,20 @@ def build_list_summary_cards(
                 money=True,
             )
         )
+        if missing_amount_endpoint:
+            miss_count = (
+                missing_amount_count
+                if missing_amount_count is not None
+                else _count_missing_amount(rows, *money_keys)
+            )
+            cards.append(
+                _missing_amount_card(
+                    miss_count,
+                    endpoint=missing_amount_endpoint,
+                    active=missing_amount_active,
+                    endpoint_kwargs=missing_amount_endpoint_kwargs,
+                )
+            )
     latest = _latest_row(rows, *date_keys) if date_keys else (rows[0] if rows else None)
     if detail_key:
         detail_val = (latest or {}).get(detail_key) if latest else None
@@ -2810,14 +2934,19 @@ def ticket_from_form():
     return data
 
 
-@app.route("/tickets")
-@login_required
-def tickets_list():
-    q = (request.args.get("q") or "").strip()
-    status = (request.args.get("status") or "").strip()
-    date_from = (request.args.get("date_from") or "").strip()
-    date_to = (request.args.get("date_to") or "").strip()
-    conn = db.connect()
+def _load_filtered_tickets(
+    *,
+    q="",
+    status="",
+    date_from="",
+    date_to="",
+    missing_amount=False,
+    conn=None,
+):
+    """يحمّل الأعطال مع نفس فلاتر القائمة (بما فيها بدون مبلغ)."""
+    own_conn = conn is None
+    if own_conn:
+        conn = db.connect()
     sql = "SELECT * FROM tickets WHERE 1=1"
     params = []
     if q:
@@ -2838,7 +2967,29 @@ def tickets_list():
     for r in rows:
         r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
     _attach_ticket_final_values(rows, conn)
-    conn.close()
+    if own_conn:
+        conn.close()
+    missing_count = _count_missing_amount(rows, "final_value")
+    if missing_amount:
+        rows = _filter_missing_amount_rows(rows, "final_value")
+    return rows, missing_count
+
+
+@app.route("/tickets")
+@login_required
+def tickets_list():
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    missing_amount = _missing_amount_flag()
+    rows, missing_count = _load_filtered_tickets(
+        q=q,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        missing_amount=missing_amount,
+    )
     summary_cards = [
         _summary_card(_t("عدد الأعطال"), len(rows), _t("حسب الفلتر الحالي")),
         _summary_card(
@@ -2846,6 +2997,11 @@ def tickets_list():
             _sum_money_field(rows, "final_value"),
             _t("مجموع القيم النهائية"),
             money=True,
+        ),
+        _missing_amount_card(
+            missing_count,
+            endpoint="tickets_list",
+            active=missing_amount,
         ),
     ]
     latest = _latest_row(rows, "receive_date")
@@ -2870,6 +3026,8 @@ def tickets_list():
         status=status,
         date_from=date_from,
         date_to=date_to,
+        missing_amount=missing_amount,
+        export_href=_url_with_filters("export_tickets_excel"),
         summary_cards=summary_cards,
     )
 
@@ -3650,6 +3808,77 @@ def module_list(name):
             return redirect(url_for("warehouse_projects", view="movements"))
         if not (request.args.get("ticket_no") or request.args.get("item_no")):
             return redirect(url_for("warehouses_home"))
+    packed = _load_module_list_rows(name, module)
+    rows = packed["rows"]
+    money_keys = packed["money_keys"]
+    missing_amount = packed["missing_amount"]
+    missing_count = packed["missing_count"]
+    item_filter = packed["item_filter"]
+    ticket_filter = packed["ticket_filter"]
+    source_filter = packed["source_filter"]
+    dept_filter = packed["dept_filter"]
+    excavation_filter = packed["excavation_filter"]
+    linked_section_filter = packed["linked_section_filter"]
+    tickets = packed["tickets"]
+    section = module.get("section")
+    # لا نكرر بطاقات المستودع الخاصة بإجمالي الكميات على صفحات الحركات التفصيلية
+    skip_summary = name in ("warehouse_items",)
+    if skip_summary:
+        summary_cards = []
+    else:
+        count_labels = {
+            "metering": _t("عدد سجلات التمتير"),
+            "invoices": _t("عدد المستخلصات"),
+            "construction_works": _t("عدد المعاملات"),
+            "contractor_works": _t("عدد المعاملات"),
+            "reinforcement_works": _t("عدد المعاملات"),
+            "projects": _t("عدد المشاريع"),
+            "quantities": _t("عدد البنود"),
+            "photos": _t("عدد سجلات الصور"),
+            "warehouse_tx": _t("عدد الحركات"),
+            "external_purchases": _t("عدد المشتريات"),
+            "contractor_supplies": _t("عدد التوريدات"),
+            "new_coordinations": _t("عدد التنسيقات"),
+            "issued_licenses": _t("عدد الرخص"),
+            "quality_clearances": _t("عدد الإخلاءات"),
+            "reinforcement_departments": _t("عدد الأقسام"),
+        }
+        summary_cards = build_list_summary_cards(
+            rows,
+            count_label=count_labels.get(name),
+            money_keys=money_keys,
+            date_keys=_module_date_keys(name, module),
+            detail_key=_module_detail_key(name, module),
+            missing_amount_count=missing_count,
+            missing_amount_active=missing_amount,
+            missing_amount_endpoint="module_list" if money_keys else None,
+            missing_amount_endpoint_kwargs={"name": name} if money_keys else None,
+        )
+    return render_template(
+        "module_list.html",
+        name=name,
+        module=_mod(module),
+        rows=rows,
+        tickets=tickets,
+        item_filter=item_filter,
+        ticket_filter=ticket_filter,
+        excavation_filter=excavation_filter,
+        linked_section_filter=linked_section_filter,
+        source_filter=source_filter if name == "warehouse_tx" else "",
+        section=section,
+        section_meta=_smeta(SECTION_META.get(section)),
+        section_modules=modules_for_section(section) if section else [],
+        warehouse_source=source_filter if name == "warehouse_tx" else None,
+        department_filter=dept_filter if name == "reinforcement_works" else "",
+        reinforcement_departments=db.list_reinforcement_departments(active_only=False) if name == "reinforcement_works" else [],
+        missing_amount=missing_amount,
+        export_href=_url_with_filters("module_export_excel", name=name) if money_keys else None,
+        summary_cards=summary_cards,
+    )
+
+
+def _load_module_list_rows(name, module):
+    """تحميل صفوف الوحدة مع نفس فلاتر صفحة القائمة (بما فيها بدون مبلغ)."""
     conn = db.connect()
     rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {module['table']} ORDER BY id DESC").fetchall())
     tickets = [r["ticket_no"] for r in conn.execute("SELECT ticket_no FROM tickets ORDER BY id DESC").fetchall()]
@@ -3719,54 +3948,56 @@ def module_list(name):
             for r in rows
             if db.normalize_linked_section(r.get("linked_section")) == linked_section_filter
         ]
-    section = module.get("section")
-    # لا نكرر بطاقات المستودع الخاصة بإجمالي الكميات على صفحات الحركات التفصيلية
-    skip_summary = name in ("warehouse_items",)
-    if skip_summary:
-        summary_cards = []
-    else:
-        count_labels = {
-            "metering": _t("عدد سجلات التمتير"),
-            "invoices": _t("عدد المستخلصات"),
-            "construction_works": _t("عدد المعاملات"),
-            "contractor_works": _t("عدد المعاملات"),
-            "reinforcement_works": _t("عدد المعاملات"),
-            "projects": _t("عدد المشاريع"),
-            "quantities": _t("عدد البنود"),
-            "photos": _t("عدد سجلات الصور"),
-            "warehouse_tx": _t("عدد الحركات"),
-            "external_purchases": _t("عدد المشتريات"),
-            "contractor_supplies": _t("عدد التوريدات"),
-            "new_coordinations": _t("عدد التنسيقات"),
-            "issued_licenses": _t("عدد الرخص"),
-            "quality_clearances": _t("عدد الإخلاءات"),
-            "reinforcement_departments": _t("عدد الأقسام"),
-        }
-        summary_cards = build_list_summary_cards(
-            rows,
-            count_label=count_labels.get(name),
-            money_keys=_module_money_keys(name, module),
-            date_keys=_module_date_keys(name, module),
-            detail_key=_module_detail_key(name, module),
-        )
-    return render_template(
-        "module_list.html",
-        name=name,
-        module=_mod(module),
-        rows=rows,
-        tickets=tickets,
-        item_filter=item_filter,
-        ticket_filter=ticket_filter,
-        excavation_filter=excavation_filter,
-        linked_section_filter=linked_section_filter,
-        source_filter=source_filter if name == "warehouse_tx" else "",
-        section=section,
-        section_meta=_smeta(SECTION_META.get(section)),
-        section_modules=modules_for_section(section) if section else [],
-        warehouse_source=source_filter if name == "warehouse_tx" else None,
-        department_filter=dept_filter if name == "reinforcement_works" else "",
-        reinforcement_departments=db.list_reinforcement_departments(active_only=False) if name == "reinforcement_works" else [],
-        summary_cards=summary_cards,
+    money_keys = _module_money_keys(name, module)
+    missing_amount = _missing_amount_flag()
+    missing_count = _count_missing_amount(rows, *money_keys) if money_keys else 0
+    if missing_amount and money_keys:
+        rows = _filter_missing_amount_rows(rows, *money_keys)
+    return {
+        "rows": rows,
+        "tickets": tickets,
+        "money_keys": money_keys,
+        "missing_amount": missing_amount,
+        "missing_count": missing_count,
+        "item_filter": item_filter,
+        "ticket_filter": ticket_filter,
+        "source_filter": source_filter,
+        "dept_filter": dept_filter,
+        "excavation_filter": excavation_filter,
+        "linked_section_filter": linked_section_filter,
+    }
+
+
+@app.route("/module/<name>/export.xlsx")
+@login_required
+def module_export_excel(name):
+    module = MODULES.get(name)
+    if not module:
+        flash(_t("القسم غير موجود"), "danger")
+        return redirect(url_for("ops_home"))
+    if name in ("warehouse_items", "primary_team_orders", "warehouse_tx"):
+        return redirect(url_for("module_list", name=name))
+    money_keys = _module_money_keys(name, module)
+    if not money_keys:
+        flash(_t("لا يوجد تصدير لهذه القائمة"), "danger")
+        return redirect(url_for("module_list", name=name))
+    packed = _load_module_list_rows(name, module)
+    rows = packed["rows"]
+    list_cols = list(module.get("list_cols") or [])
+    for mk in money_keys:
+        if mk not in list_cols:
+            list_cols.append(mk)
+    label_map = {f[0]: f[1] for f in module.get("fields") or []}
+    headers = [_t(label_map.get(k, k)) for k in list_cols]
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-بدون-مبلغ" if packed["missing_amount"] else ""
+    title = _t(module.get("title") or name)
+    return _simple_xlsx_export(
+        title,
+        headers,
+        rows,
+        list_cols,
+        f"{name}{suffix}-{stamp}.xlsx",
     )
 
 
@@ -4525,6 +4756,7 @@ def ops_primary_teams():
     q = (request.args.get("q") or "").strip()
     date_from = (request.args.get("date_from") or "").strip()
     date_to = (request.args.get("date_to") or "").strip()
+    missing_amount = _missing_amount_flag()
     rows = db.rows_to_dicts(
         conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall()
     )
@@ -4540,12 +4772,18 @@ def ops_primary_teams():
             or ql in (r.get("notes") or "").lower()
         ]
     rows = _filter_rows_by_date_range(rows, date_from, date_to, "order_date")
+    missing_count = _count_missing_amount(rows, "amount")
+    if missing_amount:
+        rows = _filter_missing_amount_rows(rows, "amount")
     summary_cards = build_list_summary_cards(
         rows,
         count_label=_t("عدد الأوامر"),
         money_keys=("amount",),
         date_keys=("order_date",),
         detail_key="work_order",
+        missing_amount_count=missing_count,
+        missing_amount_active=missing_amount,
+        missing_amount_endpoint="ops_primary_teams",
     )
     return render_template(
         "primary_teams.html",
@@ -4554,7 +4792,53 @@ def ops_primary_teams():
         date_from=date_from,
         date_to=date_to,
         today=datetime.now().strftime("%Y-%m-%d"),
+        missing_amount=missing_amount,
+        export_href=_url_with_filters("export_primary_teams_excel"),
         summary_cards=summary_cards,
+    )
+
+
+@app.route("/ops/primary-teams/export.xlsx")
+@login_required
+def export_primary_teams_excel():
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    missing_amount = _missing_amount_flag()
+    conn = db.connect()
+    rows = db.rows_to_dicts(
+        conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall()
+    )
+    conn.close()
+    if q:
+        ql = q.lower()
+        rows = [
+            r
+            for r in rows
+            if ql in (r.get("work_order") or "").lower()
+            or ql in (r.get("extract_no") or "").lower()
+            or ql in (str(r.get("amount") or "")).lower()
+            or ql in (r.get("notes") or "").lower()
+        ]
+    rows = _filter_rows_by_date_range(rows, date_from, date_to, "order_date")
+    if missing_amount:
+        rows = _filter_missing_amount_rows(rows, "amount")
+    headers = [
+        _t("أمر العمل"),
+        _t("رقم المستخلص"),
+        _t("المبلغ"),
+        _t("التاريخ"),
+        _t("ملاحظات"),
+    ]
+    fields = ["work_order", "extract_no", "amount", "order_date", "notes"]
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-بدون-مبلغ" if missing_amount else ""
+    return _simple_xlsx_export(
+        _t("الفرق الأولية"),
+        headers,
+        rows,
+        fields,
+        f"الفرق-الأولية{suffix}-{stamp}.xlsx",
     )
 
 
@@ -5021,11 +5305,25 @@ def api_jump_destinations():
 @app.route("/export/tickets.xlsx")
 @login_required
 def export_tickets_excel():
-    data = tickets_excel.export_tickets()
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    missing_amount = _missing_amount_flag()
+    rows, _missing = _load_filtered_tickets(
+        q=q,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        missing_amount=missing_amount,
+    )
+    data = tickets_excel.export_tickets(rows)
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-بدون-مبلغ" if missing_amount else ""
     return send_file(
         io.BytesIO(data),
         as_attachment=True,
-        download_name=f"الأعطال-{datetime.now().strftime('%Y%m%d')}.xlsx",
+        download_name=f"الأعطال{suffix}-{stamp}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     )
 

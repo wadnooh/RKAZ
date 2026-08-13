@@ -29,7 +29,14 @@
 </div>
 
 <div class="card" style="margin-top:14px;">
+  <div class="toolbar" style="margin-bottom:12px;">
+    <div></div>
+    <div class="actions">
+      {% if can('export') %}<a class="btn ghost" href="{{ export_href or url_for('export_primary_teams_excel') }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>{% endif %}
+    </div>
+  </div>
   <form method="get" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
+    {% if missing_amount %}<input type="hidden" name="missing_amount" value="1">{% endif %}
     <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بأمر العمل / رقم المستخلص / المبلغ...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <label class="meta" style="display:flex;align-items:center;gap:6px;">
       <span>{{ _('من') }}</span>
@@ -41,6 +48,9 @@
     </label>
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for('ops_primary_teams') }}">{{ _('مسح') }}</a>
+    {% if missing_amount %}
+    <a class="btn ghost" href="{{ url_for('ops_primary_teams', q=q, date_from=date_from, date_to=date_to) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
+    {% endif %}
   </form>
   {% set summary_cards_style = 'margin-bottom:14px;' %}
   {% include "_summary_cards.html" %}

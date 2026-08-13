@@ -13,7 +13,7 @@
       <a class="btn ghost" href="{{ url_for('tickets_template') }}">{{ _('قالب Excel') }}</a>
       <a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>
       {% endif %}
-      {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>{% endif %}
+      {% if can('export') %}<a class="btn ghost" href="{{ export_href or url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>{% endif %}
     </div>
   </div>
 
@@ -33,6 +33,7 @@
   {% endif %}
 
   <form method="get" class="tickets-filters actions" style="margin-bottom:12px;flex-wrap:wrap;">
+    {% if missing_amount %}<input type="hidden" name="missing_amount" value="1">{% endif %}
     <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;flex:1;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
@@ -50,6 +51,9 @@
     </label>
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for('tickets_list') }}">{{ _('مسح') }}</a>
+    {% if missing_amount %}
+    <a class="btn ghost" href="{{ url_for('tickets_list', q=q, status=status, date_from=date_from, date_to=date_to) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
+    {% endif %}
   </form>
 
   {% set summary_cards_style = 'margin-bottom:14px;' %}

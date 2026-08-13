@@ -408,6 +408,9 @@ def required_perm_for_request() -> str | None:
     if ep == "export_tickets_excel":
         return None if has_perm("export") else "export"
 
+    if ep in {"module_export_excel", "export_primary_teams_excel"}:
+        return None if has_perm("export") else "export"
+
     if ep == "global_search":
         return None if has_perm("search") else "search"
 

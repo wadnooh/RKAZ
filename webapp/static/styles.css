@@ -368,6 +368,22 @@ body.delete-pw-open {
 .warehouse-qty-summary .stat-card {
   background: #fff;
 }
+a.stat-card {
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+a.stat-card:hover {
+  border-color: #7eb0d6;
+  box-shadow: 0 2px 10px rgba(18, 63, 105, 0.08);
+}
+.stat-card.is-active {
+  border-color: #c45c26;
+  background: linear-gradient(180deg, #fff8f3, #fff);
+  box-shadow: 0 0 0 1px rgba(196, 92, 38, 0.25);
+}
+.stat-card.is-active strong {
+  color: #9a3d12;
+}
 
 .table-wrap {
   overflow: auto;
