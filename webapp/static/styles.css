@@ -168,16 +168,20 @@ body {
 }
 
 .container {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 18px 16px 40px;
-  position: relative;
-  z-index: 1;
-}
-.container.container-wide {
+  /* Full-bleed content on ultra-wide monitors; modest side padding only */
   max-width: none;
   width: 100%;
-  padding-inline: clamp(12px, 2.2vw, 32px);
+  margin: 0 auto;
+  padding: 18px clamp(12px, 1.4vw, 40px) 40px;
+  position: relative;
+  z-index: 1;
+  box-sizing: border-box;
+}
+.container.container-wide {
+  /* Alias kept for pages that opt in; same ultra-wide default */
+  max-width: none;
+  width: 100%;
+  padding-inline: clamp(12px, 1.4vw, 40px);
   box-sizing: border-box;
 }
 .tickets-page .tickets-filters {
@@ -1199,6 +1203,7 @@ a.quality-metric.active {
   .quality-metric-row.compact {
     grid-template-columns: 1fr;
   }
+  .container,
   .container.container-wide {
     padding-inline: 10px;
   }
