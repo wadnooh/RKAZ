@@ -27,11 +27,11 @@
     <div class="actions programmer-otp-actions" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
       <button class="btn primary programmer-otp-btn" type="submit" name="action" value="send_otp"
         {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
-        {{ _('إرسال رمز التحقق') }}
+        {{ _('إرسال') }}
       </button>
       <button class="btn primary programmer-otp-btn" type="submit" name="action" value="resend_otp"
         {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
-        {{ _('إعادة إرسال رمز التحقق') }}
+        {{ _('إعادة إرسال') }}
       </button>
       {% if otp_wait_seconds %}
       <span class="badge" data-otp-wait="{{ otp_wait_seconds }}">{{ _('انتظر {sec} ث قبل إعادة الإرسال', sec=otp_wait_seconds) }}</span>

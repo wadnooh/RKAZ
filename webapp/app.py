@@ -302,7 +302,7 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
 
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "bootstrap-email-btn-3"
+_LAYOUT_ASSET_TAG = "bootstrap-email-btn-4"
 
 
 def _static_asset_version() -> str:
