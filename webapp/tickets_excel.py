@@ -172,7 +172,13 @@ _TICKET_ALIASES = {
     "حالة المستخلص": "invoice_status",
     "invoice_status": "invoice_status",
     "أمر العمل": "work_order",
+    "رقم أمر العمل": "work_order",
+    "رقم المعاملة": "work_order",  # توافق مع التسمية القديمة
     "work_order": "work_order",
+    "work order no": "work_order",
+    "work order number": "work_order",
+    "transaction no": "work_order",
+    "transaction number": "work_order",
     "رقم الفاتورة": "invoice_no",
     "invoice_no": "invoice_no",
     "حالة sap": "sap_status",

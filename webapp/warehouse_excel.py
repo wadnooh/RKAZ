@@ -83,7 +83,12 @@ _TX_ALIASES = {
     "qty": "qty",
     "رقم أمر العمل": "work_order",
     "أمر العمل": "work_order",
+    "رقم المعاملة": "work_order",  # توافق مع التسمية القديمة
     "work_order": "work_order",
+    "work order no": "work_order",
+    "work order number": "work_order",
+    "transaction no": "work_order",
+    "transaction number": "work_order",
     "المستلم / المسلم": "recipient",
     "المستلم": "recipient",
     "recipient": "recipient",

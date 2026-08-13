@@ -190,7 +190,7 @@
   {% elif view == 'works' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="works">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم المعاملة / الموقع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أمر العمل / الموقع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='works') }}">{{ _('مسح') }}</a>
   </form>
@@ -198,7 +198,7 @@
     <table class="table">
       <thead>
         <tr>
-          <th>{{ _('رقم المعاملة') }}</th>
+          <th>{{ _('رقم أمر العمل') }}</th>
           <th>{{ _('التاريخ') }}</th>
           <th>{{ _('الموقع') }}</th>
           <th>{{ _('نوع العمل') }}</th>

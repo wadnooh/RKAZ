@@ -37,7 +37,7 @@
         <tr><th>{{ _('الحالة') }}</th><td>{{ tv(record.status) if record.status else '—' }}</td></tr>
         <tr><th>{{ _('الموقع') }}</th><td>{{ record.location or '—' }}</td></tr>
         {% elif kind == 'construction' %}
-        <tr><th>{{ _('رقم المعاملة') }}</th><td><strong>{{ record.work_no or '—' }}</strong></td></tr>
+        <tr><th>{{ _('رقم أمر العمل') }}</th><td><strong>{{ record.work_no or '—' }}</strong></td></tr>
         <tr><th>{{ _('التاريخ') }}</th><td>{{ record.work_date or '—' }}</td></tr>
         <tr><th>{{ _('الموقع') }}</th><td>{{ record.site or '—' }}</td></tr>
         <tr><th>{{ _('الحي') }}</th><td>{{ record.district or '—' }}</td></tr>
