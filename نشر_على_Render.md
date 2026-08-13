@@ -1,6 +1,6 @@
 # نشر نظام ركاز — مرجع Render (أرشيف متقاعد)
 
-> **تم الانتقال بالكامل.** الاستضافة الرسمية: **https://rekaz.wadnooh.com**  
+> **تم الانتقال بالكامل.** الاستضافة الرسمية: **https://report.ralenjaz.com**  
 > الدليل الحالي: [`نشر_على_VPS.md`](نشر_على_VPS.md)  
 > SQLite على القرص: `/opt/rekaz/data` · الخدمة: `rekaz.service` · nginx + HTTPS
 

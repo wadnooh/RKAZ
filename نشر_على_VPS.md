@@ -1,6 +1,6 @@
 # نشر نظام ركاز على VPS (الاستضافة الرسمية)
 
-**الرابط الرسمي:** https://rekaz.wadnooh.com
+**الرابط الرسمي:** https://report.ralenjaz.com
 
 | البند | القيمة |
 |-------|--------|
@@ -8,7 +8,8 @@
 | مسار التطبيق | `/opt/rekaz` |
 | قاعدة البيانات | `/opt/rekaz/data/rakaz.db` (`RAKAZ_DATA_DIR=/opt/rekaz/data`) |
 | الخدمة | `systemd` → `rekaz.service` (Waitress على `127.0.0.1:8010`) |
-| الواجهة | nginx + Let's Encrypt → `rekaz.wadnooh.com` |
+| الواجهة | nginx + Let's Encrypt → `report.ralenjaz.com` (ملف موقع منفصل عن `report.rtcco.org`) |
+| الدومين القديم | `rekaz.wadnooh.com` → تحويل 301 إلى الرابط الرسمي |
 | النسخ الاحتياطي | محلي تحت `/opt/rekaz/data/backups` + رفع تلقائي إلى Amazon S3 |
 
 المستودع: https://github.com/wadnooh/RKAZ
@@ -18,7 +19,7 @@
 ## فحص سريع بعد النشر
 
 ```bash
-curl -sS https://rekaz.wadnooh.com/health
+curl -sS https://report.ralenjaz.com/health
 systemctl status rekaz --no-pager
 nginx -t
 ```
@@ -41,7 +42,7 @@ sudo -u rekazapp /opt/rekaz/.venv/bin/pip install -r requirements.txt
 sudo systemctl restart rekaz
 ```
 
-لا تلمس `/opt/weeklyreport` ولا خدمة `weeklyreport`.
+لا تلمس `/opt/weeklyreport` ولا خدمة `weeklyreport` ولا موقع nginx `report.rtcco.org`.
 
 ---
 
@@ -56,6 +57,8 @@ RAKAZ_CLOUD=1
 TRIAL_MODE=1
 SESSION_COOKIE_SECURE=1
 FORCE_HTTPS=1
+PREFERRED_URL_SCHEME=https
+APP_BASE_URL=https://report.ralenjaz.com
 AUTO_BACKUP=1
 AUTO_BACKUP_HOURS=2
 AUTO_BACKUP_ACTIVITY_SECONDS=45
@@ -88,7 +91,18 @@ sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/restore_backup.py --s3-latest
 
 ## DNS
 
-سجل A: `rekaz.wadnooh.com` → IP الـ VPS.
+| النوع | الاسم | القيمة | TTL |
+|-------|--------|--------|-----|
+| A | `report` | `191.101.2.59` | 300 أو الافتراضي |
+
+النطاق `ralenjaz.com` يُدار من حساب Hostinger الخاص بالعميل (ليس حساب `wadnooh.com`).
+بعد انتشار DNS نفّذ على السيرفر:
+
+```bash
+bash /opt/rekaz/tools/finish_report_ralenjaz_ssl.sh
+```
+
+هذا يُصدر شهادة Let's Encrypt ويحوّل `rekaz.wadnooh.com` إلى `report.ralenjaz.com`.
 
 ---
 

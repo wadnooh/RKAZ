@@ -6,7 +6,7 @@
 
 أرسل للعميل هذا الرابط فقط:
 
-**https://rekaz.wadnooh.com**
+**https://report.ralenjaz.com**
 
 - الدخول: `admin` / `admin123`
 - التفاصيل: [`للعميل/الرابط_السحابي.md`](للعميل/الرابط_السحابي.md)
@@ -34,7 +34,7 @@
 
 ### الاستضافة الحالية (VPS دائم)
 
-- السيرفر: نفس VPS المستخدم لـ RTCREPORT (`rekaz.wadnooh.com`)
+- السيرفر: نفس VPS المستخدم لـ RTCREPORT — الدومين الرسمي `report.ralenjaz.com` (منفصل عن `report.rtcco.org`)
 - SQLite دائم على القرص: `RAKAZ_DATA_DIR=/opt/rekaz/data` (يبقى بعد إعادة التشغيل والنشر)
 - نسخ احتياطي إضافي إلى **Amazon S3** في الخلفية
 - الخدمة: `systemd` (`rekaz.service`) + nginx + HTTPS

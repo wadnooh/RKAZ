@@ -1,5 +1,5 @@
 # متقاعد — كان يُبقي خدمة Render المجانية مستيقظة.
-# الاستضافة الرسمية الآن: https://rekaz.wadnooh.com (VPS دائم، لا يحتاج keep-alive).
+# الاستضافة الرسمية الآن: https://report.ralenjaz.com (VPS دائم، لا يحتاج keep-alive).
 # عُطّل الـ schedule حتى لا يستدعي الرابط القديم onrender.
 
 name: Keep Render Awake (retired)
@@ -13,5 +13,5 @@ jobs:
     steps:
       - name: No-op
         run: |
-          echo "Render keep-alive retired. Official URL: https://rekaz.wadnooh.com"
+          echo "Render keep-alive retired. Official URL: https://report.ralenjaz.com"
           exit 0
