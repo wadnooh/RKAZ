@@ -343,6 +343,17 @@ body.delete-pw-open {
   font-size: 1.45rem;
   color: #123f69;
 }
+.stat-card .meta {
+  margin-top: 6px;
+  font-size: 0.82rem;
+  line-height: 1.35;
+}
+.warehouse-qty-summary {
+  align-items: stretch;
+}
+.warehouse-qty-summary .stat-card {
+  background: #fff;
+}
 
 .table-wrap {
   overflow: auto;

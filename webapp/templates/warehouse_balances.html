@@ -43,6 +43,8 @@
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('مسح') }}</a>
   </form>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -108,6 +110,8 @@
     <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('مسح') }}</a>
   </form>
 
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>

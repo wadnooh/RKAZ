@@ -24,6 +24,8 @@
       {% endif %}
     </div>
   </div>
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
   <p class="meta">{{ _('قسم النظام') }}: <code>{{ tab.section }}</code> — {{ _('المعرّف') }}: <code>{{ tab.slug }}</code></p>
   {% if tab.notes %}
   <p class="meta">{{ _('ملاحظة المضيف') }}: {{ tab.notes }}</p>

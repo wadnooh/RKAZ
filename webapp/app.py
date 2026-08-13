@@ -4663,12 +4663,32 @@ def warehouse_balances():
             or q in (r.get("item_name") or "").lower()
             or q in (r.get("category") or "").lower()
         ]
+    hint = _t("حسب البحث الحالي") if q else _t("حسب الفلتر الحالي")
+    summary_cards = [
+        _summary_card(_t("عدد الأصناف"), len(items), hint),
+        _summary_card(
+            _t("إجمالي الوارد"),
+            f"{sum(float(r.get('inbound') or 0) for r in items):.2f}",
+            hint,
+        ),
+        _summary_card(
+            _t("إجمالي المنصرف"),
+            f"{sum(float(r.get('outbound') or 0) for r in items):.2f}",
+            hint,
+        ),
+        _summary_card(
+            _t("المتبقي"),
+            f"{sum(float(r.get('balance') or 0) for r in items):.2f}",
+            _t("الوارد − المنصرف"),
+        ),
+    ]
     return render_template(
         "warehouse_balances.html",
         rows=items,
         q=q,
         view=view,
         warehouse_active="balances",
+        summary_cards=summary_cards,
     )
 
 
