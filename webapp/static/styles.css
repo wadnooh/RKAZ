@@ -363,10 +363,18 @@ body.delete-pw-open {
   line-height: 1.35;
 }
 .warehouse-qty-summary {
+  display: flex;
+  flex-wrap: nowrap;
   align-items: stretch;
+  gap: 12px;
+  /* Override fixed 4-col grid so N cards (incl. بدون مبلغ) share one row */
+  grid-template-columns: none;
 }
 .warehouse-qty-summary .stat-card {
+  flex: 1 1 0;
+  min-width: 0;
   background: #fff;
+  box-sizing: border-box;
 }
 a.stat-card {
   cursor: pointer;
@@ -1199,6 +1207,16 @@ a.quality-metric.active {
 
 @media (max-width: 1100px) {
   .stats-grid, .form-grid, .meta-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  /* Summary cards: keep one even row on tablet+ (override 2-col stats-grid) */
+  .warehouse-qty-summary {
+    display: flex;
+    flex-wrap: nowrap;
+    grid-template-columns: none;
+  }
+  .warehouse-qty-summary .stat-card {
+    flex: 1 1 0;
+    min-width: 0;
+  }
   .brand-logo { width: 120px; height: 48px; }
   .quality-summary,
   .quality-evac-cards,
@@ -1211,6 +1229,16 @@ a.quality-metric.active {
 }
 @media (max-width: 720px) {
   .stats-grid, .form-grid, .meta-grid { grid-template-columns: 1fr; }
+  /* Very small phones: compact 2-up wrap; still prefer equal cards */
+  .warehouse-qty-summary {
+    display: flex;
+    flex-wrap: wrap;
+    grid-template-columns: none;
+  }
+  .warehouse-qty-summary .stat-card {
+    flex: 1 1 calc(50% - 6px);
+    min-width: min(100%, 140px);
+  }
   .quality-count-cards,
   .quality-count-cards-3 {
     grid-template-columns: 1fr;

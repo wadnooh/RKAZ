@@ -295,7 +295,7 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
 
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "uw-appwide-1"
+_LAYOUT_ASSET_TAG = "summary-row-1"
 
 
 def _static_asset_version() -> str:
