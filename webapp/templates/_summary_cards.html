@@ -1,0 +1,25 @@
+{# بطاقات ملخص موحّدة — نفس أسلوب إجمالي الكميات في المستودعات
+   الاستخدام: {% set summary_cards = [...] %}{% include "_summary_cards.html" %}
+   كل بطاقة: title, value, subtitle?, money?, href?
+#}
+{% if summary_cards %}
+<div class="stats-grid warehouse-qty-summary{% if summary_cards_class %} {{ summary_cards_class }}{% endif %}"{% if summary_cards_style %} style="{{ summary_cards_style }}"{% endif %}>
+  {% for c in summary_cards %}
+  {% if c.href %}
+  <a class="stat-card" href="{{ c.href }}" style="text-decoration:none;color:inherit;">
+  {% else %}
+  <div class="stat-card">
+  {% endif %}
+    <div>{{ c.title }}</div>
+    <strong{% if c.money %} style="font-size:1.05rem"{% endif %}>
+      {% if c.money %}{{ c.value|money }}{% else %}{{ c.value }}{% endif %}
+    </strong>
+    {% if c.subtitle %}<div class="meta">{{ c.subtitle }}</div>{% endif %}
+  {% if c.href %}
+  </a>
+  {% else %}
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}

@@ -1,8 +1,9 @@
 {% extends "base.html" %}
+{% block container_class %} container-wide{% endblock %}
 {% block content %}
 {% set active = 'tickets' %}
 {% include "_ops_subnav.html" %}
-<div class="card">
+<div class="card tickets-page">
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ _('الأعطال') }}</h2>
@@ -16,6 +17,8 @@
       {% if can('export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>{% endif %}
     </div>
   </div>
+
+  {% include "_summary_cards.html" %}
 
   {% if can('tickets.write') %}
   <div class="form-grid" style="margin-bottom:14px;">
@@ -32,8 +35,8 @@
   </p>
   {% endif %}
 
-  <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
+  <form method="get" class="tickets-filters actions" style="margin-bottom:12px;">
+    <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;flex:1;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
       {% for s in lists.execution_status %}
@@ -44,21 +47,17 @@
     <a class="btn ghost" href="{{ url_for('tickets_list') }}">{{ _('مسح') }}</a>
   </form>
 
-  <div class="table-wrap">
-    <table class="table">
+  <div class="table-wrap tickets-table-wrap">
+    <table class="table tickets-table">
       <thead>
         <tr>
           <th>{{ _('رقم العطل') }}</th>
           <th>{{ _('كود ER') }}</th>
           <th>{{ _('أمر العمل') }}</th>
           <th>{{ _('التاريخ') }}</th>
-          <th>{{ _('الحي') }}</th>
           <th>{{ _('المحطة') }}</th>
-          <th>{{ _('العطل') }}</th>
-          <th>{{ _('التصنيف') }}</th>
           <th>{{ _('الفرقة') }}</th>
           <th>{{ _('الحالة') }}</th>
-          <th>{{ _('الاستجابة (د)') }}</th>
           <th>{{ _('القيمة النهائية') }}</th>
           <th>{{ _('إجراءات') }}</th>
         </tr>
@@ -70,10 +69,7 @@
           <td>{{ t.rekaz_code or '—' }}</td>
           <td><strong>{{ t.work_order or '—' }}</strong></td>
           <td>{{ t.receive_date or '—' }}</td>
-          <td>{{ t.district or '—' }}</td>
           <td>{{ t.station_no or '—' }}</td>
-          <td>{{ t.fault_type or '—' }}</td>
-          <td>{{ t.classification or '—' }}</td>
           <td>{{ t.team or '—' }}</td>
           <td>
             {% if t.status in ['منفذ','مغلق'] %}
@@ -86,7 +82,6 @@
             <span class="badge info">{{ t.status or '—' }}</span>
             {% endif %}
           </td>
-          <td>{{ t.response_min if t.response_min is not none else '—' }}</td>
           <td>{{ t.final_value|money if t.final_value is not none else '—' }}</td>
           <td class="actions">
             {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">{{ _('عرض') }}</a>{% endif %}
@@ -95,7 +90,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="12">{{ _('لا توجد أعطال') }}</td></tr>
+        <tr><td colspan="9">{{ _('لا توجد أعطال') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
