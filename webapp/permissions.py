@@ -35,6 +35,7 @@ PERM_LABELS = {
     "cashflow.write": "تعديل التدفق النقدي",
     "teams.write": "إدارة فرق المهام",
     "users.manage": "إدارة المستخدمين",
+    "ops.tabs.manage": "إدارة تبويبات العمليات",
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",
@@ -81,7 +82,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "audit.read",
             "export",
             "search",
-            # بدون users.manage — خاص بمدير النظام
+            # بدون users.manage / ops.tabs.manage — خاص بمدير النظام (المضيف)
         }
     ),
     "مدخل بيانات": {
@@ -383,6 +384,16 @@ def required_perm_for_request() -> str | None:
     if ep in {"users_home", "users_list"}:
         return None if has_perm("users.manage") else "users.manage"
 
+    if ep == "ops_custom_tabs_manage":
+        if not has_perm("section.ops"):
+            return "section.ops"
+        return None if has_perm("ops.tabs.manage") else "ops.tabs.manage"
+
+    if ep == "ops_custom_tab_view":
+        if not has_perm("section.ops"):
+            return "section.ops"
+        return None
+
     if ep in {"audit_log_home", "audit_log_page"}:
         return None if has_perm("audit.read") else "audit.read"
 
@@ -442,6 +453,7 @@ def _perm_for_path(path: str) -> str | None:
         ("/cashflow", "section.financial"),
         ("/teams", "section.ops"),
         ("/export", "export"),
+        ("/ops/tabs/manage", "ops.tabs.manage"),
         ("/ops", "section.ops"),
         ("/search", "search"),
     )

@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'custom:' ~ (tab.slug or '') %}
+{% include "_ops_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab_title }}</h2>
+      <div class="meta">{{ _('صفحة نائبة لهذا التبويب — جاهزة لربط وحدة أو محتوى لاحقاً دون تعديل قائمة التنقل.') }}</div>
+    </div>
+    <div class="actions">
+      {% if can('ops.tabs.manage') %}
+      <a class="btn ghost" href="{{ url_for('ops_custom_tabs_manage') }}">{{ _('إدارة التبويبات') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('ops_home') }}">{{ _('لوحة العمليات') }}</a>
+    </div>
+  </div>
+  <p class="meta">{{ _('المعرّف') }}: <code>{{ tab.slug }}</code></p>
+  {% if tab.notes %}
+  <p class="meta">{{ _('ملاحظة المضيف') }}: {{ tab.notes }}</p>
+  {% endif %}
+  <p>{{ _('لم يُربط محتوى بعد. عيّن مساراً داخلياً (مثل /tickets) أو رابطاً من إدارة التبويبات، أو ابنِ الصفحة على هذا المسار:') }} <code>/ops/tabs/{{ tab.slug }}</code></p>
+</div>
+{% endblock %}

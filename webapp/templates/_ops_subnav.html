@@ -1,4 +1,5 @@
-{# شريط فرعي داخل العمليات والصيانة — الأعطال محور العمل #}
+{# شريط فرعي داخل العمليات والصيانة — الأعطال محور العمل + تبويبات المضيف المخصصة #}
+{% set p = request.path or '' %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1" data-tab-strip-key="ops_rakaz_tabs">
     <a class="btn ghost{% if active=='ops' %} primary{% endif %}" href="{{ url_for('ops_home') }}">{{ _('لوحة العمليات') }}</a>
@@ -7,5 +8,11 @@
     {% endif %}
     <a class="btn ghost{% if active=='primary_teams' %} primary{% endif %}" href="{{ url_for('ops_primary_teams') }}">{{ _('الفرق الأولية') }}</a>
     <a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام العاجلة') }}</a>
+    {% for tab in ops_custom_tabs or [] %}
+    <a class="btn ghost{% if active==('custom:' ~ tab.slug) or (active_slug is defined and active_slug==tab.slug) or p == tab.href or p.startswith('/ops/tabs/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
+    {% endfor %}
+    {% if can('ops.tabs.manage') %}
+    <a class="btn ghost{% if active=='ops_tabs_manage' %} primary{% endif %}" href="{{ url_for('ops_custom_tabs_manage') }}">{{ _('إدارة التبويبات') }}</a>
+    {% endif %}
   </div>
 </div>

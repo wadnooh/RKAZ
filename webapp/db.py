@@ -340,6 +340,22 @@ EXTRA_TABLE_DDL = {
             consultant_result TEXT
         )
     """,
+    "ops_custom_tabs": """
+        CREATE TABLE IF NOT EXISTS ops_custom_tabs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            slug TEXT NOT NULL UNIQUE,
+            title_ar TEXT NOT NULL,
+            title_en TEXT,
+            target_path TEXT,
+            sort_order INTEGER DEFAULT 100,
+            is_visible INTEGER DEFAULT 1,
+            icon TEXT,
+            required_perm TEXT,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
 }
 
 
@@ -1776,6 +1792,183 @@ def get_lists(conn=None):
 
 def rows_to_dicts(rows):
     return [dict(r) for r in rows]
+
+
+def _slugify_ops_tab(text: str) -> str:
+    """مُعرّف تبويب لاتيني بسيط (a-z0-9-_)."""
+    raw = (text or "").strip().lower()
+    raw = re.sub(r"[^a-z0-9\u0600-\u06ff]+", "-", raw)
+    # إن بقي عربي فقط نُسقط الحروف غير اللاتينية لاحقاً
+    ascii_only = re.sub(r"[^a-z0-9]+", "-", raw)
+    ascii_only = ascii_only.strip("-_")
+    return ascii_only[:64]
+
+
+_OPS_TAB_RESERVED_SLUGS = frozenset({"manage", "new", "edit", "delete", "api"})
+
+
+def list_ops_custom_tabs(conn=None, *, visible_only: bool = False) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        sql = "SELECT * FROM ops_custom_tabs"
+        if visible_only:
+            sql += " WHERE IFNULL(is_visible,1)=1"
+        sql += " ORDER BY IFNULL(sort_order,100) ASC, id ASC"
+        try:
+            return rows_to_dicts(conn.execute(sql).fetchall())
+        except sqlite3.OperationalError:
+            ensure_schema(conn)
+            return rows_to_dicts(conn.execute(sql).fetchall())
+    finally:
+        if own:
+            conn.close()
+
+
+def get_ops_custom_tab(slug_or_id, conn=None) -> dict | None:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        key = str(slug_or_id or "").strip()
+        if not key:
+            return None
+
+        def _fetch():
+            if key.isdigit():
+                return conn.execute("SELECT * FROM ops_custom_tabs WHERE id=?", (int(key),)).fetchone()
+            return conn.execute("SELECT * FROM ops_custom_tabs WHERE slug=?", (key,)).fetchone()
+
+        try:
+            row = _fetch()
+        except sqlite3.OperationalError:
+            ensure_schema(conn)
+            row = _fetch()
+        return dict(row) if row else None
+    finally:
+        if own:
+            conn.close()
+
+
+def save_ops_custom_tab(data: dict, conn=None) -> dict:
+    """إضافة أو تحديث تبويب عمليات مخصص. يعيد الصف المحفوظ."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        tab_id = data.get("id")
+        title_ar = (data.get("title_ar") or "").strip()
+        title_en = (data.get("title_en") or "").strip()
+        if not title_ar:
+            raise ValueError("title_ar_required")
+        slug = (data.get("slug") or "").strip().lower()
+        slug = re.sub(r"[^a-z0-9_-]+", "-", slug).strip("-_")
+        if not slug:
+            slug = _slugify_ops_tab(title_en) or _slugify_ops_tab(title_ar)
+        if not slug:
+            slug = f"tab-{int(datetime.now().timestamp())}"
+        if slug in _OPS_TAB_RESERVED_SLUGS:
+            slug = f"{slug}-tab"
+        target_path = (data.get("target_path") or "").strip()
+        try:
+            sort_order = int(data.get("sort_order") if data.get("sort_order") not in (None, "") else 100)
+        except (TypeError, ValueError):
+            sort_order = 100
+        is_visible = 1 if str(data.get("is_visible", "1")).strip() in {"1", "true", "yes", "on"} else 0
+        icon = (data.get("icon") or "").strip() or None
+        required_perm = (data.get("required_perm") or "").strip() or None
+        notes = (data.get("notes") or "").strip() or None
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        # ضمان تفرّد الـ slug
+        clash = conn.execute(
+            "SELECT id FROM ops_custom_tabs WHERE slug=? AND (? IS NULL OR id!=?)",
+            (slug, tab_id, tab_id),
+        ).fetchone()
+        if clash:
+            base = slug
+            n = 2
+            while conn.execute(
+                "SELECT id FROM ops_custom_tabs WHERE slug=? AND (? IS NULL OR id!=?)",
+                (f"{base}-{n}", tab_id, tab_id),
+            ).fetchone():
+                n += 1
+            slug = f"{base}-{n}"
+
+        if tab_id:
+            conn.execute(
+                """
+                UPDATE ops_custom_tabs
+                SET slug=?, title_ar=?, title_en=?, target_path=?, sort_order=?,
+                    is_visible=?, icon=?, required_perm=?, notes=?, updated_at=?
+                WHERE id=?
+                """,
+                (
+                    slug,
+                    title_ar,
+                    title_en or None,
+                    target_path or None,
+                    sort_order,
+                    is_visible,
+                    icon,
+                    required_perm,
+                    notes,
+                    now,
+                    int(tab_id),
+                ),
+            )
+            row_id = int(tab_id)
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO ops_custom_tabs(
+                    slug, title_ar, title_en, target_path, sort_order,
+                    is_visible, icon, required_perm, notes, created_at, updated_at
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    slug,
+                    title_ar,
+                    title_en or None,
+                    target_path or None,
+                    sort_order,
+                    is_visible,
+                    icon,
+                    required_perm,
+                    notes,
+                    now,
+                    now,
+                ),
+            )
+            row_id = int(cur.lastrowid)
+        if own:
+            conn.commit()
+        return get_ops_custom_tab(row_id, conn=conn) or {"id": row_id, "slug": slug}
+    finally:
+        if own:
+            conn.close()
+
+
+def delete_ops_custom_tab(tab_id: int, conn=None) -> bool:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        cur = conn.execute("DELETE FROM ops_custom_tabs WHERE id=?", (int(tab_id),))
+        if own:
+            conn.commit()
+        return cur.rowcount > 0
+    finally:
+        if own:
+            conn.close()
+
+
+def ops_custom_tab_href(tab: dict) -> str:
+    """مسار الظهور في الشريط: رابط خارجي/داخلي أو صفحة التبويب النائبة."""
+    path = (tab.get("target_path") or "").strip()
+    if path.startswith("http://") or path.startswith("https://") or path.startswith("/"):
+        return path
+    slug = (tab.get("slug") or "").strip()
+    return f"/ops/tabs/{slug}" if slug else "/ops"
 
 
 def is_excavation_text(*parts) -> bool:

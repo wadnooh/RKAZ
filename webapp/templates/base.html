@@ -56,7 +56,7 @@
     <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>
     {% endif %}
     {% if can('section.ops') %}
-    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') %} active{% endif %}" href="{{ url_for('ops_home') }}">{{ tr('nav_ops') }}</a>
+    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/ops/tabs') %} active{% endif %}" href="{{ url_for('ops_home') }}">{{ tr('nav_ops') }}</a>
     {% endif %}
     {% if can('section.contractors') %}
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>

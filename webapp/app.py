@@ -202,6 +202,30 @@ def login_required(fn):
     return wrapper
 
 
+def _ops_custom_tabs_for_nav(lang: str | None = None) -> list[dict]:
+    """تبويبات العمليات المخصصة الظاهرة للمستخدم الحالي."""
+    if not session.get("user_id") or not permissions.can("section.ops"):
+        return []
+    lang = lang or (session.get("lang") or "ar")
+    out = []
+    for tab in db.list_ops_custom_tabs(visible_only=True):
+        need = (tab.get("required_perm") or "").strip()
+        if need and not permissions.has_perm(need):
+            continue
+        title = (tab.get("title_en") or "").strip() if lang == "en" else (tab.get("title_ar") or "").strip()
+        if lang == "en" and not title:
+            title = (tab.get("title_ar") or "").strip()
+        href = db.ops_custom_tab_href(tab)
+        out.append(
+            {
+                **tab,
+                "title": title,
+                "href": href,
+            }
+        )
+    return out
+
+
 @app.context_processor
 def inject_globals():
     lang = session.get("lang") or "ar"
@@ -233,6 +257,7 @@ def inject_globals():
         "has_perm": permissions.has_perm,
         "is_pdf_ref": media_svc.is_pdf_ref,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
+        "ops_custom_tabs": _ops_custom_tabs_for_nav(lang) if session.get("user_id") else [],
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
         "hosting": backup_svc.hosting_info(),
     }
@@ -554,6 +579,10 @@ def ops_home():
         {"label": _t("الفرق الأولية"), "href": url_for("ops_primary_teams")},
         {"label": _t("فرق المهام العاجلة"), "href": url_for("teams_page")},
     ]
+    if permissions.can("ops.tabs.manage"):
+        tools.append(
+            {"label": _t("إدارة التبويبات"), "href": url_for("ops_custom_tabs_manage")}
+        )
 
     conn = db.connect()
     recent = db.rows_to_dicts(
@@ -570,6 +599,110 @@ def ops_home():
         tools=tools,
         recent_tickets=recent,
         total_count=_count("tickets"),
+    )
+
+
+@app.route("/ops/tabs/manage", methods=["GET", "POST"])
+@login_required
+def ops_custom_tabs_manage():
+    """إدارة تبويبات العمليات المخصصة — للمضيف/مدير النظام فقط."""
+    if request.method == "POST":
+        action = (request.form.get("action") or "").strip()
+        if action == "add":
+            try:
+                db.save_ops_custom_tab(
+                    {
+                        "title_ar": request.form.get("title_ar"),
+                        "title_en": request.form.get("title_en"),
+                        "slug": request.form.get("slug"),
+                        "target_path": request.form.get("target_path"),
+                        "sort_order": request.form.get("sort_order") or 100,
+                        "is_visible": request.form.get("is_visible") or "1",
+                        "icon": request.form.get("icon"),
+                        "required_perm": request.form.get("required_perm"),
+                        "notes": request.form.get("notes"),
+                    }
+                )
+                flash(_t("تم إضافة التبويب"), "ok")
+                _after_data_change()
+            except ValueError:
+                flash(_t("عنوان التبويب بالعربية مطلوب"), "danger")
+        elif action == "update":
+            try:
+                db.save_ops_custom_tab(
+                    {
+                        "id": request.form.get("id"),
+                        "title_ar": request.form.get("title_ar"),
+                        "title_en": request.form.get("title_en"),
+                        "slug": request.form.get("slug"),
+                        "target_path": request.form.get("target_path"),
+                        "sort_order": request.form.get("sort_order") or 100,
+                        "is_visible": request.form.get("is_visible") or "0",
+                        "icon": request.form.get("icon"),
+                        "required_perm": request.form.get("required_perm"),
+                        "notes": request.form.get("notes"),
+                    }
+                )
+                flash(_t("تم حفظ التبويب"), "ok")
+                _after_data_change()
+            except ValueError:
+                flash(_t("عنوان التبويب بالعربية مطلوب"), "danger")
+        elif action == "delete":
+            if not _delete_password_ok():
+                return _reject_bad_delete_password(url_for("ops_custom_tabs_manage"))
+            tab_id = request.form.get("id")
+            if tab_id and db.delete_ops_custom_tab(int(tab_id)):
+                flash(_t("تم حذف التبويب"), "ok")
+                _after_data_change()
+            else:
+                flash(_t("تعذّر حذف التبويب"), "danger")
+        return redirect(url_for("ops_custom_tabs_manage"))
+
+    rows = db.list_ops_custom_tabs(visible_only=False)
+    for r in rows:
+        r["href"] = db.ops_custom_tab_href(r)
+    # صلاحيات اختيارية لربط ظهور التبويب
+    perm_choices = [
+        ("", _t("قسم العمليات فقط")),
+        ("tickets.read", permissions.PERM_LABELS["tickets.read"]),
+        ("tickets.write", permissions.PERM_LABELS["tickets.write"]),
+        ("modules.read", permissions.PERM_LABELS["modules.read"]),
+        ("modules.write", permissions.PERM_LABELS["modules.write"]),
+        ("teams.write", permissions.PERM_LABELS["teams.write"]),
+        ("export", permissions.PERM_LABELS["export"]),
+    ]
+    return render_template(
+        "ops_custom_tabs.html",
+        rows=rows,
+        perm_choices=perm_choices,
+    )
+
+
+@app.route("/ops/tabs/<slug>")
+@login_required
+def ops_custom_tab_view(slug):
+    """صفحة نائبة/توجيه لتبويب عمليات مخصص — تُملأ لاحقاً أو تُوجّه لمسار موجود."""
+    tab = db.get_ops_custom_tab(slug)
+    if not tab or not int(tab.get("is_visible") or 0):
+        flash(_t("التبويب غير موجود أو مخفي"), "danger")
+        return redirect(url_for("ops_home"))
+    need = (tab.get("required_perm") or "").strip()
+    if need and not permissions.has_perm(need):
+        return permissions.deny_redirect(
+            _t("ليس لديك صلاحية: {label}", label=_t(permissions.PERM_LABELS.get(need, need)))
+        )
+    target = (tab.get("target_path") or "").strip()
+    if target.startswith("http://") or target.startswith("https://") or target.startswith("/"):
+        return redirect(target)
+    lang = _lang()
+    title = (tab.get("title_en") or "").strip() if lang == "en" else (tab.get("title_ar") or "").strip()
+    if lang == "en" and not title:
+        title = (tab.get("title_ar") or "").strip()
+    return render_template(
+        "ops_custom_tab_page.html",
+        tab=tab,
+        tab_title=title,
+        active_slug=tab.get("slug"),
     )
 
 
@@ -4299,7 +4432,30 @@ def global_search():
 def api_jump_destinations():
     from flask import jsonify
 
-    items = permissions.filter_jump_items(review_engine.jump_destinations())
+    items = list(review_engine.jump_destinations())
+    # تبويبات العمليات المخصصة + صفحة إدارتها
+    if permissions.can("ops.tabs.manage"):
+        items.append(
+            {
+                "title": "إدارة تبويبات العمليات",
+                "path": "/ops/tabs/manage",
+                "group": "عمليات",
+                "keywords": "تبويب tabs manage ops",
+            }
+        )
+    for tab in db.list_ops_custom_tabs(visible_only=True):
+        need = (tab.get("required_perm") or "").strip()
+        if need and not permissions.has_perm(need):
+            continue
+        items.append(
+            {
+                "title": tab.get("title_ar") or tab.get("slug") or "تبويب",
+                "path": db.ops_custom_tab_href(tab),
+                "group": "عمليات",
+                "keywords": f"{tab.get('slug') or ''} {tab.get('title_en') or ''} تبويب",
+            }
+        )
+    items = permissions.filter_jump_items(items)
     return jsonify(localize_jump(items, _lang()))
 
 
