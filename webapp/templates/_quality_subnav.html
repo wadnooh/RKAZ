@@ -58,8 +58,6 @@
        href="{{ url_for('quality_home', tab='permits', sub='checks', year=year or '', month=month or '', q=q or '') }}">{{ _('تحت التشييكات') }} <em>{{ counts.checks or 0 }}</em></a>
     <a class="qnav-sub{% if qsub=='closing' %} is-active{% endif %}"
        href="{{ url_for('quality_home', tab='permits', sub='closing', year=year or '', month=month or '', q=q or '') }}">{{ _('تحت إجراءات الإغلاق') }} <em>{{ counts.closing or 0 }}</em></a>
-    <a class="qnav-sub"
-       href="{{ url_for('quality_home', tab='evacuations', sub='initial', year=year or '', month=month or '', q=q or '') }}">{{ _('من هنا تبدأ رحلة الإخلاءات') }}</a>
     <a class="qnav-sub{% if qsub=='asphalt' %} is-active{% endif %}"
        href="{{ url_for('quality_home', tab='permits', sub='asphalt', year=year or '', month=month or '', q=q or '') }}">{{ _('موردي الأسفلت') }} <em>{{ counts.asphalt or 0 }}</em></a>
     <a class="qnav-sub{% if qsub=='expired' %} is-active{% endif %}"

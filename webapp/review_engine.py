@@ -18,7 +18,6 @@ def jump_destinations():
         {"title": "الرخص السارية", "path": "/quality?tab=permits&sub=active", "group": "التنسيقات والجودة", "keywords": "رخص سارية"},
         {"title": "تحت التشييكات", "path": "/quality?tab=permits&sub=checks", "group": "التنسيقات والجودة", "keywords": "تشييكات"},
         {"title": "تحت إجراءات الإغلاق", "path": "/quality?tab=permits&sub=closing", "group": "التنسيقات والجودة", "keywords": "إغلاق"},
-        {"title": "من هنا تبدأ رحلة الإخلاءات", "path": "/quality?tab=evacuations&sub=initial", "group": "التنسيقات والجودة", "keywords": "إخلاءات رحلة إغلاق"},
         {"title": "موردي الأسفلت", "path": "/quality?tab=permits&sub=asphalt", "group": "التنسيقات والجودة", "keywords": "أسفلت"},
         {"title": "الإخلاءات", "path": "/quality?tab=evacuations&sub=initial", "group": "التنسيقات والجودة", "keywords": "إخلاء أسفلت"},
         {"title": "الإخلاء المبدئي", "path": "/quality?tab=evacuations&sub=initial", "group": "التنسيقات والجودة", "keywords": "إخلاء مبدئي"},

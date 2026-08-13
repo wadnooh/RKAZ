@@ -90,6 +90,7 @@ DEFAULT_LISTS = {
         "متابعة بعد الإصدار",
         "تحت التشييكات",
         "تحت إجراءات الإغلاق",
+        "الإخلاء المبدئي",
         "موردي الأسفلت",
     ],
     "clearance_stage": ["إخلاء مبدئي", "إخلاء نهائي", "رخصة ملغاة"],
@@ -438,6 +439,14 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 UPDATE issued_licenses
                 SET workflow_status='متابعة بعد الإصدار'
                 WHERE workflow_status IS NULL OR trim(workflow_status)=''
+                """
+            )
+            # تصحيح تسمية خيار متابعة التصريح (كان تبويبة خاطئة)
+            conn.execute(
+                """
+                UPDATE issued_licenses
+                SET workflow_status='الإخلاء المبدئي'
+                WHERE trim(coalesce(workflow_status,'')) = 'من هنا تبدأ رحلة الإخلاءات'
                 """
             )
             refresh_issued_license_expiry_status(conn)
@@ -1799,14 +1808,25 @@ def get_lists(conn=None):
         except Exception:
             pass
     # دمج القيم الافتراضية الجديدة (مثل رصيد افتتاحي) دون حذف تخصيص المستخدم
+    # تُدرج القيم الناقصة بترتيب DEFAULT_LISTS قدر الإمكان
+    obsolete = {
+        "license_workflow": {"من هنا تبدأ رحلة الإخلاءات"},
+    }
     for key, defaults in DEFAULT_LISTS.items():
         current = data.get(key) or []
         if not isinstance(current, list):
             continue
-        merged = list(current)
-        for val in defaults:
-            if val not in merged:
-                merged.append(val)
+        drop = obsolete.get(key) or set()
+        merged = [v for v in current if v not in drop]
+        for i, val in enumerate(defaults):
+            if val in merged:
+                continue
+            insert_at = len(merged)
+            for prev in reversed(defaults[:i]):
+                if prev in merged:
+                    insert_at = merged.index(prev) + 1
+                    break
+            merged.insert(insert_at, val)
         data[key] = merged
     if own:
         conn.close()
@@ -2786,7 +2806,16 @@ def _license_workflow_match(sub: str) -> tuple[str, list]:
     if key in ("checks", "تشييكات", "تحت التشييكات"):
         return ("coalesce(workflow_status, '') = 'تحت التشييكات'", [])
     if key in ("closing", "إغلاق", "تحت إجراءات الإغلاق"):
-        return ("coalesce(workflow_status, '') = 'تحت إجراءات الإغلاق'", [])
+        return (
+            """
+            coalesce(workflow_status, '') IN (
+              'تحت إجراءات الإغلاق',
+              'الإخلاء المبدئي',
+              'من هنا تبدأ رحلة الإخلاءات'
+            )
+            """,
+            [],
+        )
     if key in ("asphalt", "أسفلت", "موردي الأسفلت"):
         return (
             """

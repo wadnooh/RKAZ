@@ -184,6 +184,34 @@ def _flash_excavation_link(result: dict | None):
         flash(" — ".join(parts), "ok")
 
 
+_LICENSE_EVACUATION_WORKFLOW = "الإخلاء المبدئي"
+
+
+def _redirect_license_evacuations_journey(data: dict | None):
+    """عند اختيار «الإخلاء المبدئي» من متابعة التصريح: افتح رحلة الإخلاءات."""
+    data = data or {}
+    if (data.get("workflow_status") or "").strip() != _LICENSE_EVACUATION_WORKFLOW:
+        return None
+    ticket_no = (data.get("ticket_no") or "").strip()
+    if not ticket_no:
+        flash(_t("لبدء الإخلاء المبدئي اربط الرخصة برقم عطل أولاً."), "danger")
+        return None
+    try:
+        res = db.ensure_excavation_coordination(
+            ticket_no,
+            reason="الإخلاء المبدئي — من متابعة التصريح",
+            create_clearance=True,
+        )
+        _flash_excavation_link(res)
+    except Exception as exc:
+        flash(_t("تعذر بدء الإخلاء المبدئي: {exc}", exc=exc), "danger")
+        return None
+    flash(_t("تم فتح الإخلاء المبدئي من متابعة التصريح."), "ok")
+    return redirect(
+        url_for("quality_home", tab="evacuations", sub="initial", q=ticket_no)
+    )
+
+
 def _linked_section_label(section: str | None) -> str:
     return {
         "ops": _t("العمليات والصيانة"),
@@ -3565,6 +3593,10 @@ def module_new(name):
                 # تأكد من رقم توريد بعد الإدراج إن كان فارغاً
                 pass
             return redirect(url_for("module_edit", name=name, row_id=new_id))
+        if name == "issued_licenses":
+            journey = _redirect_license_evacuations_journey(data)
+            if journey:
+                return journey
         return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
     warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
     reinforcement_departments = (
@@ -3787,6 +3819,10 @@ def module_edit(name, row_id):
         edit_ctx = _warehouse_form_ctx() if name == "warehouse_tx" else None
         if name == "warehouse_tx" and edit_ctx not in _warehouse_create_contexts():
             edit_ctx = "warehouses"
+        if name == "issued_licenses":
+            journey = _redirect_license_evacuations_journey(data)
+            if journey:
+                return journey
         return _redirect_after_module(name, data, form_ctx=edit_ctx)
     data = dict(row)
     warehouse_items = (
