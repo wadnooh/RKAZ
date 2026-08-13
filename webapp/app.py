@@ -299,7 +299,7 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
 
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "hide-hints-1"
+_LAYOUT_ASSET_TAG = "hidden-admin-otp-2"
 
 
 def _static_asset_version() -> str:
@@ -2915,7 +2915,7 @@ def _safe_next_path(raw: str | None, fallback: str) -> str:
 @login_required
 def programmer_device_setup():
     """تسجيل الجهاز الرئيسي للمبرمج (مرة واحدة / بعد إعادة التعيين عبر SSH)."""
-    if not prog_guard.is_programmer():
+    if not prog_guard.can_access_programmer_device_ui():
         return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
     already = prog_guard.main_device_registered()
@@ -2923,6 +2923,42 @@ def programmer_device_setup():
 
     if request.method == "POST":
         action = (request.form.get("action") or "register").strip()
+        # مسار OTP متاح من صفحة الجهاز أيضاً حتى لا يُحصر المستخدم في التسجيل فقط
+        if action in {"send_otp", "resend_otp"}:
+            if not already:
+                flash(_t("سجّل الجهاز الرئيسي أولاً، ثم استخدم التحقق من جهاز آخر."), "danger")
+                return redirect(url_for("programmer_device_setup", next=nxt))
+            if is_this_main:
+                flash(_t("أنت على الجهاز الرئيسي — التعديل مسموح مباشرة."), "ok")
+                return redirect(nxt)
+            ok, msg = prog_guard.send_email_otp(next_path=nxt)
+            flash(msg, "ok" if ok else "danger")
+            if ok:
+                db.log_audit(current_user_name(), "إرسال OTP مبرمج", "أمان", session.get("user_id"))
+            return redirect(url_for("programmer_device_setup", next=nxt))
+        if action == "verify_secondary":
+            if not already:
+                return redirect(url_for("programmer_device_setup", next=nxt))
+            if is_this_main or prog_guard.is_elevated():
+                return redirect(nxt)
+            ok, err = prog_guard.verify_strict(
+                password=request.form.get("password") or "",
+                pin=request.form.get("change_pin") or "",
+                approve_code=request.form.get("approve_code") or "",
+            )
+            if not ok:
+                flash(err, "danger")
+                return redirect(url_for("programmer_device_setup", next=nxt))
+            prog_guard.grant_elevation()
+            db.log_audit(current_user_name(), "تحقق مبرمج (جهاز ثانوي)", "أمان", session.get("user_id"))
+            flash(
+                _t(
+                    "تم التحقق — يمكنك إجراء تعديلات إدارية لمدة {mins} دقيقة من هذا الجهاز.",
+                    mins=prog_guard.ELEVATION_MINUTES,
+                ),
+                "ok",
+            )
+            return redirect(nxt)
         if action == "register":
             if already and not is_this_main:
                 flash(
@@ -2950,6 +2986,7 @@ def programmer_device_setup():
             return prog_guard.clear_device_cookie(resp)
 
     devices = db.list_programmer_devices() if already else []
+    show_otp = bool(already and not is_this_main and not prog_guard.is_elevated())
     return render_template(
         "programmer_device.html",
         next_url=nxt,
@@ -2957,6 +2994,9 @@ def programmer_device_setup():
         is_this_main=is_this_main,
         devices=devices,
         secrets_ok=prog_guard.secrets_configured(),
+        smtp_ready=prog_guard.smtp_ready(),
+        show_otp=show_otp,
+        otp_wait_seconds=prog_guard.otp_send_wait_seconds() if show_otp else 0,
         can_mutate=prog_guard.can_mutate_control_plane(),
         elevated_seconds=prog_guard.elevation_remaining_seconds(),
     )
@@ -2966,7 +3006,7 @@ def programmer_device_setup():
 @login_required
 def programmer_verify():
     """تحقق صارم لتعديل إداري من جهاز غير رئيسي (OTP بريد المبرمج)."""
-    if not prog_guard.is_programmer():
+    if not prog_guard.can_access_programmer_device_ui():
         return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
 
@@ -3029,6 +3069,8 @@ def programmer_verify():
 @login_required
 def programmer_magic(token):
     """الروابط السريعة أُلغيت — التحقق يتم فقط بإدخال رمز البريد في النموذج."""
+    if not prog_guard.can_access_programmer_device_ui():
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج (مدير النظام) فقط"))
     flash(
         _t("يلزم إدخال رمز التحقق من البريد يدوياً مع كلمة المرور ورمز التغيير."),
         "danger",
@@ -5242,67 +5284,77 @@ def users_list():
         action = request.form.get("action")
         if action == "add":
             try:
-                role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
-                conn.execute(
-                    "INSERT INTO users(username, full_name, role, active, password, notes) VALUES (?,?,?,?,?,?)",
-                    (
-                        request.form.get("username"),
-                        request.form.get("full_name"),
-                        role,
-                        1 if request.form.get("active") == "1" else 0,
-                        request.form.get("password") or "1234",
-                        request.form.get("notes"),
-                    ),
-                )
-                conn.commit()
-                db.log_audit(current_user_name(), "إضافة", "مستخدم", details=request.form.get("username"))
-                flash(_t("تم إضافة المستخدم"), "ok")
+                username = (request.form.get("username") or "").strip()
+                if db.is_hidden_username(username):
+                    flash(_t("تعذر الإضافة"), "danger")
+                else:
+                    role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
+                    conn.execute(
+                        "INSERT INTO users(username, full_name, role, active, password, notes, is_hidden) VALUES (?,?,?,?,?,?,0)",
+                        (
+                            username,
+                            request.form.get("full_name"),
+                            role,
+                            1 if request.form.get("active") == "1" else 0,
+                            request.form.get("password") or "1234",
+                            request.form.get("notes"),
+                        ),
+                    )
+                    conn.commit()
+                    db.log_audit(current_user_name(), "إضافة", "مستخدم", details=username)
+                    flash(_t("تم إضافة المستخدم"), "ok")
             except Exception as exc:
                 flash(_t("تعذر الإضافة: {exc}", exc=exc), "danger")
         elif action == "update":
             uid = request.form.get("id")
-            role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
-            password = (request.form.get("password") or "").strip()
-            if password:
-                conn.execute(
-                    "UPDATE users SET full_name=?, role=?, active=?, password=?, notes=? WHERE id=?",
-                    (
-                        request.form.get("full_name"),
-                        role,
-                        1 if request.form.get("active") == "1" else 0,
-                        password,
-                        request.form.get("notes"),
-                        uid,
-                    ),
-                )
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if db.user_is_hidden(target):
+                flash(_t("تعذر التحديث"), "danger")
             else:
-                conn.execute(
-                    "UPDATE users SET full_name=?, role=?, active=?, notes=? WHERE id=?",
-                    (
-                        request.form.get("full_name"),
-                        role,
-                        1 if request.form.get("active") == "1" else 0,
-                        request.form.get("notes"),
-                        uid,
-                    ),
-                )
-            conn.commit()
-            if str(session.get("user_id")) == str(uid):
-                session["full_name"] = request.form.get("full_name")
-                session["role"] = role
-            db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
-            flash(_t("تم تحديث المستخدم"), "ok")
+                role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
+                password = (request.form.get("password") or "").strip()
+                if password:
+                    conn.execute(
+                        "UPDATE users SET full_name=?, role=?, active=?, password=?, notes=? WHERE id=?",
+                        (
+                            request.form.get("full_name"),
+                            role,
+                            1 if request.form.get("active") == "1" else 0,
+                            password,
+                            request.form.get("notes"),
+                            uid,
+                        ),
+                    )
+                else:
+                    conn.execute(
+                        "UPDATE users SET full_name=?, role=?, active=?, notes=? WHERE id=?",
+                        (
+                            request.form.get("full_name"),
+                            role,
+                            1 if request.form.get("active") == "1" else 0,
+                            request.form.get("notes"),
+                            uid,
+                        ),
+                    )
+                conn.commit()
+                if str(session.get("user_id")) == str(uid):
+                    session["full_name"] = request.form.get("full_name")
+                    session["role"] = role
+                db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
+                flash(_t("تم تحديث المستخدم"), "ok")
         elif action == "delete":
             if not _delete_password_ok():
                 conn.close()
                 return _reject_bad_delete_password(url_for("users_list"))
             uid = request.form.get("id")
             target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-            if target and str(session.get("user_id")) == str(uid):
+            if db.user_is_hidden(target):
+                flash(_t("تعذر الحذف"), "danger")
+            elif target and str(session.get("user_id")) == str(uid):
                 flash(_t("لا يمكن حذف حسابك الحالي"), "danger")
             else:
                 admins = conn.execute(
-                    "SELECT COUNT(*) FROM users WHERE lower(role)='admin' AND active=1"
+                    "SELECT COUNT(*) FROM users WHERE lower(role)='admin' AND active=1 AND coalesce(is_hidden,0)=0"
                 ).fetchone()[0]
                 if target and permissions.normalize_role(target["role"]) == "admin" and admins <= 1:
                     flash(_t("لا يمكن حذف آخر مدير نظام نشط"), "danger")
@@ -5314,7 +5366,9 @@ def users_list():
         elif action == "toggle":
             uid = request.form.get("id")
             target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
-            if target and str(session.get("user_id")) == str(uid):
+            if db.user_is_hidden(target):
+                flash(_t("تعذر التحديث"), "danger")
+            elif target and str(session.get("user_id")) == str(uid):
                 flash(_t("لا يمكن إيقاف حسابك الحالي"), "danger")
             else:
                 conn.execute(
@@ -5323,7 +5377,7 @@ def users_list():
                 )
                 conn.commit()
                 flash(_t("تم تحديث الحالة"), "ok")
-    rows = db.rows_to_dicts(conn.execute("SELECT * FROM users ORDER BY id").fetchall())
+    rows = db.list_visible_users(conn)
     conn.close()
     for row in rows:
         row["role"] = permissions.normalize_role(row.get("role"))

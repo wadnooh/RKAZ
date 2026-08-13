@@ -386,8 +386,14 @@ def required_perm_for_request() -> str | None:
         return None if has_perm("users.manage") else "users.manage"
 
     if ep in {"programmer_device_setup", "programmer_verify", "programmer_magic"}:
-        # صفحات أمان المبرمج — لمدير النظام فقط
-        return None if has_perm("users.manage") else "users.manage"
+        # صفحات أمان المبرمج — لمدير النظام أو الحساب المخفي فقط
+        from webapp import db as _db
+
+        if _db.is_hidden_username(session.get("username")):
+            return None
+        if normalize_role(session.get("role")) == "admin":
+            return None
+        return "users.manage"
 
     if ep in {"app_custom_tabs_manage", "ops_custom_tabs_manage"}:
         # الإدارة من داخل إدارة العقود — للمضيف فقط

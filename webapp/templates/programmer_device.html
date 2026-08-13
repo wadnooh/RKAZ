@@ -7,8 +7,8 @@
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('users_list') }}">{{ _('المستخدمون') }}</a>
-      {% if already_registered and not is_this_main %}
-      <a class="btn primary" href="{{ url_for('programmer_verify', next=next_url) }}">{{ _('تحقق من جهاز آخر') }}</a>
+      {% if already_registered %}
+      <a class="btn primary" href="{{ url_for('programmer_verify', next=next_url) }}">{{ _('تحقق المبرمج / إعادة الإرسال') }}</a>
       {% endif %}
     </div>
   </div>
@@ -21,6 +21,52 @@
 
   {% if is_this_main %}
   <p class="badge ok" style="display:block;margin-bottom:12px;">{{ _('هذا المتصفح هو الجهاز الرئيسي المعتمد.') }}</p>
+  {% endif %}
+
+  {% if show_otp %}
+  <div class="programmer-otp-box" style="max-width:520px;margin-bottom:18px;">
+    <h3 class="section-title" style="font-size:1.05rem;margin-bottom:10px;">{{ _('تحقق من جهاز آخر') }}</h3>
+    {% if not smtp_ready %}
+    <p class="badge danger" style="display:block;margin-bottom:12px;">
+      {{ _('SMTP غير جاهز. طوارئ SSH فقط:') }} <code>python tools/programmer_approve.py</code>
+    </p>
+    {% endif %}
+    <form method="post" class="form-grid" style="margin-bottom:12px;">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <div class="actions programmer-otp-actions" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+        <button class="btn primary programmer-otp-btn" type="submit" name="action" value="send_otp"
+          {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
+          {{ _('إرسال رمز التحقق') }}
+        </button>
+        <button class="btn primary programmer-otp-btn" type="submit" name="action" value="resend_otp"
+          {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
+          {{ _('إعادة إرسال رمز التحقق') }}
+        </button>
+        {% if otp_wait_seconds %}
+        <span class="badge" data-otp-wait="{{ otp_wait_seconds }}">{{ _('انتظر {sec} ث قبل إعادة الإرسال', sec=otp_wait_seconds) }}</span>
+        {% endif %}
+      </div>
+    </form>
+    <form method="post" class="form-grid">
+      <input type="hidden" name="next" value="{{ next_url }}">
+      <input type="hidden" name="action" value="verify_secondary">
+      <div class="field" style="grid-column:1/-1">
+        <label>{{ _('كلمة مرور حساب المبرمج') }}</label>
+        <input name="password" type="password" autocomplete="current-password" required>
+      </div>
+      <div class="field" style="grid-column:1/-1">
+        <label>{{ _('رمز التغيير PROGRAMMER_CHANGE_PIN') }}</label>
+        <input name="change_pin" type="password" autocomplete="off" required>
+      </div>
+      <div class="field" style="grid-column:1/-1">
+        <label>{{ _('رمز التحقق من البريد') }}</label>
+        <input name="approve_code" autocomplete="one-time-code" required style="letter-spacing:0.12em;text-transform:uppercase;">
+      </div>
+      <div class="actions" style="grid-column:1/-1">
+        <button class="btn primary" type="submit" {% if not secrets_ok %}disabled{% endif %}>{{ _('تحقق والمتابعة') }}</button>
+      </div>
+    </form>
+  </div>
   {% endif %}
 
   {% if not already_registered or is_this_main %}

@@ -277,6 +277,23 @@ main.container .toolbar,
   border-color: #e2aaa0;
   color: var(--danger);
 }
+.btn:disabled,
+.btn[disabled] {
+  opacity: 0.62;
+  cursor: not-allowed;
+  filter: none;
+  display: inline-flex !important;
+  visibility: visible !important;
+}
+.programmer-otp-actions .programmer-otp-btn {
+  display: inline-flex !important;
+  visibility: visible !important;
+  min-height: 40px;
+}
+.programmer-otp-box {
+  display: block !important;
+  visibility: visible !important;
+}
 .wh-tx-options {
   appearance: auto;
   -webkit-appearance: menulist;

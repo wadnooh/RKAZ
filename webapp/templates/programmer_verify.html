@@ -22,19 +22,19 @@
   </p>
   {% endif %}
 
-  <form method="post" class="form-grid" style="max-width:520px;margin-bottom:16px;">
+  <form method="post" class="form-grid programmer-otp-box" style="max-width:520px;margin-bottom:16px;">
     <input type="hidden" name="next" value="{{ next_url }}">
-    <div class="actions" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-      <button class="btn primary" type="submit" name="action" value="send_otp"
+    <div class="actions programmer-otp-actions" style="grid-column:1/-1;display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+      <button class="btn primary programmer-otp-btn" type="submit" name="action" value="send_otp"
         {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
         {{ _('إرسال رمز التحقق') }}
       </button>
-      <button class="btn ghost" type="submit" name="action" value="resend_otp"
+      <button class="btn primary programmer-otp-btn" type="submit" name="action" value="resend_otp"
         {% if not secrets_ok or not smtp_ready or otp_wait_seconds %}disabled{% endif %}>
         {{ _('إعادة إرسال رمز التحقق') }}
       </button>
       {% if otp_wait_seconds %}
-      <span class="meta">{{ _('انتظر {sec} ث قبل إعادة الإرسال', sec=otp_wait_seconds) }}</span>
+      <span class="badge" data-otp-wait="{{ otp_wait_seconds }}">{{ _('انتظر {sec} ث قبل إعادة الإرسال', sec=otp_wait_seconds) }}</span>
       {% endif %}
     </div>
   </form>

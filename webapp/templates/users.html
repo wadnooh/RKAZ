@@ -3,7 +3,7 @@
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions">
     <a class="btn primary" href="{{ url_for('users_list') }}">{{ _('المستخدمون والصلاحيات') }}</a>
-    {% if programmer_is_admin %}
+    {% if programmer_show_device_tab %}
     <a class="btn ghost" href="{{ url_for('programmer_device_setup') }}">{{ _('جهاز المبرمج') }}</a>
     {% if not programmer_can_mutate and programmer_main_registered %}
     <a class="btn ghost" href="{{ url_for('programmer_verify', next=request.path) }}">{{ _('تحقق المبرمج') }}</a>
