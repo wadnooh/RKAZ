@@ -551,3 +551,19 @@ def modules_for_section(section, *, include_hidden: bool = False):
         for k, m in MODULES.items()
         if m.get("section") == section and (include_hidden or not m.get("hub_hidden"))
     ]
+
+
+def _enable_module_attachments() -> None:
+    field = ("attachments", "المرفقات", "attachment")
+    for module in MODULES.values():
+        fields = list(module.get("fields") or [])
+        if not any(f[0] == "attachments" for f in fields):
+            fields.append(field)
+            module["fields"] = fields
+        list_cols = list(module.get("list_cols") or [])
+        if "attachments" not in list_cols:
+            list_cols.append("attachments")
+            module["list_cols"] = list_cols
+
+
+_enable_module_attachments()

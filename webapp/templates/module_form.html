@@ -88,7 +88,11 @@
   </div>
   {% endif %}
 
-  <form method="post" class="form-grid" {% if name == 'photos' %}enctype="multipart/form-data"{% endif %}>
+  {% set upload = namespace(enabled=false) %}
+  {% for _key, _label, _ftype in module.fields %}
+    {% if _ftype in ['image', 'attachment'] %}{% set upload.enabled = true %}{% endif %}
+  {% endfor %}
+  <form method="post" class="form-grid" {% if upload.enabled %}enctype="multipart/form-data"{% endif %}>
     {% if name == 'warehouse_tx' and form_ctx %}
     <input type="hidden" name="from" value="{{ form_ctx }}">
     {% if reuse_voucher %}
@@ -161,6 +165,31 @@
           </label>
           {% endif %}
         </div>
+      {% elif ftype == 'attachment' %}
+        <div class="photo-slot">
+          {% set refs = attachment_refs(row[key]) %}
+          {% if refs %}
+          <div class="attachment-list">
+            {% for ref in refs %}
+              {% if is_image_ref(ref) %}
+              <a href="{{ ref }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ ref }}" alt="{{ label }}"></a>
+              {% elif is_pdf_ref(ref) %}
+              <a class="photo-pdf-chip" href="{{ ref }}" target="_blank" rel="noopener">PDF</a>
+              {% else %}
+              <a class="attachment-chip" href="{{ ref }}" target="_blank" rel="noopener">{{ media_filename(ref) }}</a>
+              {% endif %}
+            {% endfor %}
+          </div>
+          <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
+          <label class="photo-actions">
+            <input type="checkbox" name="clear_{{ key }}" value="1"> {{ _('حذف كل المرفقات الحالية') }}
+          </label>
+          {% else %}
+          <div class="photo-empty">{{ _('لا توجد مرفقات') }}</div>
+          <input type="hidden" name="{{ key }}" value="">
+          {% endif %}
+          <input type="file" name="file_{{ key }}" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+        </div>
       {% elif ftype == 'yesno' %}
         <select name="{{ key }}">
           <option value="">—</option>
@@ -197,9 +226,9 @@
     </div>
     {% endif %}
     {% endfor %}
-    {% if name == 'photos' %}
+    {% if upload.enabled %}
     <p class="photo-storage-hint" style="grid-column:1/-1">
-      {{ _('صيغ مقبولة: JPG / PNG / WebP / PDF — حد أقصى 10 ميجا لكل ملف.') }}
+      {{ _('صيغ المرفقات المقبولة: JPG / PNG / WebP / PDF / Word / Excel / PowerPoint / TXT / ZIP — حد أقصى 10 ميجا لكل ملف.') }}
       {% if photo_storage == 's3' %}{{ _('التخزين: Amazon S3 (دائم).') }}{% else %}{{ _('التخزين: محلي على السيرفر') }}{% if photo_ephemeral %} {{ _('— إن كان القرص مؤقتاً يُفضّل تفعيل S3.') }}{% endif %}.{% endif %}
     </p>
     {% endif %}

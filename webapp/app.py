@@ -345,6 +345,9 @@ def inject_globals():
         "can": can,
         "has_perm": permissions.has_perm,
         "is_pdf_ref": media_svc.is_pdf_ref,
+        "is_image_ref": media_svc.is_image_ref,
+        "attachment_refs": media_svc.attachment_refs,
+        "media_filename": media_svc.media_filename,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "ops_custom_tabs": tabs_by_section.get("ops") or [],
         "app_custom_tabs_by_section": tabs_by_section,
@@ -3755,7 +3758,7 @@ def _module_form_data(module):
         val = (request.form.get(key) or "").strip()
         if ftype == "number":
             data[key] = float(val) if val != "" else None
-        elif ftype == "image":
+        elif ftype in ("image", "attachment"):
             # تُعالَج لاحقاً عبر media_svc.apply_photo_uploads
             data[key] = val
         else:
@@ -3789,6 +3792,33 @@ def _apply_photos_from_request(data: dict) -> None:
         request.files,
         ticket_no=data.get("ticket_no"),
         clear_flags=clear_flags,
+    )
+
+
+def _apply_attachments_from_request(name: str, data: dict) -> None:
+    if "attachments" not in data:
+        return
+    clear = str(request.form.get("clear_attachments") or "").strip().lower() in {"1", "on", "yes", "true"}
+    ref = (
+        data.get("ticket_no")
+        or data.get("coord_no")
+        or data.get("license_no")
+        or data.get("work_no")
+        or data.get("project_code")
+        or data.get("voucher_no")
+        or data.get("purchase_no")
+        or data.get("supply_no")
+        or data.get("permit_no")
+        or data.get("contract_no")
+        or data.get("emp_no")
+        or data.get("dept_code")
+    )
+    media_svc.apply_attachment_uploads(
+        data,
+        request.files,
+        scope=name,
+        record_ref=ref,
+        clear=clear,
     )
 
 
@@ -4360,6 +4390,12 @@ def module_new(name):
                     photo_storage=media_svc.storage_backend(),
                     photo_ephemeral=backup_svc.is_trial_free(),
                 )
+        try:
+            _apply_attachments_from_request(name, data)
+        except ValueError as exc:
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(request.url)
         if name == "warehouse_tx":
             voucher = (data.get("voucher_no") or "").strip()
             reuse = str(request.values.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
@@ -4614,6 +4650,12 @@ def module_edit(name, row_id):
                     photo_storage=media_svc.storage_backend(),
                     photo_ephemeral=backup_svc.is_trial_free(),
                 )
+        try:
+            _apply_attachments_from_request(name, data)
+        except ValueError as exc:
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(request.url)
         if name == "warehouse_tx":
             data = db.enrich_warehouse_tx_from_item(data)
             data = db.enrich_warehouse_tx_codes(data, conn)

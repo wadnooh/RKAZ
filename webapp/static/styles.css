@@ -733,6 +733,34 @@ td.col-item-name[title]:hover {
 .photo-pdf-chip:hover {
   border-color: var(--accent);
 }
+.attachment-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.attachment-list.is-compact {
+  gap: 6px;
+}
+.attachment-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 180px;
+  min-height: 32px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--text);
+  font-size: 0.82rem;
+  text-decoration: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-chip:hover {
+  border-color: var(--accent);
+}
 .photo-thumbs-row {
   display: flex;
   flex-wrap: wrap;

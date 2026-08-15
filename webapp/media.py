@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import re
 import uuid
@@ -15,13 +16,36 @@ from webapp import backup as backup_svc
 from webapp import db
 
 # أنواع مقبولة وحد أقصى ~10 ميجا للملف الواحد
-ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp", ".pdf"}
+ALLOWED_EXT = {
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".webp",
+    ".pdf",
+    ".doc",
+    ".docx",
+    ".xls",
+    ".xlsx",
+    ".ppt",
+    ".pptx",
+    ".txt",
+    ".zip",
+}
 ALLOWED_MIME = {
     "image/jpeg",
     "image/jpg",
     "image/png",
     "image/webp",
     "application/pdf",
+    "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "text/plain",
+    "application/zip",
+    "application/x-zip-compressed",
 }
 MAX_UPLOAD_BYTES = 10 * 1024 * 1024
 # توافق مع الاستيرادات القديمة
@@ -34,6 +58,7 @@ PHOTO_FIELDS = (
     "quantities_shot",
     "location_shot",
 )
+ATTACHMENT_FIELD = "attachments"
 
 _SAFE = re.compile(r"[^\w\-]+", re.UNICODE)
 
@@ -43,6 +68,14 @@ _CONTENT_TYPES = {
     ".png": "image/png",
     ".webp": "image/webp",
     ".pdf": "application/pdf",
+    ".doc": "application/msword",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".xls": "application/vnd.ms-excel",
+    ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    ".ppt": "application/vnd.ms-powerpoint",
+    ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".txt": "text/plain",
+    ".zip": "application/zip",
 }
 
 
@@ -111,6 +144,35 @@ def _kind_from_bytes(data: bytes) -> str | None:
     return None
 
 
+def attachment_refs(value) -> list[str]:
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        return [str(v).strip() for v in value if is_media_ref(str(v).strip())]
+    raw = str(value or "").strip()
+    if not raw:
+        return []
+    if is_media_ref(raw):
+        return [raw]
+    try:
+        parsed = json.loads(raw)
+    except Exception:
+        return []
+    if isinstance(parsed, list):
+        return [str(v).strip() for v in parsed if is_media_ref(str(v).strip())]
+    return []
+
+
+def encode_attachment_refs(refs: list[str]) -> str:
+    clean = [str(v).strip() for v in refs or [] if is_media_ref(str(v).strip())]
+    return json.dumps(clean, ensure_ascii=False)
+
+
+def media_filename(value: str | None) -> str:
+    v = (value or "").strip().split("?")[0]
+    return Path(v).name or "file"
+
+
 def _ext_for(file: FileStorage, *, kind: str | None = None) -> str:
     name = secure_filename(file.filename or "") or "file"
     ext = Path(name).suffix.lower()
@@ -153,6 +215,29 @@ def validate_image(file: FileStorage) -> bytes:
     return data
 
 
+def validate_attachment(file: FileStorage) -> bytes:
+    if not file or not (file.filename or "").strip():
+        raise ValueError("لم يُختر ملف")
+    name = secure_filename(file.filename or "") or "file"
+    ext = Path(name).suffix.lower()
+    if ext == ".jpeg":
+        ext = ".jpg"
+    if ext not in ALLOWED_EXT:
+        raise ValueError("صيغة الملف غير مدعومة")
+    data = file.read()
+    if not data:
+        raise ValueError("الملف فارغ")
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError("حجم الملف يتجاوز 10 ميجابايت")
+    try:
+        file.stream.seek(0)
+    except Exception:
+        pass
+    if ext in {".jpg", ".png", ".webp", ".pdf"} and not _kind_from_bytes(data):
+        raise ValueError("محتوى الملف لا يطابق صيغته")
+    return data
+
+
 def _safe_ticket(ticket_no: str | None) -> str:
     t = _SAFE.sub("-", (ticket_no or "general").strip())[:80]
     return t or "general"
@@ -172,6 +257,40 @@ def save_photo(
     ext = _ext_for(file, kind=kind)
     rel = f"{_safe_ticket(ticket_no)}/{field}_{uuid.uuid4().hex}{ext}"
     content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
+
+    if backup_svc.s3_configured():
+        key = f"{photos_s3_prefix()}/{rel}".replace("\\", "/")
+        client = backup_svc._s3_client()
+        cfg = backup_svc.s3_settings()
+        client.put_object(
+            Bucket=cfg["bucket"],
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+            ContentDisposition=f'inline; filename="{Path(rel).name}"',
+        )
+        return f"/media/s3/{key}"
+
+    dest = uploads_root() / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return f"/media/local/{rel.replace(chr(92), '/')}"
+
+
+def save_attachment(
+    file: FileStorage,
+    *,
+    scope: str = "general",
+    record_ref: str | None = None,
+) -> str:
+    data = validate_attachment(file)
+    name = secure_filename(file.filename or "") or "file"
+    ext = Path(name).suffix.lower()
+    if ext == ".jpeg":
+        ext = ".jpg"
+    content_type = _CONTENT_TYPES.get(ext, (file.mimetype or "application/octet-stream"))
+    stem = _SAFE.sub("-", Path(name).stem).strip("-")[:60] or "file"
+    rel = f"attachments/{_safe_ticket(scope)}/{_safe_ticket(record_ref)}/{uuid.uuid4().hex}_{stem}{ext}"
 
     if backup_svc.s3_configured():
         key = f"{photos_s3_prefix()}/{rel}".replace("\\", "/")
@@ -252,3 +371,22 @@ def apply_photo_uploads(
             form_data[field] = save_photo(uploaded, field=field, ticket_no=tno)
             continue
         form_data[field] = existing
+
+
+def apply_attachment_uploads(
+    form_data: dict,
+    files,
+    *,
+    field: str = ATTACHMENT_FIELD,
+    scope: str = "general",
+    record_ref: str | None = None,
+    clear: bool = False,
+) -> None:
+    existing = [] if clear else attachment_refs(form_data.get(field))
+    uploaded_files = []
+    if files is not None:
+        uploaded_files = files.getlist(f"file_{field}") or files.getlist(field)
+    for uploaded in uploaded_files:
+        if uploaded and (uploaded.filename or "").strip():
+            existing.append(save_attachment(uploaded, scope=scope, record_ref=record_ref))
+    form_data[field] = encode_attachment_refs(existing)

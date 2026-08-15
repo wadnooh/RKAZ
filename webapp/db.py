@@ -515,6 +515,19 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             if name not in existing:
                 conn.execute(ddl)
                 created.append(name)
+        try:
+            from webapp.modules_config import MODULES
+
+            for mod in MODULES.values():
+                table = (mod.get("table") or "").strip()
+                fields = mod.get("fields") or []
+                if not table or not any(f[0] == "attachments" for f in fields):
+                    continue
+                if table in existing or table in created:
+                    if _ensure_column(conn, table, "attachments"):
+                        created.append(f"{table}.attachments")
+        except Exception:
+            pass
         # قناة رمز موافقة المبرمج (email | ssh_emergency)
         if "programmer_approve_codes" in existing or "programmer_approve_codes" in created:
             if _ensure_column(conn, "programmer_approve_codes", "channel", "TEXT DEFAULT 'email'"):
