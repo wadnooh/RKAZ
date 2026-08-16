@@ -106,6 +106,43 @@ def connect():
     return conn
 
 
+def _drop_unique_index_for_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
+    """يلغي فهرس UNIQUE تلقائي/صريح إذا كان مرتبطاً بعمود واحد فقط."""
+    for idx in conn.execute(f"PRAGMA index_list('{table}')").fetchall():
+        idx_name = idx[1]
+        if not idx_name or idx[2] != 1:
+            continue
+        cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{idx_name}')").fetchall()]
+        if cols == [column]:
+            conn.execute(f'DROP INDEX IF EXISTS "{idx_name}"')
+            return True
+    return False
+
+
+def _dedupe_duplicate_work_orders(conn: sqlite3.Connection, table: str = "tickets") -> None:
+    """يحافظ على أول قيمة work_order من أصل تكرارها ويُفرغ التكرارات الإضافية."""
+    if table not in {"tickets", "primary_team_orders"}:
+        return
+    rows = conn.execute(
+        f"""
+        SELECT work_order, MIN(id) AS keep_id
+        FROM {table}
+        WHERE trim(COALESCE(work_order, '')) <> ''
+        GROUP BY work_order
+        HAVING COUNT(*) > 1
+        """
+    ).fetchall()
+    for row in rows:
+        work_order = (row[0] or "").strip()
+        keep_id = row[1]
+        if not work_order:
+            continue
+        conn.execute(
+            f"UPDATE {table} SET work_order='' WHERE trim(COALESCE(work_order, ''))=? AND id != ?",
+            (work_order, keep_id),
+        )
+
+
 # جداول أُضيفت لاحقاً — تُضمن صراحة حتى بعد استعادة حفظة قديمة
 EXTRA_TABLE_DDL = {
     "contractor_works": """
@@ -539,6 +576,17 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "tickets" in existing or "tickets" in created:
             if _ensure_column(conn, "tickets", "rekaz_code"):
                 created.append("tickets.rekaz_code")
+            # السماح بتكرار رقم العطل؛ لا يُسمح بتكرار أمر العمل
+            _drop_unique_index_for_column(conn, "tickets", "ticket_no")
+            _dedupe_duplicate_work_orders(conn, "tickets")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_work_order_unique ON tickets(work_order) WHERE trim(COALESCE(work_order, '')) <> ''"
+            )
+        if "primary_team_orders" in existing or "primary_team_orders" in created:
+            _dedupe_duplicate_work_orders(conn, "primary_team_orders")
+            conn.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_primary_team_orders_work_order_unique ON primary_team_orders(work_order) WHERE trim(COALESCE(work_order, '')) <> ''"
+            )
         if "quality_clearances" in existing or "quality_clearances" in created:
             if _ensure_column(conn, "quality_clearances", "rekaz_code"):
                 created.append("quality_clearances.rekaz_code")
@@ -720,7 +768,7 @@ def init_db():
         );
         CREATE TABLE IF NOT EXISTS tickets (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ticket_no TEXT UNIQUE,
+            ticket_no TEXT,
             rekaz_code TEXT,
             receive_date TEXT,
             district TEXT,
