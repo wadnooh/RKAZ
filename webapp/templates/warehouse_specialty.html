@@ -13,9 +13,14 @@
       {% if source == 'ops' %}
       <a class="btn ghost{% if view == 'tickets' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='tickets') }}">{{ _('الأعطال') }}</a>
       <a class="btn ghost{% if view == 'teams' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='teams') }}">{{ _('الفرق الأولية') }}</a>
+      <a class="btn ghost{% if view == 'reinforcement' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='reinforcement') }}">{{ _('التعزيز - اسكيمات') }}</a>
       <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
       {% elif source == 'constructions' %}
       <a class="btn ghost{% if view == 'works' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='works') }}">{{ _('المعاملات') }}</a>
+      <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
+      {% elif source == 'reinforcement' %}
+      <a class="btn ghost{% if view == 'works' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='works') }}">{{ _('معاملات الاسكيمات') }}</a>
+      <a class="btn ghost{% if view == 'reinforcement' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='reinforcement') }}">{{ _('التعزيز - اسكيمات') }}</a>
       <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
       {% elif source == 'projects' %}
       <a class="btn ghost{% if view == 'projects' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='projects') }}">{{ _('المشاريع') }}</a>
@@ -193,7 +198,8 @@
     </table>
   </div>
 
-  {% elif view == 'works' %}
+  {% elif view in ['works', 'reinforcement'] %}
+  {% set is_reinforcement_work = (view == 'reinforcement' or source == 'reinforcement') %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="works">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أمر العمل / الموقع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
@@ -221,17 +227,27 @@
         <tr>
           <td><strong>{{ r.work_no or '—' }}</strong></td>
           <td>{{ r.work_date or '—' }}</td>
-          <td>{{ r.site or '—' }}</td>
+          <td>{% if is_reinforcement_work %}{{ r.department or '—' }}{% if r.location %} - {{ r.location }}{% endif %}{% else %}{{ r.site or '—' }}{% endif %}</td>
           <td>{{ r.work_type or '—' }}</td>
           <td>{{ tv(r.status) if r.status else '—' }}</td>
           <td>{{ r.value|money if r.value is not none else '—' }}</td>
           <td><span class="badge info">{{ r.wh_count or 0 }}</span></td>
           <td class="actions">
+            {% if is_reinforcement_work %}
+            <a class="btn ghost" href="{{ url_for('reinforcement_work_view', row_id=r.id) }}">{{ _('عرض') }}</a>
+            {% else %}
             <a class="btn ghost" href="{{ url_for('warehouse_construction_detail', row_id=r.id) }}">{{ _('عرض') }}</a>
+            {% endif %}
             {% if can('modules.write') and r.work_no %}
-            {% set in_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'وارد من موقع العمل'}) %}
-            {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'منصرف للمقاول'}) %}
-            {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'إرجاع للمجمعة'}) %}
+            {% if is_reinforcement_work %}
+              {% set in_url = url_for('module_new', name='warehouse_tx', ticket_no=r.ticket_no or none, **{'from': 'wh_reinforcement', 'source_ref': r.work_no, 'work_order': r.work_no, 'tx_type': 'وارد من موقع العمل'}) %}
+              {% set out_url = url_for('module_new', name='warehouse_tx', ticket_no=r.ticket_no or none, **{'from': 'wh_reinforcement', 'source_ref': r.work_no, 'work_order': r.work_no, 'tx_type': 'منصرف للمقاول'}) %}
+              {% set return_url = url_for('module_new', name='warehouse_tx', ticket_no=r.ticket_no or none, **{'from': 'wh_reinforcement', 'source_ref': r.work_no, 'work_order': r.work_no, 'tx_type': 'إرجاع للمجمعة'}) %}
+            {% else %}
+              {% set in_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'وارد من موقع العمل'}) %}
+              {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'منصرف للمقاول'}) %}
+              {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'إرجاع للمجمعة'}) %}
+            {% endif %}
             {% include '_warehouse_tx_options.html' %}
             {% endif %}
           </td>

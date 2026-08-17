@@ -80,13 +80,9 @@ _CONTENT_TYPES = {
 
 
 def uploads_root() -> Path:
-    root = db.DB_PATH.parent / "uploads" / "photos"
+    root = db.DB_PATH.parent / "uploads"
     root.mkdir(parents=True, exist_ok=True)
     return root
-
-
-def photos_s3_prefix() -> str:
-    return (os.environ.get("AWS_S3_PHOTOS_PREFIX", "").strip() or "rekaz-photos").strip("/")
 
 
 def storage_backend() -> str:
@@ -243,6 +239,27 @@ def _safe_ticket(ticket_no: str | None) -> str:
     return t or "general"
 
 
+def _save_media(data: bytes, rel_path: str, content_type: str, filename: str) -> str:
+    """Saves media data to S3 or local disk and returns the media URL."""
+    if backup_svc.s3_configured():
+        client = backup_svc._s3_client()
+        cfg = backup_svc.s3_settings()
+        key = f"{cfg.get('photos_prefix', 'rekaz-photos')}/{rel_path}".replace("\\", "/")
+        client.put_object(
+            Bucket=cfg["bucket"],
+            Key=key,
+            Body=data,
+            ContentType=content_type,
+            ContentDisposition=f'inline; filename="{filename}"',
+        )
+        return f"/media/s3/{key}"
+
+    dest = uploads_root() / rel_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return f"/media/local/{rel_path.replace(chr(92), '/')}"
+
+
 def save_photo(
     file: FileStorage,
     *,
@@ -255,26 +272,10 @@ def save_photo(
     data = validate_image(file)
     kind = _kind_from_bytes(data)
     ext = _ext_for(file, kind=kind)
-    rel = f"{_safe_ticket(ticket_no)}/{field}_{uuid.uuid4().hex}{ext}"
+    photo_rel = f"{_safe_ticket(ticket_no)}/{field}_{uuid.uuid4().hex}{ext}"
+    rel = f"photos/{photo_rel}"
     content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")
-
-    if backup_svc.s3_configured():
-        key = f"{photos_s3_prefix()}/{rel}".replace("\\", "/")
-        client = backup_svc._s3_client()
-        cfg = backup_svc.s3_settings()
-        client.put_object(
-            Bucket=cfg["bucket"],
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-            ContentDisposition=f'inline; filename="{Path(rel).name}"',
-        )
-        return f"/media/s3/{key}"
-
-    dest = uploads_root() / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    return f"/media/local/{rel.replace(chr(92), '/')}"
+    return _save_media(data, rel, content_type, Path(photo_rel).name)
 
 
 def save_attachment(
@@ -291,24 +292,7 @@ def save_attachment(
     content_type = _CONTENT_TYPES.get(ext, (file.mimetype or "application/octet-stream"))
     stem = _SAFE.sub("-", Path(name).stem).strip("-")[:60] or "file"
     rel = f"attachments/{_safe_ticket(scope)}/{_safe_ticket(record_ref)}/{uuid.uuid4().hex}_{stem}{ext}"
-
-    if backup_svc.s3_configured():
-        key = f"{photos_s3_prefix()}/{rel}".replace("\\", "/")
-        client = backup_svc._s3_client()
-        cfg = backup_svc.s3_settings()
-        client.put_object(
-            Bucket=cfg["bucket"],
-            Key=key,
-            Body=data,
-            ContentType=content_type,
-            ContentDisposition=f'inline; filename="{Path(rel).name}"',
-        )
-        return f"/media/s3/{key}"
-
-    dest = uploads_root() / rel
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(data)
-    return f"/media/local/{rel.replace(chr(92), '/')}"
+    return _save_media(data, rel, content_type, Path(rel).name)
 
 
 def load_media(storage: str, key: str) -> tuple[io.BytesIO, str, str]:
@@ -324,7 +308,7 @@ def load_media(storage: str, key: str) -> tuple[io.BytesIO, str, str]:
     if storage == "s3":
         if not backup_svc.s3_configured():
             raise FileNotFoundError("S3 غير مُعد")
-        prefix = photos_s3_prefix() + "/"
+        prefix = (backup_svc.s3_settings().get("photos_prefix") or "rekaz-photos") + "/"
         if not key.startswith(prefix) and not key.startswith("rekaz-photos/"):
             raise PermissionError("مفتاح S3 خارج مجلد الصور")
         client = backup_svc._s3_client()

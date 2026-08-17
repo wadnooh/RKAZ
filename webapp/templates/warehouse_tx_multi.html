@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% block content %}
-{% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else 'home')) %}
+{% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops','reinforcement','wh_reinforcement'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else 'home')) %}
 {% include "_warehouse_subnav.html" %}
 
 <div class="card">

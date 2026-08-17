@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'reinforcement' %}
+{% include "_ops_subnav.html" %}
+
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('معاملة التعزيز') }} - {{ work.work_no }}</h2>
+      <div class="meta">{{ _('صفحة واحدة للكميات والصور والتمتير والمستودع الخاصة بالمعاملة.') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('module_list', name='reinforcement_works') }}">{{ _('رجوع') }}</a>
+      {% if can_mutate %}
+      <a class="btn ghost" href="{{ url_for('module_edit', name='reinforcement_works', row_id=work.id) }}">{{ _('تعديل البيانات') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="meta-grid">
+    <div class="meta-item"><div class="k">{{ _('رقم المعاملة') }}</div><div class="v"><strong>{{ work.work_no }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('التاريخ') }}</div><div class="v">{{ work.work_date or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القسم') }}</div><div class="v">{{ work.department or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('نوع العمل') }}</div><div class="v">{{ work.work_type or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(work.status) or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ work.ticket_no or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القيمة') }}</div><div class="v">{{ work.value|money if work.value not in [None, ''] else '—' }}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{{ work.location or '—' }}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ work.notes or '—' }}</div></div>
+  </div>
+</div>
+
+<div class="card{% if focus == 'quantities' %} is-active{% endif %}" id="section-quantities" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الكميات') }}</h3>
+      <div class="meta">{{ related.quantities|length }} {{ _('بند') }} | {{ _('الإجمالي') }} {{ qty_total|money }}</div>
+    </div>
+    <div class="actions">
+      {% if can_mutate %}
+      <a class="btn primary" href="{{ url_for('module_new', name='quantities', ticket_no=work.work_no) }}">{{ _('إضافة كمية') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='quantities', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>{{ _('البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الوحدة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('السعر') }}</th><th>{{ _('الإجمالي') }}</th><th>{{ _('إجراءات') }}</th></tr></thead>
+      <tbody>
+        {% for q in related.quantities %}
+        <tr>
+          <td>{{ q.item_no or '—' }}</td>
+          <td>{{ q.description or '—' }}</td>
+          <td>{{ q.unit or '—' }}</td>
+          <td>{{ q.qty or '—' }}</td>
+          <td>{{ q.unit_price|money if q.unit_price not in [None, ''] else '—' }}</td>
+          <td>{{ ((q.qty or 0)|float * (q.unit_price or 0)|float)|money }}</td>
+          <td>{% if can_mutate %}<a class="btn ghost" href="{{ url_for('module_edit', name='quantities', row_id=q.id) }}">{{ _('تعديل') }}</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد كميات مرتبطة.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card{% if focus == 'photos' %} is-active{% endif %}" id="section-photos" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الصور والمرفقات') }}</h3>
+      <div class="meta">{{ related.photos|length }} {{ _('سجل') }}</div>
+    </div>
+    <div class="actions">
+      {% if can_mutate %}
+      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=work.work_no) }}">{{ _('إضافة صور') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
+    </div>
+  </div>
+  {% for p in related.photos %}
+  <div class="attachment-panel" style="margin-bottom:10px;">
+    <div class="attachment-panel__head">
+      <strong>{{ _('سجل صور') }} #{{ p.id }}</strong>
+      <span class="badge">{{ p.complete }}</span>
+    </div>
+    <div class="attachment-list attachment-list--gallery">
+      {% for ref in [p.before_shot, p.during_shot, p.after_shot, p.quantities_shot, p.location_shot] if ref %}
+        {% if is_image_ref(ref) %}
+        <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
+        {% elif is_pdf_ref(ref) %}
+        <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>PDF</span><em>{{ media_filename(ref) }}</em></a>
+        {% endif %}
+      {% endfor %}
+      {% for ref in attachment_refs(p.attachments) %}
+        {% if is_image_ref(ref) %}
+        <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
+        {% else %}
+        <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>{{ media_filename(ref).split('.')[-1]|upper }}</span><em>{{ media_filename(ref) }}</em></a>
+        {% endif %}
+      {% endfor %}
+    </div>
+    <div class="actions" style="margin-top:10px;">
+      {% if can_mutate %}<a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">{{ _('تعديل') }}</a>{% endif %}
+    </div>
+  </div>
+  {% else %}
+  <p class="meta">{{ _('لا توجد صور مرتبطة.') }}</p>
+  {% endfor %}
+</div>
+
+<div class="card{% if focus == 'metering' %} is-active{% endif %}" id="section-metering" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير') }}</h3>
+      <div class="meta">{{ related.metering|length }} {{ _('سجل') }}</div>
+    </div>
+    <div class="actions">
+      {% if can_mutate %}
+      <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=work.work_no) }}">{{ _('إضافة تمتر') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>{{ _('المسؤول') }}</th><th>{{ _('البداية') }}</th><th>{{ _('الرفع') }}</th><th>{{ _('الاعتماد') }}</th><th>{{ _('الحالة') }}</th><th>{{ _('القيمة') }}</th><th>{{ _('إجراءات') }}</th></tr></thead>
+      <tbody>
+        {% for m in related.metering %}
+        <tr>
+          <td>{{ m.officer or '—' }}</td>
+          <td>{{ m.start_date or '—' }}</td>
+          <td>{{ m.submit_date or '—' }}</td>
+          <td>{{ m.approve_date or '—' }}</td>
+          <td>{{ tv(m.status) or '—' }}</td>
+          <td>{{ m.approved_value|money if m.approved_value not in [None, ''] else '—' }}</td>
+          <td>{% if can_mutate %}<a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">{{ _('تعديل') }}</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد سجلات تمتير مرتبطة.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card{% if focus == 'warehouse' %} is-active{% endif %}" id="section-warehouse" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('المستودع') }}</h3>
+      <div class="meta">{{ related.warehouse_tx|length }} {{ _('حركة') }}</div>
+    </div>
+    <div class="actions">
+      {% if can_mutate and can_warehouse %}
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'reinforcement', 'source_ref': work.work_no, 'work_order': work.work_no, 'ticket_no': work.ticket_no or none}) }}">{{ _('إضافة حركة') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('warehouse_movements_summary', source='reinforcement') }}">{{ _('حركات التعزيز') }}</a>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>{{ _('السند') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('النوع') }}</th><th>{{ _('المادة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('أمر العمل') }}</th><th>{{ _('إجراءات') }}</th></tr></thead>
+      <tbody>
+        {% for w in related.warehouse_tx %}
+        <tr>
+          <td>{% if w.voucher_no %}<a href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}">{{ w.voucher_no }}</a>{% else %}—{% endif %}</td>
+          <td>{{ w.tx_date or '—' }}</td>
+          <td>{{ tv(w.tx_type) or '—' }}</td>
+          <td>{{ w.item_no or '—' }}{% if w.item_name %} - {{ w.item_name }}{% endif %}</td>
+          <td>{{ w.qty or '—' }}</td>
+          <td>{{ w.work_order or w.source_ref or '—' }}</td>
+          <td>{% if can_mutate and can_warehouse %}<a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=reinforcement">{{ _('تعديل') }}</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد حركات مستودع مرتبطة.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

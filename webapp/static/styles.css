@@ -739,6 +739,12 @@ td.col-item-name[title]:hover {
   gap: 8px;
   align-items: center;
 }
+.attachment-list--gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  width: 100%;
+  gap: 10px;
+}
 .attachment-list.is-compact {
   gap: 6px;
 }
@@ -760,6 +766,128 @@ td.col-item-name[title]:hover {
 }
 .attachment-chip:hover {
   border-color: var(--accent);
+}
+.attachment-panel {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.attachment-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.attachment-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 86px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fafafa;
+  color: var(--text);
+  text-decoration: none;
+  overflow: hidden;
+}
+.attachment-preview:hover {
+  border-color: var(--accent);
+}
+.attachment-preview--image img {
+  width: 100%;
+  height: 100%;
+  min-height: 86px;
+  object-fit: cover;
+  display: block;
+}
+.attachment-preview--file {
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  text-align: center;
+}
+.attachment-preview--file span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  height: 30px;
+  padding: 0 8px;
+  border-radius: 6px;
+  background: #f0f4f8;
+  color: #26384c;
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+.attachment-preview--file em {
+  max-width: 100%;
+  font-size: 0.78rem;
+  font-style: normal;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  color: var(--muted);
+  background: #fafafa;
+  font-size: 0.9rem;
+}
+.attachment-upload {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  align-items: center;
+  padding: 12px;
+  border: 1px dashed #b8c5d4;
+  border-radius: 8px;
+  background: #f7fafc;
+  cursor: pointer;
+}
+.attachment-upload input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.attachment-upload__icon {
+  grid-row: 1 / span 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 900;
+}
+.attachment-upload__text {
+  font-weight: 800;
+  color: var(--text);
+}
+.attachment-upload__hint,
+.attachment-upload-status {
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+.attachment-upload-status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment-clear {
+  margin: 0;
 }
 .photo-thumbs-row {
   display: flex;

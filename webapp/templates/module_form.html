@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
 {% if name == 'warehouse_tx' or name == 'warehouse_items' %}
-  {% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else ('balances' if name == 'warehouse_items' else 'home'))) %}
+  {% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops','reinforcement','wh_reinforcement'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else ('balances' if name == 'warehouse_items' else 'home'))) %}
   {% include "_warehouse_subnav.html" %}
 {% elif name == 'contractor_supplies' %}
   {% set warehouse_active = 'contractors' %}
@@ -43,6 +43,8 @@
     <a class="btn ghost" href="{{ url_for('warehouse_constructions') }}">{{ _('رجوع') }}</a>
     {% elif name == 'warehouse_tx' and form_ctx in ['wh_projects','projects'] %}
     <a class="btn ghost" href="{{ url_for('warehouse_projects') }}">{{ _('رجوع') }}</a>
+    {% elif name == 'warehouse_tx' and form_ctx in ['wh_reinforcement','reinforcement'] %}
+    <a class="btn ghost" href="{{ url_for('warehouse_ops', view='reinforcement') }}">{{ _('رجوع') }}</a>
     {% elif name == 'warehouse_tx' %}
     <a class="btn ghost" href="{{ url_for('warehouses_home') }}">{{ _('رجوع') }}</a>
     {% elif name == 'warehouse_items' %}
@@ -107,12 +109,18 @@
       <label>{{ label }}</label>
       {% if ftype == 'ticket' %}
         <select name="{{ key }}" {% if name == 'warehouse_tx' and key == 'ticket_no' %}id="warehouseTicketSelect"{% endif %}>
+          {% set current_ticket_value = row[key] or '' %}
+          {% set current_ticket_found = namespace(value=false) %}
           <option value="">—</option>
           {% for t in ticket_options or [] %}
+          {% if current_ticket_value == t.value %}{% set current_ticket_found.value = true %}{% endif %}
           <option value="{{ t.value }}" data-rekaz-code="{{ t.rekaz_code or '' }}" {% if row[key]==t.value %}selected{% endif %}>{{ t.label }}</option>
           {% else %}
-          {% for t in tickets %}<option value="{{ t }}" {% if row[key]==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
+          {% for t in tickets %}{% if current_ticket_value == t %}{% set current_ticket_found.value = true %}{% endif %}<option value="{{ t }}" {% if row[key]==t %}selected{% endif %}>{{ t }}</option>{% endfor %}
           {% endfor %}
+          {% if current_ticket_value and not current_ticket_found.value %}
+          <option value="{{ current_ticket_value }}" selected>{{ current_ticket_value }}</option>
+          {% endif %}
         </select>
       {% elif ftype == 'boq_item' %}
         <input type="text" name="{{ key }}" id="boqItemNo" value="{{ row[key] or '' }}" required autocomplete="off" placeholder="{{ _('اكتب رقم البند من الدليل') }}" dir="ltr" style="text-align:left">
@@ -166,29 +174,47 @@
           {% endif %}
         </div>
       {% elif ftype == 'attachment' %}
-        <div class="photo-slot">
+        <div class="attachment-panel">
           {% set refs = attachment_refs(row[key]) %}
+          <div class="attachment-panel__head">
+            <strong>{{ _('المرفقات') }}</strong>
+            <span class="badge">{{ refs|length }}</span>
+          </div>
           {% if refs %}
-          <div class="attachment-list">
+          <div class="attachment-list attachment-list--gallery">
             {% for ref in refs %}
               {% if is_image_ref(ref) %}
-              <a href="{{ ref }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ ref }}" alt="{{ label }}"></a>
+              <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener">
+                <img src="{{ ref }}" alt="{{ label }}">
+              </a>
               {% elif is_pdf_ref(ref) %}
-              <a class="photo-pdf-chip" href="{{ ref }}" target="_blank" rel="noopener">PDF</a>
+              <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener">
+                <span>PDF</span>
+                <em>{{ media_filename(ref) }}</em>
+              </a>
               {% else %}
-              <a class="attachment-chip" href="{{ ref }}" target="_blank" rel="noopener">{{ media_filename(ref) }}</a>
+              <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener">
+                <span>{{ media_filename(ref).split('.')[-1]|upper }}</span>
+                <em>{{ media_filename(ref) }}</em>
+              </a>
               {% endif %}
             {% endfor %}
           </div>
           <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
-          <label class="photo-actions">
+          <label class="photo-actions attachment-clear">
             <input type="checkbox" name="clear_{{ key }}" value="1"> {{ _('حذف كل المرفقات الحالية') }}
           </label>
           {% else %}
-          <div class="photo-empty">{{ _('لا توجد مرفقات') }}</div>
+          <div class="attachment-empty">{{ _('لا توجد مرفقات') }}</div>
           <input type="hidden" name="{{ key }}" value="">
           {% endif %}
-          <input type="file" name="file_{{ key }}" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+          <label class="attachment-upload">
+            <input class="js-attachment-input" type="file" name="file_{{ key }}" multiple accept=".jpg,.jpeg,.png,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.zip">
+            <span class="attachment-upload__icon">+</span>
+            <span class="attachment-upload__text">{{ _('اختيار صور أو ملفات') }}</span>
+            <span class="attachment-upload__hint">JPG · PNG · PDF · Word · Excel · ZIP</span>
+          </label>
+          <div class="attachment-upload-status" data-empty="{{ _('لم يتم اختيار ملفات جديدة') }}">{{ _('لم يتم اختيار ملفات جديدة') }}</div>
         </div>
       {% elif ftype == 'yesno' %}
         <select name="{{ key }}">
@@ -215,7 +241,7 @@
       {% else %}
         {% if name == 'warehouse_tx' and key == 'source_section' %}
         <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
-        <input type="text" value="{% if row[key] == 'ops' or form_ctx in ['ops','wh_ops'] %}{{ _('العمليات والصيانة') }}{% elif row[key] == 'constructions' or form_ctx in ['constructions','wh_constructions'] %}{{ _('الإنشاءات') }}{% elif row[key] == 'projects' or form_ctx in ['projects','wh_projects'] %}{{ _('المشاريع') }}{% else %}{{ row[key] or '' }}{% endif %}" readonly>
+        <input type="text" value="{% if row[key] == 'ops' or form_ctx in ['ops','wh_ops'] %}{{ _('العمليات والصيانة') }}{% elif row[key] == 'constructions' or form_ctx in ['constructions','wh_constructions'] %}{{ _('الإنشاءات') }}{% elif row[key] == 'projects' or form_ctx in ['projects','wh_projects'] %}{{ _('المشاريع') }}{% elif row[key] == 'reinforcement' or form_ctx in ['reinforcement','wh_reinforcement'] %}{{ _('التعزيز - اسكيمات') }}{% else %}{{ row[key] or '' }}{% endif %}" readonly>
         {% else %}
         <input type="text" name="{{ key }}" value="{{ row[key] or '' }}"
           {% if name == 'warehouse_tx' and key == 'voucher_no' and mode == 'new' %}readonly dir="ltr" style="text-align:left"{% endif %}
@@ -238,6 +264,8 @@
       <a class="btn ghost" href="{{ url_for('warehouse_constructions') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'warehouse_tx' and form_ctx in ['wh_projects','projects'] %}
       <a class="btn ghost" href="{{ url_for('warehouse_projects') }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'warehouse_tx' and form_ctx in ['wh_reinforcement','reinforcement'] %}
+      <a class="btn ghost" href="{{ url_for('warehouse_ops', view='reinforcement') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'warehouse_tx' and form_ctx in ['wh_ops','ops'] %}
       <a class="btn ghost" href="{{ url_for('warehouse_ops') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'warehouse_tx' %}
@@ -292,6 +320,23 @@
 })();
 </script>
 {% endif %}
+<script>
+(function () {
+  document.querySelectorAll(".js-attachment-input").forEach(function (input) {
+    var panel = input.closest(".attachment-panel");
+    var status = panel ? panel.querySelector(".attachment-upload-status") : null;
+    if (!status) return;
+    input.addEventListener("change", function () {
+      var files = Array.prototype.slice.call(input.files || []);
+      if (!files.length) {
+        status.textContent = status.getAttribute("data-empty") || "";
+        return;
+      }
+      status.textContent = files.map(function (file) { return file.name; }).join("، ");
+    });
+  });
+})();
+</script>
 {% if name == 'quantities' %}
 <script>
 (function () {

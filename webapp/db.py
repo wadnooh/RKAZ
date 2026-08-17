@@ -2,6 +2,7 @@ import json
 import os
 import re
 import sqlite3
+import secrets
 from datetime import datetime
 from pathlib import Path
 
@@ -730,6 +731,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "users" in existing or "users" in created:
             if _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0"):
                 created.append("users.is_hidden")
+            # مفتاح API للتكاملات الخارجية
+            if _ensure_column(conn, "users", "api_key", "TEXT"):
+                created.append("users.api_key")
             if ensure_hidden_programmer_user(conn):
                 created.append("users.hidden_programmer")
         if created:
@@ -1041,6 +1045,7 @@ def init_db():
             active INTEGER DEFAULT 1,
             password TEXT,
             notes TEXT,
+            api_key TEXT,
             is_hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS audit_log (
@@ -1160,9 +1165,9 @@ def init_db():
     _ensure_column(conn, "warehouse_tx", "work_order")
     backfill_warehouse_tx_sources(conn)
     backfill_warehouse_tx_work_orders(conn)
-    for _boq_table in ("boq_items", "contract_boq_items"):
-        for _col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
-            _ensure_column(conn, _boq_table, _col)
+    for boq_table in ("boq_items", "contract_boq_items"):
+        for col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
+            _ensure_column(conn, boq_table, col)
 
     # تأكيد الجداول المضافة لاحقاً (حتى لو استُعيدت قاعدة قديمة)
     ensure_schema(conn)
@@ -1377,7 +1382,7 @@ def count_warehouse_tx_by_source(source: str | None = None, conn=None) -> int:
     own = conn is None
     conn = conn or connect()
     source = (source or "").strip().lower()
-    if source in ("ops", "constructions", "projects", "external", "contractors"):
+    if source in ("ops", "constructions", "projects", "external", "contractors", "reinforcement"):
         n = conn.execute(
             "SELECT COUNT(*) FROM warehouse_tx WHERE lower(coalesce(source_section,''))=?",
             (source,),
@@ -3685,7 +3690,7 @@ def warehouse_movements_totals(source_section: str | None = None, conn=None) -> 
     params: list = []
     where = "1=1"
     section = (source_section or "").strip().lower()
-    if section in ("ops", "constructions", "projects", "external", "contractors"):
+    if section in ("ops", "constructions", "projects", "external", "contractors", "reinforcement"):
         where = "lower(coalesce(source_section,''))=?"
         params.append(section)
     rows = conn.execute(
@@ -3716,6 +3721,7 @@ def warehouse_movements_totals_by_source(conn=None) -> list[dict]:
     own = conn is None
     conn = conn or connect()
     sections = [
+        ("reinforcement", "التعزيز - اسكيمات"),
         ("ops", "العمليات والصيانة"),
         ("constructions", "الإنشاءات"),
         ("projects", "المشاريع"),
@@ -3732,7 +3738,7 @@ def warehouse_movements_totals_by_source(conn=None) -> list[dict]:
                 """
                 SELECT tx_type, qty FROM warehouse_tx
                 WHERE trim(coalesce(source_section,''))=''
-                   OR lower(trim(source_section)) NOT IN ('ops','constructions','projects','external','contractors')
+                   OR lower(trim(source_section)) NOT IN ('ops','constructions','projects','external','contractors','reinforcement')
                 """
             ).fetchall()
             inbound = outbound = 0.0
@@ -4348,6 +4354,39 @@ def enrich_warehouse_tx_from_item(data: dict) -> dict:
         if not data.get("unit"):
             data["unit"] = item["unit"]
     return data
+
+
+def get_user_by_api_key(api_key: str, conn=None) -> dict | None:
+    """البحث عن مستخدم نشط عبر مفتاح API."""
+    key = (api_key or "").strip()
+    if not key:
+        return None
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        row = conn.execute(
+            "SELECT * FROM users WHERE api_key=? AND active=1", (key,)
+        ).fetchone()
+        return dict(row) if row else None
+    finally:
+        if own:
+            conn.close()
+
+
+def regenerate_api_key(user_id: int, conn=None) -> str:
+    """يولّد مفتاح API جديداً للمستخدم ويحفظه."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        new_key = f"rkz_{secrets.token_urlsafe(32)}"
+        conn.execute("UPDATE users SET api_key=? WHERE id=?", (new_key, int(user_id)))
+        conn.commit()
+        return new_key
+    finally:
+        if own:
+            conn.close()
 
 # ---- أجهزة المبرمج / رموز الموافقة ----
 

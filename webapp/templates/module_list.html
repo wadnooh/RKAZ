@@ -227,6 +227,9 @@
           {% if name == 'invoices' %}<td>{{ r.remaining|money }}</td>{% endif %}
           {% if name == 'warehouse_items' %}<td>{{ r.balance }}</td>{% endif %}
           <td class="actions">
+            {% if name == 'reinforcement_works' %}
+            <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=r.id) }}">{{ _('فتح المعاملة') }}</a>
+            {% endif %}
             {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
             {% if can_mod_write and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
             <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">

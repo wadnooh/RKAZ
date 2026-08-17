@@ -19,6 +19,7 @@
     <a class="btn ghost{% if source_filter=='ops' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='ops') }}">{{ _('العمليات والصيانة') }}</a>
     <a class="btn ghost{% if source_filter=='constructions' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='constructions') }}">{{ _('الإنشاءات') }}</a>
     <a class="btn ghost{% if source_filter=='projects' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='projects') }}">{{ _('المشاريع') }}</a>
+    <a class="btn ghost{% if source_filter=='reinforcement' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='reinforcement') }}">{{ _('التعزيز - اسكيمات') }}</a>
     <a class="btn ghost{% if source_filter=='external' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='external') }}">{{ _('المشتريات الخارجية') }}</a>
     <a class="btn ghost{% if source_filter=='contractors' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary', source='contractors') }}">{{ _('مواد موردة من مقاول') }}</a>
   </div>

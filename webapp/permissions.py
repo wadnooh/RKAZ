@@ -40,6 +40,9 @@ PERM_LABELS = {
     "audit.read": "سجل النشاط",
     "export": "تصدير Excel",
     "search": "البحث العام",
+    "api.access": "الوصول عبر API",
+    "notifications.read": "عرض الإشعارات",
+    "notifications.manage": "إدارة الإشعارات",
 }
 
 ALL_PERMS = set(PERM_LABELS)
@@ -81,6 +84,8 @@ _ROLE_PERMS: dict[str, set[str]] = {
             "cashflow.write",
             "teams.write",
             "audit.read",
+            "api.access",
+            "notifications.read",
             "export",
             "search",
             # بدون users.manage / app.tabs.manage / ops.tabs.manage — خاص بمدير النظام (المضيف)
@@ -105,6 +110,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
         "modules.write",
         "cashflow.read",
         "export",
+        "notifications.read",
         "search",
     },
     "مراقب": _READ_ALL_SECTIONS
@@ -113,6 +119,7 @@ _ROLE_PERMS: dict[str, set[str]] = {
         "modules.read",
         "cashflow.read",
         "export",
+        "notifications.read",
         "search",
         "audit.read",
     },
@@ -435,6 +442,47 @@ def required_perm_for_request() -> str | None:
 
     if ep == "api_boq_item":
         return None  # بحث قراءة بعد تسجيل الدخول
+
+    # --- إعادة بناء باستخدام قاموس للوضوح ---
+    # يمكن اعتماد هذا الأسلوب تدريجياً لتبسيط الدالة
+    endpoint_to_perm_map = {
+        # Users & Admin
+        "users_home": "users.manage",
+        "users_list": "users.manage",
+        "audit_log_home": "audit.read",
+        "audit_log_page": "audit.read",
+        "app_custom_tabs_manage": "app.tabs.manage",
+        "ops_custom_tabs_manage": "app.tabs.manage",
+        # Tickets
+        "tickets_list": "tickets.read",
+        "ticket_view": "tickets.read",
+        "ticket_print": "tickets.read",
+        "ticket_new": "tickets.write",
+        "ticket_edit": "tickets.write",
+        "ticket_delete": "tickets.delete",
+        "tickets_template": "tickets.write",
+        "tickets_import": "tickets.write",
+        "ticket_boq_add": "tickets.write",
+        "ticket_boq_delete": "tickets.write",
+        # Exports & Search
+        "export_tickets_excel": "export",
+        "module_export_excel": "export",
+        "export_primary_teams_excel": "export",
+        "global_search": "search",
+    }
+
+    if ep in endpoint_to_perm_map:
+        perm = endpoint_to_perm_map[ep]
+        # بعض الصفحات تتطلب صلاحية القسم أيضاً
+        if perm.startswith("tickets.") and not has_perm("section.ops"):
+            return "section.ops"
+        if ep in {"app_custom_tabs_manage", "ops_custom_tabs_manage"} and not has_perm("section.contracts"):
+            return "section.contracts"
+        
+        return None if has_perm(perm) else perm
+
+    # ... (يمكن ترك باقي المنطق المعقد كما هو أو نقله تدريجياً للقاموس)
+    # ...
 
     return None
 

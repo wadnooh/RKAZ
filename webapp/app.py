@@ -29,13 +29,54 @@ from webapp import review_engine
 from webapp import permissions
 from webapp import warehouse_excel
 from webapp import tickets_excel
+from webapp.tickets_routes import tickets_bp
 from webapp import backup as backup_svc
+from webapp.api_routes import api_bp
 from webapp import media as media_svc
 from webapp import programmer_guard as prog_guard
+from webapp import helpers
+
+_t = helpers.t
+_lang = helpers.lang
+_tv = helpers.tv
+_mod = helpers.mod
+_smeta = helpers.smeta
+current_user_name = helpers.current_user_name
+_after_data_change = helpers.after_data_change
+_missing_amount_flag = helpers.missing_amount_flag
+_count_missing_amount = helpers.count_missing_amount
+_filter_missing_amount_rows = helpers.filter_missing_amount_rows
+_filter_rows_by_date_range = helpers.filter_rows_by_date_range
+_module_money_keys = helpers.module_money_keys
+_module_date_keys = helpers.module_date_keys
+_module_detail_key = helpers.module_detail_key
+_latest_row = helpers.latest_row
+_simple_xlsx_export = helpers.simple_xlsx_export
+_link_excavation_if_needed = helpers.link_excavation_if_needed
+_flash_excavation_link = helpers.flash_excavation_link
+_redirect_license_evacuations_journey = helpers.redirect_license_evacuations_journey
+_linked_section_label = helpers.linked_section_label
+_summary_card = helpers.summary_card
+build_list_summary_cards = helpers.build_list_summary_cards
+request_query_args = helpers.request_query_args
+_url_with_filters = helpers.url_with_filters
+
+
+def money(value):
+    if value is None or value == "":
+        return "—"
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return value
+    return f"{amount:,.2f} ر.س"
 
 app = Flask(__name__, instance_relative_config=True)
 # يجب أن يبقى SECRET_KEY ثابتاً بين إعادة التشغيل — تغييره يُبطل جلسات الجميع
-app.secret_key = os.environ.get("SECRET_KEY", "rakaz-khurais-emergency-2026")
+# في بيئة الإنتاج، يجب تعيين هذا المتغير عبر متغيرات البيئة (environment variable)
+app.secret_key = os.environ.get("SECRET_KEY")
+if not app.secret_key:
+    raise ValueError("متغير البيئة SECRET_KEY غير معين. هذا المتغير مطلوب لتشغيل التطبيق بأمان.")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
 app.permanent_session_lifetime = timedelta(days=30)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -71,6 +112,16 @@ PUBLIC_ENDPOINTS = {
 }
 
 
+def login_required(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        if not session.get("user_id"):
+            return redirect(url_for("login", next=request.full_path))
+        return fn(*args, **kwargs)
+
+    return wrapper
+
+
 def create_app():
     global _DB_READY
     db.init_db()
@@ -84,9 +135,33 @@ def create_app():
     # ابدأ الحفظ التلقائي في الخلفية (محلي + رفع إلى S3)
     try:
         backup_svc.start_auto_backup_scheduler(app)
+        app.register_blueprint(tickets_bp)
+        app.register_blueprint(api_bp)
+        _register_legacy_ticket_endpoints()
     except Exception:
         pass
     return app
+
+
+def _register_legacy_ticket_endpoints() -> None:
+    """Keep old template endpoint names working after moving tickets to a blueprint."""
+    aliases = [
+        ("tickets_list", "/tickets/", "tickets.list_all", ["GET"]),
+        ("tickets_template", "/tickets/template.xlsx", "tickets.template", ["GET"]),
+        ("tickets_import", "/tickets/import", "tickets.import_from_excel", ["POST"]),
+        ("ticket_new", "/tickets/new", "tickets.new", ["GET", "POST"]),
+        ("ticket_view", "/tickets/<int:ticket_id>", "tickets.view", ["GET"]),
+        ("ticket_print", "/tickets/<int:ticket_id>/print", "tickets.print_view", ["GET"]),
+        ("ticket_edit", "/tickets/<int:ticket_id>/edit", "tickets.edit", ["GET", "POST"]),
+        ("ticket_delete", "/tickets/<int:ticket_id>/delete", "tickets.delete", ["POST"]),
+        ("ticket_boq_add", "/tickets/<int:ticket_id>/boq/add", "tickets.boq_add", ["POST"]),
+        ("ticket_boq_delete", "/tickets/<int:ticket_id>/boq/<int:line_id>/delete", "tickets.boq_delete", ["POST"]),
+        ("export_tickets_excel", "/tickets/export.xlsx", "tickets.export_excel", ["GET"]),
+    ]
+    for endpoint, rule, target, methods in aliases:
+        if endpoint in app.view_functions or target not in app.view_functions:
+            continue
+        app.add_url_rule(rule, endpoint=endpoint, view_func=app.view_functions[target], methods=methods)
 
 
 @app.before_request
@@ -108,7 +183,7 @@ def _load_context():
     # حماية الصفحات — يتطلب تسجيل دخول
     if request.endpoint and request.endpoint not in PUBLIC_ENDPOINTS and not session.get("user_id"):
         if request.endpoint != "static":
-            return redirect(url_for("login", next=request.path))
+            return redirect(url_for("login", next=request.full_path))
         return None
     # نظام الصلاحيات لكل التطبيق
     if session.get("user_id") and request.endpoint not in PUBLIC_ENDPOINTS:
@@ -124,119 +199,6 @@ def _load_context():
         blocked = prog_guard.gate_control_plane_mutation()
         if blocked is not None:
             return blocked
-
-def current_user_name():
-    return session.get("full_name") or session.get("username") or _t("مستخدم")
-
-
-
-def _lang():
-    return session.get("lang") or "ar"
-
-
-def _t(text, **kwargs):
-    return i18n_phrase(_lang(), text, **kwargs)
-
-
-def _tv(value):
-    return i18n_tv(_lang(), value)
-
-
-def _mod(module):
-    return localize_module(module, _lang())
-
-
-def _smeta(meta):
-    return localize_section_meta(meta, _lang())
-
-
-def _after_data_change():
-    """مزامنة صامتة بعد أي تعديل — بدون أزرار أو رسائل للمستخدم."""
-    try:
-        backup_svc.silent_backup_after_change()
-    except Exception:
-        pass
-
-
-def _link_excavation_if_needed(ticket_no: str, reason: str = "", conn=None) -> dict | None:
-    """يربط معاملة الحفر بالتنسيق/الإخلاء عند الحاجة."""
-    tno = str(ticket_no or "").strip()
-    if not tno:
-        return None
-    own = conn is None
-    conn = conn or db.connect()
-    try:
-        if not db.ticket_has_excavation(tno, conn):
-            return None
-        return db.ensure_excavation_coordination(
-            tno,
-            reason=reason or "ربط تلقائي — معاملة بها حفر",
-            conn=conn,
-            create_clearance=True,
-        )
-    finally:
-        if own:
-            conn.commit()
-            conn.close()
-
-
-def _flash_excavation_link(result: dict | None):
-    if not result:
-        return
-    parts = []
-    if result.get("created_coord"):
-        parts.append(_t("تم ربط المعاملة بالتنسيقات"))
-    if result.get("created_clearance"):
-        parts.append(_t("تم فتح إجراء إخلاء الأسفلت"))
-    if parts:
-        flash(" — ".join(parts), "ok")
-
-
-_LICENSE_EVACUATION_WORKFLOW = "الإخلاء المبدئي"
-
-
-def _redirect_license_evacuations_journey(data: dict | None):
-    """عند اختيار «الإخلاء المبدئي» من متابعة التصريح: افتح رحلة الإخلاءات."""
-    data = data or {}
-    if (data.get("workflow_status") or "").strip() != _LICENSE_EVACUATION_WORKFLOW:
-        return None
-    ticket_no = (data.get("ticket_no") or "").strip()
-    if not ticket_no:
-        flash(_t("لبدء الإخلاء المبدئي اربط الرخصة برقم عطل أولاً."), "danger")
-        return None
-    try:
-        res = db.ensure_excavation_coordination(
-            ticket_no,
-            reason="الإخلاء المبدئي — من متابعة التصريح",
-            create_clearance=True,
-        )
-        _flash_excavation_link(res)
-    except Exception as exc:
-        flash(_t("تعذر بدء الإخلاء المبدئي: {exc}", exc=exc), "danger")
-        return None
-    flash(_t("تم فتح الإخلاء المبدئي من متابعة التصريح."), "ok")
-    return redirect(
-        url_for("quality_home", tab="evacuations", sub="initial", q=ticket_no)
-    )
-
-
-def _linked_section_label(section: str | None) -> str:
-    return {
-        "ops": _t("العمليات والصيانة"),
-        "projects": _t("المشاريع"),
-        "constructions": _t("الإنشاءات"),
-    }.get(db.normalize_linked_section(section), section or "—")
-
-
-def login_required(fn):
-    @wraps(fn)
-    def wrapper(*args, **kwargs):
-        if not session.get("user_id"):
-            return redirect(url_for("login"))
-        return fn(*args, **kwargs)
-
-    return wrapper
-
 
 _SECTION_PERM = {
     "ops": "section.ops",
@@ -279,7 +241,7 @@ def _ops_custom_tabs_for_nav(lang: str | None = None) -> list[dict]:
     return _custom_tabs_for_section("ops", lang)
 
 
-def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]]:
+def app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]]:
     if not session.get("user_id"):
         return {}
     lang = lang or (session.get("lang") or "ar")
@@ -301,17 +263,13 @@ def _app_custom_tabs_by_section(lang: str | None = None) -> dict[str, list[dict]
     return by_sec
 
 
-# Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "bootstrap-email-btn-4"
-
-
-def _static_asset_version() -> str:
+def static_asset_version() -> str:
     """Cache-bust static CSS/JS so layout updates (e.g. ultra-wide) reach clients despite nginx expires."""
     try:
         css = Path(app.root_path) / "static" / "styles.css"
-        return f"{_LAYOUT_ASSET_TAG}-{int(css.stat().st_mtime)}"
+        return f"{helpers._LAYOUT_ASSET_TAG}-{int(css.stat().st_mtime)}"
     except OSError:
-        return _LAYOUT_ASSET_TAG
+        return helpers._LAYOUT_ASSET_TAG
 
 
 @app.context_processor
@@ -322,15 +280,15 @@ def inject_globals():
         return i18n_tr(lang, key, **kwargs)
 
     def _(text, **kwargs):
-        return i18n_phrase(lang, text, **kwargs)
+        return helpers.t(text, **kwargs)
 
     def tv(value):
-        return i18n_tv(lang, value)
+        return helpers.tv(value)
 
     def can(*perms):
         return permissions.can(*perms)
 
-    tabs_by_section = _app_custom_tabs_by_section(lang) if session.get("user_id") else {}
+    tabs_by_section = app_custom_tabs_by_section(lang) if session.get("user_id") else {}
     ctx = {
         "settings": g.get("settings") or db.get_settings(),
         "lists": g.get("lists") or db.get_lists(),
@@ -353,353 +311,10 @@ def inject_globals():
         "app_custom_tabs_by_section": tabs_by_section,
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
         "hosting": backup_svc.hosting_info(),
-        "asset_v": _static_asset_version(),
+        "asset_v": static_asset_version(),
     }
     ctx.update(prog_guard.template_context())
     return ctx
-
-
-def money(n):
-    try:
-        return f"{float(n or 0):,.2f} {_t('ر.س')}"
-    except Exception:
-        return f"0.00 {_t('ر.س')}"
-
-
-def _summary_card(title, value, subtitle="", *, money=False, href=None, active=False):
-    """بطاقة ملخص بنفس أسلوب إجمالي الكميات في المستودعات."""
-    return {
-        "title": title,
-        "value": value if value is not None else "—",
-        "subtitle": subtitle or "",
-        "money": bool(money),
-        "href": href or None,
-        "active": bool(active),
-    }
-
-
-def _to_float_safe(val):
-    if val is None or val == "":
-        return None
-    try:
-        return float(val)
-    except (TypeError, ValueError):
-        return None
-
-
-def _sum_money_field(rows, *keys):
-    total = 0.0
-    for r in rows or []:
-        for key in keys:
-            num = _to_float_safe(r.get(key))
-            if num is not None:
-                total += num
-                break
-    return total
-
-
-def _missing_amount_flag(raw=None):
-    """هل طلب المستخدم فلتر السجلات بدون مبلغ؟"""
-    if raw is None:
-        raw = request.args.get("missing_amount")
-    return str(raw or "").strip().lower() in {"1", "yes", "true", "on"}
-
-
-def _row_missing_amount(row, *keys):
-    """True إذا لم يُدخل أي مبلغ في الحقول المحددة."""
-    if not keys:
-        return False
-    for key in keys:
-        if _to_float_safe(row.get(key)) is not None:
-            return False
-    return True
-
-
-def _count_missing_amount(rows, *keys):
-    if not keys:
-        return 0
-    return sum(1 for r in rows or [] if _row_missing_amount(r, *keys))
-
-
-def _filter_missing_amount_rows(rows, *keys):
-    if not keys:
-        return list(rows or [])
-    return [r for r in (rows or []) if _row_missing_amount(r, *keys)]
-
-
-def _request_query_args(*drop, **overrides):
-    """يبني dict لمعاملات الرابط مع الحفاظ على الفلاتر الحالية."""
-    args = {
-        k: v
-        for k, v in request.args.to_dict(flat=True).items()
-        if v is not None and str(v).strip() != ""
-    }
-    for key in drop:
-        args.pop(key, None)
-    for key, val in overrides.items():
-        if val is None or str(val).strip() == "":
-            args.pop(key, None)
-        else:
-            args[key] = val
-    return args
-
-
-def _url_with_filters(endpoint, *drop, **overrides):
-    return url_for(endpoint, **_request_query_args(*drop, **overrides))
-
-
-def _missing_amount_card(
-    count,
-    *,
-    endpoint,
-    active=False,
-    endpoint_kwargs=None,
-):
-    """بطاقة قابلة للنقر لتصفية السجلات بدون مبلغ."""
-    endpoint_kwargs = dict(endpoint_kwargs or {})
-    if active:
-        href = _url_with_filters(endpoint, "missing_amount", **endpoint_kwargs)
-        subtitle = _t("فلتر نشط — اضغط لإلغاء التصفية")
-    else:
-        href = _url_with_filters(
-            endpoint, missing_amount="1", **endpoint_kwargs
-        )
-        subtitle = _t("اضغط لعرض السجلات بدون مبلغ")
-    return _summary_card(
-        _t("بدون مبلغ"),
-        count,
-        subtitle,
-        href=href,
-        active=active,
-    )
-
-
-def _xlsx_sheet_title(title, fallback="Export"):
-    """عناوين أوراق Excel لا تقبل \\ / * ? : [ ] وبحد أقصى 31 حرفاً."""
-    raw = (title or "").strip() or fallback
-    for ch in '\\/*?:[]':
-        raw = raw.replace(ch, "-")
-    raw = " ".join(raw.split()).strip() or fallback
-    return raw[:31]
-
-
-def _simple_xlsx_export(title, headers, rows, field_keys, download_name):
-    """تصدير Excel بسيط للصفوف المفلترة."""
-    from openpyxl import Workbook
-    from webapp import excel_brand as brand
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = _xlsx_sheet_title(title)
-    ncol = len(headers)
-    header_row = brand.apply_brand_header(ws, title=title, ncol=ncol)
-    brand.write_header_row(ws, headers, header_row)
-    start = header_row + 1
-    for offset, row in enumerate(rows or []):
-        r = start + offset
-        for col, key in enumerate(field_keys, start=1):
-            val = row.get(key) if isinstance(row, dict) else None
-            ws.cell(row=r, column=col, value="" if val is None else val)
-    end = start + len(rows or []) - 1 if rows else header_row
-    if rows:
-        brand.style_data_rows(ws, start_row=start, end_row=end, ncol=ncol)
-    data = brand.save_workbook_bytes(wb)
-    return send_file(
-        io.BytesIO(data),
-        as_attachment=True,
-        download_name=download_name,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-
-def _latest_row(rows, *date_keys):
-    """أحدث صف حسب أول تاريخ متاح ثم أعلى id."""
-    best = None
-    best_key = None
-    for r in rows or []:
-        date_val = ""
-        for key in date_keys:
-            date_val = (r.get(key) or "").strip()
-            if date_val:
-                break
-        sort_key = (date_val or "", int(r.get("id") or 0))
-        if best is None or sort_key > best_key:
-            best = r
-            best_key = sort_key
-    return best
-
-
-def _filter_rows_by_date_range(rows, date_from, date_to, *date_keys):
-    """تصفية الصفوف حسب تاريخ من/إلى باستخدام أول حقل تاريخ غير فارغ."""
-    date_from = (date_from or "").strip()
-    date_to = (date_to or "").strip()
-    if not date_from and not date_to:
-        return list(rows or [])
-    out = []
-    for r in rows or []:
-        d = ""
-        for key in date_keys:
-            d = (r.get(key) or "").strip()
-            if d:
-                break
-        if not d:
-            continue
-        if date_from and d < date_from:
-            continue
-        if date_to and d > date_to:
-            continue
-        out.append(r)
-    return out
-
-
-def _module_money_keys(name, module=None):
-    module = module or MODULES.get(name) or {}
-    preferred = {
-        "metering": ("approved_value",),
-        "invoices": ("value",),
-        "quantities": ("total", "unit_price"),
-        "external_purchases": ("total",),
-        "contractor_supplies": ("total",),
-        "primary_team_orders": ("amount",),
-        "reinforcement_works": ("value",),
-        "construction_works": ("value",),
-        "contractor_works": ("value",),
-    }.get(name)
-    if preferred:
-        return preferred
-    keys = []
-    for key, _label, ftype in module.get("fields") or []:
-        if ftype != "number":
-            continue
-        lk = key.lower()
-        if any(tok in lk for tok in ("value", "amount", "price", "collected", "approved", "total")):
-            keys.append(key)
-    return tuple(keys)
-
-
-def _module_date_keys(name, module=None):
-    module = module or MODULES.get(name) or {}
-    preferred = {
-        "metering": ("approve_date", "submit_date", "start_date"),
-        "invoices": ("invoice_date", "support_date", "paid_date"),
-        "primary_team_orders": ("order_date",),
-        "reinforcement_works": ("work_date",),
-        "construction_works": ("work_date",),
-        "contractor_works": ("work_date",),
-        "contractor_supplies": ("supply_date",),
-        "external_purchases": ("purchase_date", "order_date"),
-        "projects": ("start_date", "end_date"),
-        "warehouse_tx": ("tx_date",),
-        "new_coordinations": ("request_date",),
-        "issued_licenses": ("issue_date", "expiry_date"),
-        "quality_clearances": ("request_date", "clearance_date"),
-    }.get(name)
-    if preferred:
-        return preferred
-    keys = []
-    for key, _label, ftype in module.get("fields") or []:
-        if ftype == "date" or key.endswith("_date") or key in ("tx_date",):
-            keys.append(key)
-    return tuple(keys)
-
-
-def _module_detail_key(name, module=None):
-    module = module or MODULES.get(name) or {}
-    preferred = {
-        "metering": "ticket_no",
-        "invoices": "invoice_id",
-        "primary_team_orders": "work_order",
-        "reinforcement_works": "work_no",
-        "construction_works": "work_no",
-        "contractor_works": "work_no",
-        "contractor_supplies": "supply_no",
-        "projects": "project_code",
-        "warehouse_tx": "voucher_no",
-        "new_coordinations": "coord_no",
-        "issued_licenses": "license_no",
-        "quality_clearances": "ticket_no",
-        "quantities": "ticket_no",
-        "photos": "ticket_no",
-        "external_purchases": "purchase_no",
-    }.get(name)
-    if preferred:
-        return preferred
-    for key, _label, _ftype in module.get("fields") or []:
-        if key in module.get("list_cols") or []:
-            return key
-    fields = module.get("fields") or []
-    return fields[0][0] if fields else "id"
-
-
-def build_list_summary_cards(
-    rows,
-    *,
-    count_label=None,
-    money_keys=(),
-    date_keys=(),
-    detail_key=None,
-    filter_hint=None,
-    missing_amount_count=None,
-    missing_amount_active=False,
-    missing_amount_endpoint=None,
-    missing_amount_endpoint_kwargs=None,
-):
-    """يبني بطاقات ملخص من الصفوف المعروضة (بعد الفلترة)."""
-    rows = list(rows or [])
-    hint = filter_hint or _t("حسب الفلتر الحالي")
-    count_label = count_label or _t("عدد السجلات")
-    cards = [
-        _summary_card(count_label, len(rows), hint),
-    ]
-    if money_keys:
-        cards.append(
-            _summary_card(
-                _t("المبالغ المدخلة"),
-                _sum_money_field(rows, *money_keys),
-                hint,
-                money=True,
-            )
-        )
-        if missing_amount_endpoint:
-            miss_count = (
-                missing_amount_count
-                if missing_amount_count is not None
-                else _count_missing_amount(rows, *money_keys)
-            )
-            cards.append(
-                _missing_amount_card(
-                    miss_count,
-                    endpoint=missing_amount_endpoint,
-                    active=missing_amount_active,
-                    endpoint_kwargs=missing_amount_endpoint_kwargs,
-                )
-            )
-    latest = _latest_row(rows, *date_keys) if date_keys else (rows[0] if rows else None)
-    if detail_key:
-        detail_val = (latest or {}).get(detail_key) if latest else None
-        cards.append(
-            _summary_card(
-                _t("آخر سجل"),
-                detail_val or "—",
-                _t("تفاصيل أحدث حركة"),
-            )
-        )
-    if date_keys:
-        last_date = ""
-        if latest:
-            for key in date_keys:
-                last_date = (latest.get(key) or "").strip()
-                if last_date:
-                    break
-        cards.append(
-            _summary_card(
-                _t("تاريخ آخر حركة"),
-                last_date or "—",
-                _t("أحدث تاريخ في القائمة"),
-            )
-        )
-    return cards
-
 
 def response_minutes(dispatch, arrival):
     if not dispatch or not arrival:
@@ -848,7 +463,7 @@ def set_lang(lang):
     # أعد لنفس الموقع فقط — تجنّب إعادة توجيه خارجية عبر Referer
     if ref.startswith(request.host_url) or ref.startswith("/"):
         return redirect(ref)
-    return redirect(url_for("login"))
+    return redirect(url_for("ops_home"))
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -1034,8 +649,8 @@ def dashboard():
 @login_required
 def ops_home():
     """توجيه لقسم العمليات → أول تبويب فرعي حقيقي (الأعطال)."""
-    if permissions.can("tickets.read"):
-        return redirect(url_for("tickets_list"))
+    if permissions.can("section.ops") and permissions.can("tickets.read"):
+        return redirect(url_for("tickets.list_all"))
     return redirect(url_for("ops_primary_teams"))
 
 
@@ -1634,6 +1249,83 @@ def reinforcement_home():
     )
 
 
+def _reinforcement_work_for_ref(ref: str, conn=None):
+    ref = (ref or "").strip()
+    if not ref:
+        return None
+    own = conn is None
+    conn = conn or db.connect()
+    row = conn.execute(
+        "SELECT id, work_no FROM reinforcement_works WHERE work_no=? LIMIT 1",
+        (ref,),
+    ).fetchone()
+    if own:
+        conn.close()
+    return row
+
+
+@app.route("/reinforcement/works/<int:row_id>")
+@login_required
+def reinforcement_work_view(row_id):
+    if not permissions.can("section.reinforcement"):
+        abort(403)
+    conn = db.connect()
+    work_row = conn.execute("SELECT * FROM reinforcement_works WHERE id=?", (row_id,)).fetchone()
+    if not work_row:
+        conn.close()
+        abort(404)
+    work = dict(work_row)
+    ref = (work.get("work_no") or "").strip()
+    related = {
+        "quantities": [],
+        "photos": [],
+        "metering": [],
+        "warehouse_tx": [],
+    }
+    if ref:
+        related["quantities"] = db.rows_to_dicts(
+            conn.execute("SELECT * FROM quantities WHERE ticket_no=? ORDER BY id DESC", (ref,)).fetchall()
+        )
+        related["photos"] = db.rows_to_dicts(
+            conn.execute("SELECT * FROM photos WHERE ticket_no=? ORDER BY id DESC", (ref,)).fetchall()
+        )
+        for p in related["photos"]:
+            p["complete"] = _t("مكتمل") if media_svc.photos_complete(p) else _t("ناقص")
+        related["metering"] = db.rows_to_dicts(
+            conn.execute("SELECT * FROM metering WHERE ticket_no=? ORDER BY id DESC", (ref,)).fetchall()
+        )
+        related["warehouse_tx"] = db.rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM warehouse_tx
+                WHERE (lower(coalesce(source_section,''))='reinforcement' AND coalesce(source_ref,'')=?)
+                   OR coalesce(work_order,'')=?
+                   OR coalesce(ticket_no,'')=?
+                ORDER BY id DESC
+                """,
+                (ref, ref, ref),
+            ).fetchall()
+        )
+        db.enrich_warehouse_txs_work_order(related["warehouse_tx"], conn)
+    qty_total = 0.0
+    for q in related["quantities"]:
+        qty_total += float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
+    conn.close()
+    return render_template(
+        "reinforcement_work_view.html",
+        work=work,
+        related=related,
+        qty_total=qty_total,
+        voucher_groups=db.group_warehouse_txs_by_voucher(related["warehouse_tx"]),
+        can_mutate=permissions.can("modules.write") and permissions.can("section.reinforcement"),
+        can_warehouse=permissions.can("section.warehouses"),
+        focus=(request.args.get("focus") or "").strip(),
+        section="reinforcement",
+        section_meta=_smeta(SECTION_META.get("reinforcement")),
+        section_modules=modules_for_section("reinforcement"),
+    )
+
+
 @app.route("/warehouses")
 @login_required
 def warehouses_home():
@@ -1647,7 +1339,7 @@ def warehouse_movements_summary():
     """صفحة إجمالي كميات الوارد والمنصرف والمتبقي بدون تفصيل الحركات."""
     db.backfill_warehouse_tx_sources()
     source = (request.args.get("source") or "").strip().lower()
-    if source not in ("", "ops", "constructions", "projects", "external", "contractors"):
+    if source not in ("", "ops", "constructions", "projects", "external", "contractors", "reinforcement"):
         source = ""
     totals = db.warehouse_movements_totals(source or None)
     by_source = db.warehouse_movements_totals_by_source()
@@ -1710,12 +1402,14 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
     # التبويبات الداخلية حسب التخصص (أعطال / الفرق الأولية / حركات)
     if view == "work_orders":
         view = "teams"
-    if source == "ops" and view not in ("tickets", "teams", "movements"):
+    if source == "ops" and view not in ("tickets", "teams", "reinforcement", "movements"):
         view = "tickets"
     if source == "constructions" and view not in ("works", "movements"):
         view = "works"
     if source == "projects" and view not in ("projects", "movements"):
         view = "projects"
+    if source == "reinforcement" and view not in ("works", "movements"):
+        view = "works"
 
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
@@ -1781,9 +1475,9 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         cmap = _warehouse_tx_count_map("ops", conn)
         for r in rows:
             r["wh_count"] = cmap.get(str(r.get("ticket_no") or ""), 0)
-    elif view == "works":
+    elif view == "reinforcement":
         rows = db.rows_to_dicts(
-            conn.execute("SELECT * FROM construction_works ORDER BY id DESC").fetchall()
+            conn.execute("SELECT * FROM reinforcement_works ORDER BY id DESC").fetchall()
         )
         if q:
             ql = q.lower()
@@ -1791,10 +1485,29 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 r
                 for r in rows
                 if ql in (r.get("work_no") or "").lower()
+                or ql in (r.get("department") or "").lower()
+                or ql in (r.get("location") or "").lower()
+                or ql in (r.get("work_type") or "").lower()
+                or ql in (r.get("ticket_no") or "").lower()
+            ]
+        cmap = _warehouse_tx_count_map("reinforcement", conn)
+        for r in rows:
+            r["wh_count"] = cmap.get(str(r.get("work_no") or ""), 0)
+    elif view in ("works", "reinforcement"):
+        table = "reinforcement_works" if source == "reinforcement" else "construction_works"
+        rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {table} ORDER BY id DESC").fetchall())
+        if q:
+            ql = q.lower()
+            rows = [
+                r
+                for r in rows
+                if ql in (r.get("work_no") or "").lower()
+                or ql in (r.get("department") or "").lower()
+                or ql in (r.get("location") or "").lower()
                 or ql in (r.get("site") or "").lower()
                 or ql in (r.get("work_type") or "").lower()
             ]
-        cmap = _warehouse_tx_count_map("constructions", conn)
+        cmap = _warehouse_tx_count_map(source, conn)
         for r in rows:
             r["wh_count"] = cmap.get(str(r.get("work_no") or ""), 0)
     elif view == "projects":
@@ -1895,6 +1608,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             "ops": "wh_ops",
             "constructions": "wh_constructions",
             "projects": "wh_projects",
+            "reinforcement": "wh_reinforcement",
         }.get(source, "warehouses"),
     )
 
@@ -1932,6 +1646,20 @@ def warehouse_projects():
         _t("المشاريع"),
         _t("عرض المشاريع داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         "warehouse_projects",
+    )
+
+
+@app.route("/warehouses/reinforcement")
+@login_required
+def warehouse_reinforcement():
+    return redirect(url_for("warehouse_ops", view="reinforcement"))
+    # Legacy route kept for old links; the visible tab now lives under operations.
+    return _warehouse_specialty_page(
+        "reinforcement",
+        "reinforcement",
+        _t("التعزيز - اسكيمات"),
+        _t("عرض معاملات التعزيز/الاسكيمات داخل المستودع مع ربط تلقائي برقم المعاملة."),
+        "warehouse_reinforcement",
     )
 
 
@@ -2138,6 +1866,7 @@ def warehouse_voucher_detail(voucher_no):
         "ops": "ops",
         "constructions": "constructions",
         "projects": "projects",
+        "reinforcement": "ops",
     }.get(section, "summary")
 
     inbound = [r for r in lines if r.get("sign", 0) > 0]
@@ -2169,11 +1898,20 @@ def warehouse_voucher_detail(voucher_no):
         back_url = url_for("warehouse_constructions", view="movements")
     elif section == "projects":
         back_url = url_for("warehouse_projects", view="movements")
+    elif section == "reinforcement":
+        ref = (head.get("source_ref") or head.get("work_order") or "").strip()
+        work = _reinforcement_work_for_ref(ref)
+        back_url = (
+            url_for("reinforcement_work_view", row_id=work["id"]) + "#section-warehouse"
+            if work
+            else url_for("warehouse_movements_summary", source="reinforcement")
+        )
 
     form_from = {
         "ops": "wh_ops",
         "constructions": "wh_constructions",
         "projects": "wh_projects",
+        "reinforcement": "wh_reinforcement",
     }.get(section, "warehouses")
 
     base_args = {"from": form_from, "voucher_no": voucher_no, "reuse_voucher": "1"}
@@ -2289,6 +2027,8 @@ def warehouse_tx_multi():
         "constructions": url_for("warehouse_constructions"),
         "wh_projects": url_for("warehouse_projects"),
         "projects": url_for("warehouse_projects"),
+        "wh_reinforcement": url_for("warehouse_ops", view="reinforcement"),
+        "reinforcement": url_for("module_list", name="reinforcement_works"),
     }.get(form_ctx, url_for("warehouses_home"))
 
     conn = db.connect()
@@ -2298,14 +2038,14 @@ def warehouse_tx_multi():
     header = {
         "voucher_no": "",
         "tx_date": datetime.now().strftime("%Y-%m-%d"),
-        "tx_type": (request.values.get("tx_type") or "").strip() or "منصرف للمقاول",
+        "tx_type": (request.form.get("tx_type") or request.args.get("tx_type") or "").strip() or "منصرف للمقاول",
         "recipient": "",
         "sender": "",
-        "ticket_no": (request.values.get("ticket_no") or "").strip(),
+        "ticket_no": (request.form.get("ticket_no") or request.args.get("ticket_no") or "").strip(),
         "rekaz_code": "",
         "source_section": source,
-        "source_ref": (request.values.get("source_ref") or "").strip(),
-        "work_order": (request.values.get("work_order") or "").strip(),
+        "source_ref": (request.form.get("source_ref") or request.args.get("source_ref") or "").strip(),
+        "work_order": (request.form.get("work_order") or request.args.get("work_order") or "").strip(),
         "region": "",
         "notes": "",
     }
@@ -2323,8 +2063,8 @@ def warehouse_tx_multi():
             header["work_order"] = header["source_ref"]
     header = db.apply_warehouse_tx_work_order(header, conn)
 
-    reuse = str(request.values.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
-    existing_voucher = (request.values.get("voucher_no") or "").strip()
+    reuse = str(request.form.get("reuse_voucher") or request.args.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
+    existing_voucher = (request.form.get("voucher_no") or request.args.get("voucher_no") or "").strip()
     if reuse and existing_voucher:
         header["voucher_no"] = existing_voucher
         prev = conn.execute(
@@ -2346,11 +2086,11 @@ def warehouse_tx_multi():
                 "sender",
                 "notes",
             ):
-                if request.method == "GET" or not (request.form.get(k) or "").strip():
+                if not (request.form.get(k) or "").strip():
                     if prev.get(k) not in (None, "") and not (header.get(k) or "").strip():
                         header[k] = prev.get(k)
-            if request.values.get("tx_type"):
-                header["tx_type"] = request.values.get("tx_type")
+            if request.form.get("tx_type") or request.args.get("tx_type"):
+                header["tx_type"] = (request.form.get("tx_type") or request.args.get("tx_type") or "").strip()
     else:
         header["voucher_no"] = db.next_warehouse_voucher_no(conn)
 
@@ -2383,7 +2123,7 @@ def warehouse_tx_multi():
                 header["work_order"] = header["source_ref"]
         header = db.apply_warehouse_tx_work_order(header, conn)
         if reuse and existing_voucher:
-            header["voucher_no"] = existing_voucher
+            header["voucher_no"] = existing_voucher # Keep existing voucher on reuse
         else:
             # لا تعيد استخدام سند موجود إلا عند reuse صريح
             voucher = (request.form.get("voucher_no") or "").strip() or header["voucher_no"]
@@ -2543,18 +2283,22 @@ def warehouse_tx_multi():
     )
 
 
-# كلمة سر تأكيد الحذف لكل التطبيق (مستودع / أعطال / وحدات / مستخدمين / فرق…)
-DELETE_PASSWORD = "112233"
-WAREHOUSE_DELETE_PASSWORD = DELETE_PASSWORD  # توافق خلفي
-
-
 def _delete_password_ok() -> bool:
-    """يتحقق من كلمة سر الحذف (112233) لأي عملية حذف في التطبيق."""
-    return (request.form.get("delete_password") or "").strip() == DELETE_PASSWORD
+    """يتحقق من كلمة مرور المستخدم الحالي لتأكيد عمليات الحذف."""
+    password = (request.form.get("delete_password") or "").strip()
+    if not session.get("user_id"):
+        return False
+    conn = db.connect()
+    user = conn.execute("SELECT password FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    conn.close()
+    if not user:
+        return False
+    # للمستقبل: يجب استخدام hash لكلمات المرور بدلاً من النص الصريح
+    return (user["password"] or "") == password
 
 
 def _reject_bad_delete_password(fallback_url: str):
-    flash(_t("كلمة سر الحذف غير صحيحة — أعد المحاولة من مربع التأكيد"), "danger")
+    flash(_t("كلمة مرور حسابك غير صحيحة. أدخل كلمة مرورك لتأكيد الحذف."), "danger")
     nxt = (request.form.get("next") or "").strip()
     return redirect(nxt or fallback_url)
 
@@ -3112,560 +2856,6 @@ def programmer_magic(token):
 def audit_log_home():
     return redirect(url_for("audit_log_page"))
 
-
-# ---------- Tickets (الأعطال) ----------
-TICKET_FIELDS = [
-    "ticket_no",
-    "rekaz_code",
-    "receive_date",
-    "district",
-    "receive_time",
-    "agent",
-    "station_no",
-    "feeder_no",
-    "location",
-    "fault_type",
-    "classification",
-    "team",
-    "dispatch_time",
-    "arrival_time",
-    "status",
-    "execution_date",
-    "photographed",
-    "quantities_done",
-    "asphalt_clearance",
-    "metering_status",
-    "consultant_approval",
-    "invoice_status",
-    "work_order",
-    "invoice_no",
-    "sap_status",
-    "items_value",
-    "notes",
-]
-
-
-def ticket_from_form():
-    data = {f: (request.form.get(f) or "").strip() for f in TICKET_FIELDS}
-    iv = data.get("items_value")
-    data["items_value"] = float(iv) if iv not in ("", None) else None
-    return data
-
-
-def _load_filtered_tickets(
-    *,
-    q="",
-    status="",
-    date_from="",
-    date_to="",
-    missing_amount=False,
-    conn=None,
-):
-    """يحمّل الأعطال مع نفس فلاتر القائمة (بما فيها بدون مبلغ)."""
-    own_conn = conn is None
-    if own_conn:
-        conn = db.connect()
-    sql = "SELECT * FROM tickets WHERE 1=1"
-    params = []
-    if q:
-        sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR work_order LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ? OR agent LIKE ?)"
-        like = f"%{q}%"
-        params.extend([like, like, like, like, like, like, like])
-    if status:
-        sql += " AND status = ?"
-        params.append(status)
-    if date_from:
-        sql += " AND coalesce(receive_date,'') >= ?"
-        params.append(date_from)
-    if date_to:
-        sql += " AND coalesce(receive_date,'') <= ?"
-        params.append(date_to)
-    sql += " ORDER BY id DESC"
-    rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
-    for r in rows:
-        r["response_min"] = response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
-    _attach_ticket_final_values(rows, conn)
-    if own_conn:
-        conn.close()
-    missing_count = _count_missing_amount(rows, "final_value")
-    if missing_amount:
-        rows = _filter_missing_amount_rows(rows, "final_value")
-    return rows, missing_count
-
-
-@app.route("/tickets")
-@login_required
-def tickets_list():
-    q = (request.args.get("q") or "").strip()
-    status = (request.args.get("status") or "").strip()
-    date_from = (request.args.get("date_from") or "").strip()
-    date_to = (request.args.get("date_to") or "").strip()
-    missing_amount = _missing_amount_flag()
-    rows, missing_count = _load_filtered_tickets(
-        q=q,
-        status=status,
-        date_from=date_from,
-        date_to=date_to,
-        missing_amount=missing_amount,
-    )
-    summary_cards = [
-        _summary_card(_t("عدد الأعطال"), len(rows), _t("حسب الفلتر الحالي")),
-        _summary_card(
-            _t("المبالغ المدخلة"),
-            _sum_money_field(rows, "final_value"),
-            _t("مجموع القيم النهائية"),
-            money=True,
-        ),
-        _missing_amount_card(
-            missing_count,
-            endpoint="tickets_list",
-            active=missing_amount,
-        ),
-    ]
-    latest = _latest_row(rows, "receive_date")
-    summary_cards.append(
-        _summary_card(
-            _t("آخر عطل"),
-            (latest or {}).get("ticket_no") or "—",
-            ((latest or {}).get("fault_type") or _t("تفاصيل أحدث عطل")),
-        )
-    )
-    summary_cards.append(
-        _summary_card(
-            _t("تاريخ آخر عطل"),
-            ((latest or {}).get("receive_date") or "—"),
-            _t("أحدث تاريخ استلام"),
-        )
-    )
-    return render_template(
-        "tickets_list.html",
-        rows=rows,
-        q=q,
-        status=status,
-        date_from=date_from,
-        date_to=date_to,
-        missing_amount=missing_amount,
-        export_href=_url_with_filters("export_tickets_excel"),
-        summary_cards=summary_cards,
-    )
-
-
-@app.route("/tickets/template.xlsx")
-@login_required
-def tickets_template():
-    data = tickets_excel.build_tickets_template()
-    return send_file(
-        io.BytesIO(data),
-        as_attachment=True,
-        download_name="قالب_الأعطال.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-
-@app.route("/tickets/import", methods=["POST"])
-@login_required
-def tickets_import():
-    if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate()
-    f = request.files.get("file")
-    if not f or not f.filename:
-        flash(_t("اختر ملف Excel للأعطال"), "danger")
-        return redirect(url_for("tickets_list"))
-    try:
-        result = tickets_excel.import_tickets_from_excel(f)
-        flash(_t("استيراد الأعطال: جديد {ok} | محدّث {updated}", ok=result["ok"], updated=result["updated"]), "ok")
-        if result.get("errors"):
-            flash(" / ".join(result["errors"][:5]), "danger")
-        db.log_audit(current_user_name(), "استيراد Excel", "أعطال", details=str(result)[:240])
-        if result["ok"] or result["updated"]:
-            _after_data_change()
-    except Exception as exc:
-        flash(_t("تعذر الاستيراد: {exc}", exc=exc), "danger")
-    return redirect(url_for("tickets_list"))
-
-
-@app.route("/tickets/new", methods=["GET", "POST"])
-@login_required
-def ticket_new():
-    if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate()
-    if request.method == "POST":
-        data = ticket_from_form()
-        if not data["ticket_no"]:
-            flash(_t("رقم العطل مطلوب"), "danger")
-            return render_template("ticket_form.html", row=data, mode="new")
-        conn = db.connect()
-        try:
-            if not (data.get("rekaz_code") or "").strip():
-                data["rekaz_code"] = db.next_series_code("er", conn)
-            cols = ", ".join(TICKET_FIELDS)
-            placeholders = ", ".join(["?"] * len(TICKET_FIELDS))
-            cur = conn.execute(
-                f"INSERT INTO tickets({cols}) VALUES ({placeholders})",
-                [data[f] for f in TICKET_FIELDS],
-            )
-            conn.commit()
-            db.log_audit(
-                current_user_name(),
-                "إضافة",
-                "عطل",
-                cur.lastrowid,
-                f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
-            )
-            new_id = cur.lastrowid
-            flash(_t("تم إنشاء العطل بنجاح — كود ركاز {code}", code=data.get("rekaz_code")), "ok")
-            _after_data_change()
-            return _ticket_edit_redirect(new_id, "data")
-        except Exception as exc:
-            flash(_t("تعذر الحفظ: {exc}", exc=exc), "danger")
-        finally:
-            conn.close()
-    blank = {f: "" for f in TICKET_FIELDS}
-    blank["receive_date"] = datetime.now().strftime("%Y-%m-%d")
-    blank["status"] = "جديد"
-    blank["rekaz_code"] = ""  # يُولَّد تلقائياً عند الحفظ
-    return render_template("ticket_form.html", row=blank, mode="new")
-
-
-def _ticket_wizard_steps():
-    """خطوات تعديل العطل بالترتيب (عربي)."""
-    steps = [
-        ("data", _t("بيانات المعاملة")),
-        ("boq", _t("إضافة الكمية")),
-        ("photos", _t("الصور")),
-        ("metering", _t("التمتير")),
-    ]
-    if permissions.can("section.warehouses"):
-        steps.append(("warehouse", _t("المستودع")))
-    steps.append(("done", _t("الاكتمال")))
-    return steps
-
-
-def _ticket_next_step(current):
-    keys = [s[0] for s in _ticket_wizard_steps()]
-    if not keys:
-        return "data"
-    if current not in keys:
-        return keys[0]
-    idx = keys.index(current)
-    return keys[idx + 1] if idx + 1 < len(keys) else keys[-1]
-
-
-def _ticket_edit_redirect(ticket_id, step):
-    """الانتقال لصفحة العطل في وضع التعديل مع التركيز على الخطوة."""
-    step = step or "data"
-    return redirect(url_for("ticket_view", ticket_id=ticket_id, edit=1, step=step) + f"#step-{step}")
-
-
-@app.route("/tickets/<int:ticket_id>")
-@login_required
-def ticket_view(ticket_id):
-    conn = db.connect()
-    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
-    if not row:
-        conn.close()
-        flash(_t("العطل غير موجود"), "danger")
-        return redirect(url_for("tickets_list"))
-    ticket = dict(row)
-    tno = ticket["ticket_no"]
-    related = {
-        "quantities": db.rows_to_dicts(conn.execute("SELECT * FROM quantities WHERE ticket_no=?", (tno,)).fetchall()),
-        "photos": db.rows_to_dicts(conn.execute("SELECT * FROM photos WHERE ticket_no=?", (tno,)).fetchall()),
-        "coordination": db.rows_to_dicts(conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall()),
-        "metering": db.rows_to_dicts(conn.execute("SELECT * FROM metering WHERE ticket_no=?", (tno,)).fetchall()),
-        "warehouse_tx": db.rows_to_dicts(
-            conn.execute(
-                "SELECT * FROM warehouse_tx WHERE ticket_no=? OR (rekaz_code<>'' AND lower(rekaz_code)=lower(?)) ORDER BY id DESC",
-                (tno, ticket.get("rekaz_code") or ""),
-            ).fetchall()
-        ),
-        "boq_lines": db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn),
-        "new_coordinations": db.rows_to_dicts(
-            conn.execute("SELECT * FROM new_coordinations WHERE ticket_no=? ORDER BY id DESC", (tno,)).fetchall()
-        ),
-        "issued_licenses": db.rows_to_dicts(
-            conn.execute("SELECT * FROM issued_licenses WHERE ticket_no=? ORDER BY id DESC", (tno,)).fetchall()
-        ),
-    }
-    quality_workflow = db.quality_workflow_for_ref(
-        ticket_no=tno,
-        linked_section="ops",
-        conn=conn,
-    )
-    boq_file = db.active_contract_boq_file(conn)
-    has_boq = db.has_boq_catalog(conn)
-    has_excavation = db.ticket_has_excavation(tno, conn)
-    excavation_link = None
-    if has_excavation:
-        excavation_link = db.ensure_excavation_coordination(
-            tno,
-            reason="ربط تلقائي من عرض العطل — حفر",
-            conn=conn,
-            create_clearance=True,
-        )
-        # أعد تحميل التنسيقات/الإخلاء بعد الربط
-        related["coordination"] = db.rows_to_dicts(
-            conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall()
-        )
-        related["clearances"] = db.rows_to_dicts(
-            conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall()
-        )
-    else:
-        related["clearances"] = db.rows_to_dicts(
-            conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall()
-        )
-    conn.commit()
-    conn.close()
-    for q in related["quantities"]:
-        q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
-    for p in related["photos"]:
-        p["complete"] = _t("مكتمل") if media_svc.photos_complete(p) else _t("ناقص")
-    boq_base = sum(float(x.get("line_total") or 0) for x in related["boq_lines"])
-    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
-    emergency_applied = db.ticket_emergency_ratio(related["boq_lines"], settings_ratio)
-    ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
-    if related["boq_lines"]:
-        # إجمالي البنود دائماً من الأسطر (كمية×سعر) وليس من قيمة قديمة مضاعَفة
-        ticket["items_value"] = boq_base
-        base_for_final = boq_base
-    else:
-        base_for_final = ticket.get("items_value")
-    ticket["boq_base_total"] = boq_base if related["boq_lines"] else None
-    ticket["emergency_ratio_applied"] = emergency_applied
-    ticket["final_value"] = final_value(base_for_final, ratio=emergency_applied)
-    ticket["boq_final_total"] = ticket["final_value"]
-    ticket["has_excavation"] = has_excavation
-    # تعديل العطل/البنود يتطلب tickets.write فقط (ليس modules.write)
-    can_mutate = permissions.can("tickets.write")
-    wants_edit = request.args.get("edit") == "1"
-    if wants_edit and not can_mutate:
-        flash(_t("ليس لديك صلاحية لتعديل العطل أو بنوده. العرض متاح للقراءة فقط."), "danger")
-        return redirect(url_for("ticket_view", ticket_id=ticket_id))
-    edit_mode = wants_edit and can_mutate
-    wizard_steps = _ticket_wizard_steps() if edit_mode else []
-    step_keys = [s[0] for s in wizard_steps]
-    raw_step = (request.args.get("step") or "data").strip()
-    edit_step = raw_step if raw_step in step_keys else (step_keys[0] if step_keys else "data")
-    next_step = _ticket_next_step(edit_step) if edit_mode else None
-    return render_template(
-        "ticket_view.html",
-        ticket=ticket,
-        related=related,
-        quality_workflow=quality_workflow,
-        has_boq_catalog=has_boq,
-        boq_file=boq_file,
-        emergency_ratio=float((g.settings or {}).get("emergency_ratio") or 0),
-        edit_mode=edit_mode,
-        can_mutate=can_mutate,
-        wizard_steps=wizard_steps,
-        edit_step=edit_step,
-        next_step=next_step,
-        step_labels=dict(wizard_steps),
-    )
-
-
-@app.route("/tickets/<int:ticket_id>/edit", methods=["GET", "POST"])
-@login_required
-def ticket_edit(ticket_id):
-    if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate()
-    conn = db.connect()
-    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
-    if not row:
-        conn.close()
-        flash(_t("العطل غير موجود"), "danger")
-        return redirect(url_for("tickets_list"))
-    if request.method == "POST":
-        data = ticket_from_form()
-        if not (data.get("rekaz_code") or "").strip():
-            existing_code = (dict(row).get("rekaz_code") or "").strip()
-            data["rekaz_code"] = existing_code or db.next_series_code("er", conn)
-        sets = ", ".join([f"{f}=?" for f in TICKET_FIELDS])
-        conn.execute(
-            f"UPDATE tickets SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            [data[f] for f in TICKET_FIELDS] + [ticket_id],
-        )
-        db.sync_ticket_work_order_to_related(
-            data.get("ticket_no") or dict(row).get("ticket_no") or "",
-            data.get("work_order") or "",
-            data.get("rekaz_code") or "",
-            conn,
-        )
-        conn.commit()
-        link_res = _link_excavation_if_needed(
-            data.get("ticket_no") or dict(row).get("ticket_no") or "",
-            reason="ربط تلقائي بعد حفظ العطل — حفر/إخلاء أسفلت",
-            conn=conn,
-        )
-        if link_res and (link_res.get("created_coord") or link_res.get("created_clearance")):
-            conn.commit()
-        conn.close()
-        db.log_audit(current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
-        flash(_t("تم حفظ المعاملة"), "ok")
-        _flash_excavation_link(link_res)
-        _after_data_change()
-        # ابقَ في نفس خطوة التعديل — بدون نقل تلقائي للمستودع أو خطوة أخرى
-        stay = (request.form.get("step") or request.args.get("step") or "data").strip()
-        allowed = {s[0] for s in _ticket_wizard_steps()}
-        if stay not in allowed:
-            stay = "data"
-        return _ticket_edit_redirect(ticket_id, stay)
-    conn.close()
-    # التعديل يتم على صفحة العرض الكاملة (صور / بنود / …) بعد طلب التعديل
-    return _ticket_edit_redirect(ticket_id, request.args.get("step") or "data")
-
-
-@app.route("/tickets/<int:ticket_id>/delete", methods=["POST"])
-@login_required
-def ticket_delete(ticket_id):
-    if not permissions.can("tickets.delete"):
-        return permissions.deny_redirect(_t("ليس لديك صلاحية لحذف الأعطال."))
-    if not _delete_password_ok():
-        return _reject_bad_delete_password(url_for("ticket_view", ticket_id=ticket_id, edit=1))
-    conn = db.connect()
-    row = conn.execute("SELECT ticket_no FROM tickets WHERE id=?", (ticket_id,)).fetchone()
-    conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
-    conn.commit()
-    conn.close()
-    db.log_audit(current_user_name(), "حذف", "عطل", ticket_id, row["ticket_no"] if row else "")
-    flash(_t("تم حذف العطل"), "ok")
-    _after_data_change()
-    return redirect(url_for("tickets_list"))
-
-
-@app.route("/tickets/<int:ticket_id>/boq/add", methods=["POST"])
-@login_required
-def ticket_boq_add(ticket_id):
-    if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate(_t("ليس لديك صلاحية لإضافة بنود العقد على العطل."))
-    conn = db.connect()
-    ticket = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
-    if not ticket:
-        conn.close()
-        flash(_t("العطل غير موجود"), "danger")
-        return redirect(url_for("tickets_list"))
-    item_no = (request.form.get("item_no") or "").strip()
-    qty_raw = (request.form.get("qty") or "").strip()
-    work_class = (request.form.get("work_class") or "اعتيادي").strip()
-    ratio_raw = (request.form.get("increase_ratio") or "").strip()
-    notes = (request.form.get("notes") or "").strip()
-    if not item_no:
-        conn.close()
-        flash(_t("أدخل رقم البند من دليل العقد"), "danger")
-        return _ticket_edit_redirect(ticket_id, "boq")
-    try:
-        qty = float(qty_raw) if qty_raw != "" else 0.0
-    except ValueError:
-        conn.close()
-        flash(_t("الكمية غير صالحة"), "danger")
-        return _ticket_edit_redirect(ticket_id, "boq")
-    try:
-        ratio = float(ratio_raw) if ratio_raw != "" else None
-    except ValueError:
-        ratio = None
-    catalog = db.get_contract_boq_item(item_no, conn)
-    if not catalog:
-        conn.close()
-        flash(_t("رقم البند «{item_no}» غير موجود في دليل العقد النشط — تحقق من الرقم أو ارفع الدليل من إدارة العقود", item_no=item_no), "danger")
-        return _ticket_edit_redirect(ticket_id, "boq")
-    active = db.active_contract_boq_file(conn)
-    unit_price = catalog.get("unit_price")
-    totals = db.calc_boq_line_totals(qty, unit_price, work_class, ratio)
-    desc = (
-        (catalog.get("short_desc") or "").strip()
-        or (catalog.get("description") or "").strip()
-    )
-    conn.execute(
-        """
-        INSERT INTO ticket_boq_lines(
-          ticket_id, ticket_no, file_id, item_no, description, unit, qty, unit_price,
-          line_total, work_class, increase_ratio, final_total, notes
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
-        """,
-        (
-            ticket_id,
-            ticket["ticket_no"],
-            (active or {}).get("id") if active else catalog.get("file_id"),
-            catalog.get("item_no"),
-            desc,
-            catalog.get("unit"),
-            qty,
-            unit_price,
-            totals["line_total"],
-            totals["work_class"],
-            totals["increase_ratio"],
-            totals["final_total"],
-            notes,
-        ),
-    )
-    # مزامنة صف كميات للتوافق مع الطباعة والتقارير القديمة
-    conn.execute(
-        """
-        INSERT INTO quantities(ticket_no, item_no, description, unit, qty, unit_price, notes)
-        VALUES (?,?,?,?,?,?,?)
-        """,
-        (
-            ticket["ticket_no"],
-            catalog.get("item_no"),
-            desc,
-            catalog.get("unit"),
-            qty,
-            unit_price,
-            notes,
-        ),
-    )
-    db.sync_ticket_items_value(ticket_id, conn)
-    link_res = None
-    if db.is_excavation_text(desc, notes, item_no):
-        link_res = db.ensure_excavation_coordination(
-            ticket["ticket_no"],
-            reason=f"ربط تلقائي — بند حفر {item_no}",
-            conn=conn,
-            create_clearance=True,
-        )
-    conn.commit()
-    conn.close()
-    db.log_audit(current_user_name(), "إضافة بند عقد", "عطل", ticket_id, f"{item_no} × {qty}")
-    flash(_t("تمت إضافة البند وحساب التكلفة — أضف بنداً آخر أو انتقل للخطوة التالية"), "ok")
-    _flash_excavation_link(link_res)
-    _after_data_change()
-    return _ticket_edit_redirect(ticket_id, "boq")
-
-
-@app.route("/tickets/<int:ticket_id>/boq/<int:line_id>/delete", methods=["POST"])
-@login_required
-def ticket_boq_delete(ticket_id, line_id):
-    if not permissions.can("tickets.write"):
-        return permissions.deny_ticket_mutate(_t("ليس لديك صلاحية لحذف بنود العقد من العطل."))
-    if not _delete_password_ok():
-        return _reject_bad_delete_password(url_for("ticket_view", ticket_id=ticket_id, edit=1, step="boq"))
-    conn = db.connect()
-    line = conn.execute(
-        "SELECT * FROM ticket_boq_lines WHERE id=? AND ticket_id=?",
-        (line_id, ticket_id),
-    ).fetchone()
-    if line:
-        # حذف صف كميات مطابق (أحدث صف بنفس رقم البند والكمية)
-        qty_row = conn.execute(
-            """
-            SELECT id FROM quantities
-            WHERE ticket_no=? AND lower(item_no)=lower(?)
-              AND ABS(COALESCE(qty,0) - ?) < 0.0001
-            ORDER BY id DESC LIMIT 1
-            """,
-            (line["ticket_no"], line["item_no"] or "", float(line["qty"] or 0)),
-        ).fetchone()
-        if qty_row:
-            conn.execute("DELETE FROM quantities WHERE id=?", (qty_row["id"],))
-    conn.execute("DELETE FROM ticket_boq_lines WHERE id=? AND ticket_id=?", (line_id, ticket_id))
-    db.sync_ticket_items_value(ticket_id, conn)
-    conn.commit()
-    conn.close()
-    flash(_t("تم حذف البند"), "ok")
-    _after_data_change()
-    return _ticket_edit_redirect(ticket_id, "boq")
-
-
 @app.route("/api/boq-item")
 @login_required
 def api_boq_item():
@@ -3686,67 +2876,6 @@ def api_boq_item():
             "unit_price": item.get("unit_price"),
         }
     )
-
-
-@app.route("/tickets/<int:ticket_id>/print")
-@login_required
-def ticket_print(ticket_id):
-    conn = db.connect()
-    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
-    if not row:
-        conn.close()
-        flash(_t("العطل غير موجود"), "danger")
-        return redirect(url_for("tickets_list"))
-    ticket = dict(row)
-    tno = ticket["ticket_no"]
-    boq_lines = db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn)
-    legacy_qty = db.rows_to_dicts(conn.execute("SELECT * FROM quantities WHERE ticket_no=?", (tno,)).fetchall())
-    photos = db.rows_to_dicts(conn.execute("SELECT * FROM photos WHERE ticket_no=?", (tno,)).fetchall())
-    coordination = db.rows_to_dicts(conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall())
-    metering = db.rows_to_dicts(conn.execute("SELECT * FROM metering WHERE ticket_no=?", (tno,)).fetchall())
-    conn.close()
-    ticket["response_min"] = response_minutes(ticket.get("dispatch_time"), ticket.get("arrival_time"))
-    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
-    emergency_applied = db.ticket_emergency_ratio(boq_lines, settings_ratio)
-    boq_base = sum(float(x.get("line_total") or 0) for x in boq_lines) if boq_lines else None
-    if boq_base is not None:
-        ticket["items_value"] = boq_base
-    ticket["boq_base_total"] = boq_base
-    ticket["emergency_ratio_applied"] = emergency_applied
-    ticket["final_value"] = final_value(
-        ticket.get("items_value"),
-        ratio=emergency_applied if boq_lines else settings_ratio,
-    )
-    if boq_lines:
-        quantities = [
-            {
-                "item_no": x.get("item_no"),
-                "description": x.get("description"),
-                "unit": x.get("unit"),
-                "qty": x.get("qty"),
-                "unit_price": x.get("unit_price"),
-                "total": x.get("line_total"),
-                "work_class": x.get("work_class"),
-                "increase_ratio": x.get("increase_ratio"),
-            }
-            for x in boq_lines
-        ]
-    else:
-        quantities = legacy_qty
-        for q in quantities:
-            q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
-    return render_template(
-        "ticket_print.html",
-        ticket=ticket,
-        quantities=quantities,
-        photos=photos,
-        coordination=coordination,
-        metering=metering,
-        printed_at=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
-        emergency_ratio_applied=emergency_applied if boq_lines else settings_ratio,
-        boq_base_total=boq_base,
-    )
-
 
 # ---------- Generic CRUD helpers ----------
 # MODULES imported from webapp.modules_config
@@ -3833,7 +2962,9 @@ def _warehouse_form_ctx():
         return "wh_constructions"
     if ctx in ("wh_projects", "warehouse_projects"):
         return "wh_projects"
-    if ctx in ("constructions", "projects", "warehouses", "contractors"):
+    if ctx in ("wh_reinforcement", "warehouse_reinforcement"):
+        return "wh_reinforcement"
+    if ctx in ("constructions", "projects", "warehouses", "contractors", "reinforcement"):
         return ctx
     return "warehouses"
 
@@ -3849,6 +2980,8 @@ def _warehouse_source_from_ctx(form_ctx: str) -> str:
         "wh_projects": "projects",
         "contractors": "contractors",
         "wh_contractors": "contractors",
+        "reinforcement": "reinforcement",
+        "wh_reinforcement": "reinforcement",
     }.get((form_ctx or "").strip().lower(), "")
 
 
@@ -3859,15 +2992,17 @@ def _warehouse_create_contexts():
         "constructions",
         "projects",
         "contractors",
+        "reinforcement",
         "wh_ops",
         "wh_constructions",
         "wh_projects",
         "wh_contractors",
+        "wh_reinforcement",
     )
 
 
 def _warehouse_main_sections():
-    return ("ops", "constructions", "projects", "contractors")
+    return ("ops", "constructions", "projects", "contractors", "reinforcement")
 
 
 def _warehouse_source_label(section: str) -> str:
@@ -3891,11 +3026,19 @@ def _redirect_after_module(name, data, form_ctx=None):
     form_ctx = form_ctx or _warehouse_form_ctx()
 
     if name == "warehouse_tx":
+        if form_ctx in ("reinforcement", "wh_reinforcement"):
+            ref = (data.get("source_ref") or data.get("work_order") or tno or "").strip()
+            conn = db.connect()
+            work = _reinforcement_work_for_ref(ref, conn)
+            conn.close()
+            if work:
+                flash(_t("تم الحفظ"), "ok")
+                return redirect(url_for("reinforcement_work_view", row_id=work["id"], focus="warehouse") + "#section-warehouse")
         # من داخل المستودع: ابقَ في المستودع دائماً (بدون تحويل للصفحات الرئيسية)
         voucher = (data.get("voucher_no") or "").strip()
-        if voucher and form_ctx in ("wh_ops", "wh_constructions", "wh_projects", "warehouses", "ops", "constructions", "projects"):
+        if voucher and form_ctx in ("wh_ops", "wh_constructions", "wh_projects", "wh_reinforcement", "warehouses", "ops", "constructions", "projects", "reinforcement"):
             # بعد الحفظ افتح عرض المعاملة (سند)
-            if form_ctx in ("wh_ops", "wh_constructions", "wh_projects", "warehouses") or not (
+            if form_ctx in ("wh_ops", "wh_constructions", "wh_projects", "wh_reinforcement", "warehouses") or not (
                 form_ctx == "ops"
                 and (data.get("ticket_no") or "").strip()
                 and permissions.can("tickets.read")
@@ -3912,6 +3055,8 @@ def _redirect_after_module(name, data, form_ctx=None):
             return redirect(url_for("warehouse_constructions"))
         if form_ctx == "wh_projects":
             return redirect(url_for("warehouse_projects"))
+        if form_ctx == "wh_reinforcement":
+            return redirect(url_for("warehouse_ops", view="reinforcement"))
         if form_ctx == "warehouses":
             source = (request.values.get("source") or data.get("source_section") or "").strip().lower()
             if source == "ops":
@@ -3920,6 +3065,8 @@ def _redirect_after_module(name, data, form_ctx=None):
                 return redirect(url_for("warehouse_constructions", view="movements"))
             if source == "projects":
                 return redirect(url_for("warehouse_projects", view="movements"))
+            if source == "reinforcement":
+                return redirect(url_for("warehouse_ops", view="reinforcement"))
             return redirect(url_for("warehouses_home"))
         # من الصفحة الرئيسية (معالج العطل) — ابقَ في خطوة المستودع بدون قفز تلقائي
         if (
@@ -3929,15 +3076,17 @@ def _redirect_after_module(name, data, form_ctx=None):
             and permissions.can("section.ops")
         ):
             conn = db.connect()
-            row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
+            row = conn.execute("SELECT id FROM tickets WHERE ticket_no=? LIMIT 1", (tno,)).fetchone()
             conn.close()
             if row:
                 flash(_t("تم الحفظ"), "ok")
-                return _ticket_edit_redirect(row["id"], "warehouse" if permissions.can("section.warehouses") else "done")
+                return redirect(url_for("tickets.view", ticket_id=row["id"], edit=1, step="warehouse" if permissions.can("section.warehouses") else "done") + "#step-warehouse")
         if form_ctx == "constructions":
             return redirect(url_for("module_list", name="construction_works"))
         if form_ctx == "projects":
             return redirect(url_for("module_list", name="projects"))
+        if form_ctx == "reinforcement":
+            return redirect(url_for("module_list", name="reinforcement_works"))
         if form_ctx == "ops":
             return redirect(url_for("warehouse_ops"))
         return redirect(url_for("warehouses_home"))
@@ -3950,15 +3099,25 @@ def _redirect_after_module(name, data, form_ctx=None):
     }
     if tno and name in stay_after:
         conn = db.connect()
-        row = conn.execute("SELECT id FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
+        work = _reinforcement_work_for_ref(tno, conn)
+        if work:
+            conn.close()
+            focus = {
+                "quantities": "quantities",
+                "photos": "photos",
+                "metering": "metering",
+            }.get(name, "")
+            flash(_t("تم الحفظ"), "ok")
+            return redirect(url_for("reinforcement_work_view", row_id=work["id"], focus=focus) + f"#section-{focus}")
+        row = conn.execute("SELECT id FROM tickets WHERE ticket_no=? LIMIT 1", (tno,)).fetchone()
         conn.close()
         if row:
             stay = stay_after[name]
-            allowed = {s[0] for s in _ticket_wizard_steps()}
+            allowed = {"data", "boq", "photos", "metering", "warehouse", "done"}
             if stay not in allowed:
                 stay = "data"
             flash(_t("تم الحفظ"), "ok")
-            return _ticket_edit_redirect(row["id"], stay)
+            return redirect(url_for("tickets.view", ticket_id=row["id"], edit=1, step=stay) + f"#step-{stay}")
     if tno:
         return redirect(url_for("module_list", name=name, ticket_no=tno))
     return redirect(url_for("module_list", name=name))
@@ -4051,6 +3210,8 @@ def module_list(name):
             return redirect(url_for("warehouse_ops", view="movements"))
         if source_filter == "projects":
             return redirect(url_for("warehouse_projects", view="movements"))
+        if source_filter == "reinforcement":
+            return redirect(url_for("warehouse_ops", view="reinforcement"))
         if not (request.args.get("ticket_no") or request.args.get("item_no")):
             return redirect(url_for("warehouses_home"))
     packed = _load_module_list_rows(name, module)
@@ -4171,7 +3332,7 @@ def _load_module_list_rows(name, module):
             r["balance"] = db.warehouse_balance(r.get("item_no"))
     if name == "warehouse_tx" and item_filter:
         rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
-    if name == "warehouse_tx" and source_filter in ("ops", "constructions", "projects"):
+    if name == "warehouse_tx" and source_filter in ("ops", "constructions", "projects", "reinforcement"):
         rows = [
             r
             for r in rows
@@ -4333,7 +3494,7 @@ def module_new(name):
                 if (ticket.get("work_order") or "").strip():
                     prefill["work_order"] = ticket.get("work_order")
         prefill = db.apply_warehouse_tx_work_order(prefill, conn)
-        if source in ("constructions", "projects", "ops"):
+        if source in ("constructions", "projects", "ops", "reinforcement"):
             requested_type = (request.args.get("tx_type") or "").strip()
             prefill["tx_type"] = requested_type or prefill.get("tx_type") or "منصرف للمقاول"
             prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
@@ -4561,6 +3722,8 @@ def module_new(name):
                 # تأكد من رقم توريد بعد الإدراج إن كان فارغاً
                 pass
             return redirect(url_for("module_edit", name=name, row_id=new_id))
+        if name == "reinforcement_works":
+            return redirect(url_for("reinforcement_work_view", row_id=new_id))
         if name == "issued_licenses":
             journey = _redirect_license_evacuations_journey(data)
             if journey:
@@ -4797,6 +3960,8 @@ def module_edit(name, row_id):
             journey = _redirect_license_evacuations_journey(data)
             if journey:
                 return journey
+        if name == "reinforcement_works":
+            return redirect(url_for("reinforcement_work_view", row_id=row_id))
         return _redirect_after_module(name, data, form_ctx=edit_ctx)
     data = dict(row)
     warehouse_items = (
@@ -5410,6 +4575,16 @@ def users_list():
                     session["role"] = role
                 db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
                 flash(_t("تم تحديث المستخدم"), "ok")
+        elif action == "regen_api_key":
+            uid = request.form.get("id")
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if db.user_is_hidden(target):
+                flash(_t("تعذر التحديث"), "danger")
+            elif not permissions.has_perm("api.access", role=target["role"]):
+                flash(_t("دور هذا المستخدم لا يملك صلاحية الوصول عبر API"), "danger")
+            else:
+                db.regenerate_api_key(uid, conn)
+                flash(_t("تم إنشاء مفتاح API جديد للمستخدم. المفتاح القديم لم يعد صالحاً."), "ok")
         elif action == "delete":
             if not _delete_password_ok():
                 conn.close()
@@ -5569,32 +4744,6 @@ def api_jump_destinations():
         )
     items = permissions.filter_jump_items(items)
     return jsonify(localize_jump(items, _lang()))
-
-
-@app.route("/export/tickets.xlsx")
-@login_required
-def export_tickets_excel():
-    q = (request.args.get("q") or "").strip()
-    status = (request.args.get("status") or "").strip()
-    date_from = (request.args.get("date_from") or "").strip()
-    date_to = (request.args.get("date_to") or "").strip()
-    missing_amount = _missing_amount_flag()
-    rows, _missing = _load_filtered_tickets(
-        q=q,
-        status=status,
-        date_from=date_from,
-        date_to=date_to,
-        missing_amount=missing_amount,
-    )
-    data = tickets_excel.export_tickets(rows)
-    stamp = datetime.now().strftime("%Y%m%d")
-    suffix = "-بدون-مبلغ" if missing_amount else ""
-    return send_file(
-        io.BytesIO(data),
-        as_attachment=True,
-        download_name=f"الأعطال{suffix}-{stamp}.xlsx",
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
 
 
 def main():

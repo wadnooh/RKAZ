@@ -176,6 +176,7 @@
           <th>{{ _('كود المشروع') }}</th>
           <th>{{ _('الحالة') }}</th>
           <th>{{ _('رقم الرخصة') }}</th>
+          <th>{{ _('المرفقات') }}</th>
           <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
@@ -193,6 +194,25 @@
           <td dir="ltr">{{ r.project_code or '—' }}</td>
           <td><span class="badge info">{{ tv(r.status) if r.status else '—' }}</span></td>
           <td dir="ltr">{{ r.license_no or '—' }}</td>
+          <td>
+            {% set refs = attachment_refs(r.attachments) %}
+            {% if refs %}
+            <div class="attachment-list is-compact">
+              {% for ref in refs[:3] %}
+                {% if is_image_ref(ref) %}
+                <a href="{{ ref }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ ref }}" alt="{{ _('مرفق') }}"></a>
+                {% elif is_pdf_ref(ref) %}
+                <a class="photo-pdf-chip" href="{{ ref }}" target="_blank" rel="noopener">PDF</a>
+                {% else %}
+                <a class="attachment-chip" href="{{ ref }}" target="_blank" rel="noopener">{{ media_filename(ref) }}</a>
+                {% endif %}
+              {% endfor %}
+              {% if refs|length > 3 %}<span class="badge">+{{ refs|length - 3 }}</span>{% endif %}
+            </div>
+            {% else %}
+              —
+            {% endif %}
+          </td>
           <td class="actions">
             <a class="btn ghost" href="{{ url_for('module_edit', name='new_coordinations', row_id=r.id) }}">{{ _('تعديل') }}</a>
             {% if can('modules.write') and r.status != 'تم الإصدار' %}
@@ -205,7 +225,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="12" class="meta">{{ _('لا توجد سجلات مطابقة في هذا التبويب.') }}</td></tr>
+        <tr><td colspan="13" class="meta">{{ _('لا توجد سجلات مطابقة في هذا التبويب.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
