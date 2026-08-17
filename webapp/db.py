@@ -113,10 +113,18 @@ def _drop_unique_index_for_column(conn: sqlite3.Connection, table: str, column: 
         idx_name = idx[1]
         if not idx_name or idx[2] != 1:
             continue
+        origin = idx[3] if len(idx) > 3 else ""
+        if origin and origin != "c":
+            continue
         cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{idx_name}')").fetchall()]
         if cols == [column]:
-            conn.execute(f'DROP INDEX IF EXISTS "{idx_name}"')
-            return True
+            try:
+                conn.execute(f'DROP INDEX IF EXISTS "{idx_name}"')
+                return True
+            except sqlite3.OperationalError as exc:
+                if "associated with UNIQUE or PRIMARY KEY constraint" in str(exc):
+                    return False
+                raise
     return False
 
 
