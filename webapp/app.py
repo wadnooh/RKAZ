@@ -47,6 +47,7 @@ _missing_amount_flag = helpers.missing_amount_flag
 _count_missing_amount = helpers.count_missing_amount
 _filter_missing_amount_rows = helpers.filter_missing_amount_rows
 _filter_rows_by_date_range = helpers.filter_rows_by_date_range
+_sum_money_field = helpers.sum_money_field
 _module_money_keys = helpers.module_money_keys
 _module_date_keys = helpers.module_date_keys
 _module_detail_key = helpers.module_detail_key
