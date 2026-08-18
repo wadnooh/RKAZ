@@ -4644,6 +4644,9 @@ def users_list():
     for row in rows:
         row["role"] = permissions.normalize_role(row.get("role"))
         row["perm_overrides"] = db.user_permission_overrides(row["id"], conn)
+        row["role_perm_set"] = permissions.perms_for_role(row["role"])
+        if row["role"] == "admin":
+            row["role_perm_set"] = set(permissions.ALL_PERMS)
         row["perm_count"] = len(permissions.effective_perms_for_user(row))
         row["perm_allow_count"] = sum(1 for effect in row["perm_overrides"].values() if effect == "allow")
         row["perm_deny_count"] = sum(1 for effect in row["perm_overrides"].values() if effect == "deny")
