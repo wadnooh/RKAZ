@@ -1,17 +1,17 @@
-﻿{% extends "base.html" %}
+{% extends "base.html" %}
 {% block content %}
 <div class="users-admin-page">
   <div class="toolbar users-admin-head">
     <div>
-      <h2 class="section-title">{{ _('ط§ظ„ظ…ط³طھط®ط¯ظ…ظˆظ† ظˆط§ظ„طµظ„ط§ط­ظٹط§طھ') }}</h2>
-      <div class="meta">{{ _('ط¥ط¯ط§ط±ط© ط§ظ„ط­ط³ط§ط¨ط§طھ ظ…ط¹ طµظ„ط§ط­ظٹط§طھ ط®ط§طµط© ظ„ظƒظ„ ظ…ط³طھط®ط¯ظ…. ط§ظ„ظ…ظ†ط¹ ط§ظ„ط®ط§طµ ظٹطھط؛ظ„ط¨ ط¹ظ„ظ‰ طµظ„ط§ط­ظٹط§طھ ط§ظ„ط¯ظˆط± ط­طھظ‰ ظ„ظˆ ظƒط§ظ† ط§ظ„ظ…ط³طھط®ط¯ظ… admin.') }}</div>
+      <h2 class="section-title">{{ _('المستخدمون والصلاحيات') }}</h2>
+      <div class="meta">{{ _('إدارة الحسابات مع صلاحيات خاصة لكل مستخدم. المنع الخاص يتغلب على صلاحيات الدور حتى لو كان المستخدم admin.') }}</div>
     </div>
     <div class="actions">
-      <a class="btn primary" href="{{ url_for('users_list') }}">{{ _('طھط­ط¯ظٹط«') }}</a>
+      <a class="btn primary" href="{{ url_for('users_list') }}">{{ _('تحديث') }}</a>
       {% if programmer_show_device_tab %}
-      <a class="btn ghost" href="{{ url_for('programmer_device_setup') }}">{{ _('ط¬ظ‡ط§ط² ط§ظ„ظ…ط¨ط±ظ…ط¬') }}</a>
+      <a class="btn ghost" href="{{ url_for('programmer_device_setup') }}">{{ _('جهاز المبرمج') }}</a>
       {% if not programmer_can_mutate and programmer_main_registered %}
-      <a class="btn ghost" href="{{ url_for('programmer_verify', next=request.path) }}">{{ _('طھط­ظ‚ظ‚ ط§ظ„ظ…ط¨ط±ظ…ط¬') }}</a>
+      <a class="btn ghost" href="{{ url_for('programmer_verify', next=request.path) }}">{{ _('تحقق المبرمج') }}</a>
       {% endif %}
       {% endif %}
     </div>
@@ -20,28 +20,28 @@
   <div class="card user-create-card">
     <div class="toolbar">
       <div>
-        <h3 class="section-title">{{ _('ط¥ط¶ط§ظپط© ظ…ط³طھط®ط¯ظ…') }}</h3>
-        <div class="meta">{{ _('ط£ظ†ط´ط¦ ط§ظ„ط­ط³ط§ط¨ ط£ظˆظ„ط§ظ‹طŒ ط«ظ… ط§ظپطھط­ طµظ„ط§ط­ظٹط§طھ ط®ط§طµط© ظ„طھط­ط¯ظٹط¯ ظ…ط§ ظٹط¸ظ‡ط± ط£ظˆ ظٹط®طھظپظٹ ظ„ظ‡ط°ط§ ط§ظ„ظ…ط³طھط®ط¯ظ….') }}</div>
+        <h3 class="section-title">{{ _('إضافة مستخدم') }}</h3>
+        <div class="meta">{{ _('أنشئ الحساب أولاً، ثم افتح صلاحيات خاصة لتحديد ما يظهر أو يختفي لهذا المستخدم.') }}</div>
       </div>
     </div>
     <form method="post" class="form-grid">
       <input type="hidden" name="action" value="add">
-      <div class="field"><label>{{ _('ط§ط³ظ… ط§ظ„ظ…ط³طھط®ط¯ظ…') }}</label><input name="username" required></div>
-      <div class="field"><label>{{ _('ط§ظ„ط§ط³ظ… ط§ظ„ظƒط§ظ…ظ„') }}</label><input name="full_name" required></div>
+      <div class="field"><label>{{ _('اسم المستخدم') }}</label><input name="username" required></div>
+      <div class="field"><label>{{ _('الاسم الكامل') }}</label><input name="full_name" required></div>
       <div class="field">
-        <label>{{ _('ط§ظ„ط¯ظˆط±') }}</label>
+        <label>{{ _('الدور') }}</label>
         <select name="role">
           {% for x in lists.user_roles %}<option value="{{ x }}">{{ tv(x) }}</option>{% endfor %}
         </select>
       </div>
-      <div class="field"><label>{{ _('ظƒظ„ظ…ط© ط§ظ„ظ…ط±ظˆط±') }}</label><input name="password" value="1234"></div>
+      <div class="field"><label>{{ _('كلمة المرور') }}</label><input name="password" value="1234"></div>
       <div class="field">
-        <label>{{ _('ط§ظ„ط­ط§ظ„ط©') }}</label>
-        <select name="active"><option value="1">{{ _('ظ†ط´ط·') }}</option><option value="0">{{ _('ظ…ظˆظ‚ظˆظپ') }}</option></select>
+        <label>{{ _('الحالة') }}</label>
+        <select name="active"><option value="1">{{ _('نشط') }}</option><option value="0">{{ _('موقوف') }}</option></select>
       </div>
-      <div class="field"><label>{{ _('ظ…ظ„ط§ط­ط¸ط§طھ') }}</label><input name="notes"></div>
+      <div class="field"><label>{{ _('ملاحظات') }}</label><input name="notes"></div>
       <div class="actions" style="grid-column:1/-1">
-        {% if can('button.users.add') %}<button class="btn primary" type="submit">{{ _('ط¥ط¶ط§ظپط© ظ…ط³طھط®ط¯ظ…') }}</button>{% endif %}
+        {% if can('button.users.add') %}<button class="btn primary" type="submit">{{ _('إضافة مستخدم') }}</button>{% endif %}
       </div>
     </form>
   </div>
@@ -59,72 +59,72 @@
         </div>
         <div class="user-status-stack">
           <span class="badge info">{{ tv(u.role) }}</span>
-          {% if u.active %}<span class="badge ok">{{ _('ظ†ط´ط·') }}</span>{% else %}<span class="badge danger">{{ _('ظ…ظˆظ‚ظˆظپ') }}</span>{% endif %}
+          {% if u.active %}<span class="badge ok">{{ _('نشط') }}</span>{% else %}<span class="badge danger">{{ _('موقوف') }}</span>{% endif %}
         </div>
       </div>
 
       <div class="permission-summary">
-        <div class="summary-tile"><span>{{ _('ط§ظ„ظپط¹ط§ظ„ط©') }}</span><strong>{{ u.perm_count }}</strong></div>
-        <div class="summary-tile allow"><span>{{ _('ظ…ظ†ط­ ط®ط§طµ') }}</span><strong>{{ u.perm_allow_count }}</strong></div>
-        <div class="summary-tile deny"><span>{{ _('ظ…ظ†ط¹ ط®ط§طµ') }}</span><strong>{{ u.perm_deny_count }}</strong></div>
-        <div class="summary-tile"><span>{{ _('ظ…ظ„ط§ط­ط¸ط§طھ') }}</span><strong>{{ u.notes or 'â€”' }}</strong></div>
+        <div class="summary-tile"><span>{{ _('الفعالة') }}</span><strong>{{ u.perm_count }}</strong></div>
+        <div class="summary-tile allow"><span>{{ _('منح خاص') }}</span><strong>{{ u.perm_allow_count }}</strong></div>
+        <div class="summary-tile deny"><span>{{ _('منع خاص') }}</span><strong>{{ u.perm_deny_count }}</strong></div>
+        <div class="summary-tile"><span>{{ _('ملاحظات') }}</span><strong>{{ u.notes or '—' }}</strong></div>
       </div>
 
       <div class="user-actions-row">
         <details class="admin-drawer">
-          {% if can('button.users.edit') %}<summary class="btn ghost">{{ _('ط¨ظٹط§ظ†ط§طھ ط§ظ„ظ…ط³طھط®ط¯ظ…') }}</summary>{% endif %}
+          {% if can('button.users.edit') %}<summary class="btn ghost">{{ _('بيانات المستخدم') }}</summary>{% endif %}
           <form method="post" class="form-grid drawer-panel">
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="id" value="{{ u.id }}">
-            <div class="field"><label>{{ _('ط§ظ„ط§ط³ظ…') }}</label><input name="full_name" value="{{ u.full_name }}" required></div>
+            <div class="field"><label>{{ _('الاسم') }}</label><input name="full_name" value="{{ u.full_name }}" required></div>
             <div class="field">
-              <label>{{ _('ط§ظ„ط¯ظˆط±') }}</label>
+              <label>{{ _('الدور') }}</label>
               <select name="role">
                 {% for x in lists.user_roles %}
                 <option value="{{ x }}" {% if u.role==x %}selected{% endif %}>{{ tv(x) }}</option>
                 {% endfor %}
               </select>
             </div>
-            <div class="field"><label>{{ _('ظƒظ„ظ…ط© ظ…ط±ظˆط± ط¬ط¯ظٹط¯ط©') }}</label><input name="password" placeholder="{{ _('ط§طھط±ظƒظ‡ ظپط§ط±ط؛ط§ظ‹ ظ„ظ„ط¥ط¨ظ‚ط§ط،') }}"></div>
+            <div class="field"><label>{{ _('كلمة مرور جديدة') }}</label><input name="password" placeholder="{{ _('اتركه فارغاً للإبقاء') }}"></div>
             <div class="field">
-              <label>{{ _('ط§ظ„ط­ط§ظ„ط©') }}</label>
+              <label>{{ _('الحالة') }}</label>
               <select name="active">
-                <option value="1" {% if u.active %}selected{% endif %}>{{ _('ظ†ط´ط·') }}</option>
-                <option value="0" {% if not u.active %}selected{% endif %}>{{ _('ظ…ظˆظ‚ظˆظپ') }}</option>
+                <option value="1" {% if u.active %}selected{% endif %}>{{ _('نشط') }}</option>
+                <option value="0" {% if not u.active %}selected{% endif %}>{{ _('موقوف') }}</option>
               </select>
             </div>
-            <div class="field full"><label>{{ _('ظ…ظ„ط§ط­ط¸ط§طھ') }}</label><input name="notes" value="{{ u.notes or '' }}"></div>
-            <div class="actions full">{% if can('button.users.edit') %}<button class="btn primary" type="submit">{{ _('ط­ظپط¸ ط§ظ„ط¨ظٹط§ظ†ط§طھ') }}</button>{% endif %}</div>
+            <div class="field full"><label>{{ _('ملاحظات') }}</label><input name="notes" value="{{ u.notes or '' }}"></div>
+            <div class="actions full">{% if can('button.users.edit') %}<button class="btn primary" type="submit">{{ _('حفظ البيانات') }}</button>{% endif %}</div>
           </form>
         </details>
 
         <details class="admin-drawer permission-drawer"{% if loop.first %} open{% endif %}>
-          {% if can('button.users.edit') %}<summary class="btn primary">{{ _('ط§ظ„طµظ„ط§ط­ظٹط§طھ ط§ظ„ط®ط§طµط©') }}</summary>{% endif %}
+          {% if can('button.users.edit') %}<summary class="btn primary">{{ _('الصلاحيات الخاصة') }}</summary>{% endif %}
           <form method="post" class="permission-panel drawer-panel" data-permission-panel>
             <input type="hidden" name="action" value="user_permissions">
             <input type="hidden" name="id" value="{{ u.id }}">
 
             <div class="permission-toolbar">
               <div class="field permission-search">
-                <label>{{ _('ط¨ط­ط« ظپظٹ ط§ظ„طµظ„ط§ط­ظٹط§طھ') }}</label>
-                <input type="search" data-permission-search placeholder="{{ _('ط§ظƒطھط¨ ط§ط³ظ… ط§ظ„طµظ„ط§ط­ظٹط© ط£ظˆ ط§ظ„ظƒظˆط¯...') }}">
+                <label>{{ _('بحث في الصلاحيات') }}</label>
+                <input type="search" data-permission-search placeholder="{{ _('اكتب اسم الصلاحية أو الكود...') }}">
               </div>
-              <div class="permission-filter" role="group" aria-label="{{ _('طھطµظپظٹط© ط§ظ„طµظ„ط§ط­ظٹط§طھ') }}">
-                <button type="button" class="is-active" data-permission-filter="all">{{ _('ط§ظ„ظƒظ„') }}</button>
-                <button type="button" data-permission-filter="custom">{{ _('ط§ظ„ظ…ط®طµطµط©') }}</button>
-                <button type="button" data-permission-filter="allow">{{ _('ظ…ظ†ط­') }}</button>
-                <button type="button" data-permission-filter="deny">{{ _('ظ…ظ†ط¹') }}</button>
-                <button type="button" data-permission-filter="role">{{ _('ط­ط³ط¨ ط§ظ„ط¯ظˆط±') }}</button>
+              <div class="permission-filter" role="group" aria-label="{{ _('تصفية الصلاحيات') }}">
+                <button type="button" class="is-active" data-permission-filter="all">{{ _('الكل') }}</button>
+                <button type="button" data-permission-filter="custom">{{ _('المخصصة') }}</button>
+                <button type="button" data-permission-filter="allow">{{ _('منح') }}</button>
+                <button type="button" data-permission-filter="deny">{{ _('منع') }}</button>
+                <button type="button" data-permission-filter="role">{{ _('حسب الدور') }}</button>
               </div>
             </div>
 
             <div class="permission-help">
-              <span class="badge info">{{ _('ط­ط³ط¨ ط§ظ„ط¯ظˆط±') }}</span>
-              <span>{{ _('ظ„ط§ ظٹظˆط¬ط¯ طھط®طµظٹطµ ظ„ظ„ظ…ط³طھط®ط¯ظ….') }}</span>
-              <span class="badge ok">{{ _('ظ…ظ†ط­') }}</span>
-              <span>{{ _('ط¥ط¶ط§ظپط© طµظ„ط§ط­ظٹط© ظ„ظ‡ط°ط§ ط§ظ„ظ…ط³طھط®ط¯ظ… ظپظ‚ط·.') }}</span>
-              <span class="badge danger">{{ _('ظ…ظ†ط¹') }}</span>
-              <span>{{ _('ط¥ط®ظپط§ط، ط£ظˆ طھط¹ط·ظٹظ„ ط§ظ„طµظ„ط§ط­ظٹط© ظ„ظ‡ط°ط§ ط§ظ„ظ…ط³طھط®ط¯ظ… ط­طھظ‰ ظ„ظˆ ظƒط§ظ† admin.') }}</span>
+              <span class="badge info">{{ _('حسب الدور') }}</span>
+              <span>{{ _('لا يوجد تخصيص للمستخدم.') }}</span>
+              <span class="badge ok">{{ _('منح') }}</span>
+              <span>{{ _('إضافة صلاحية لهذا المستخدم فقط.') }}</span>
+              <span class="badge danger">{{ _('منع') }}</span>
+              <span>{{ _('إخفاء أو تعطيل الصلاحية لهذا المستخدم حتى لو كان admin.') }}</span>
             </div>
 
             <div class="permission-list">
@@ -132,17 +132,17 @@
                 {% set eff = u.perm_overrides.get(key, '') %}
                 {% set in_role = key in u.role_perm_set %}
                 {% if key.startswith('tab.') %}
-                  {% set group = _('ط§ظ„طھط¨ظˆظٹط¨ط§طھ') %}
+                  {% set group = _('التبويبات') %}
                 {% elif key.startswith('button.') %}
-                  {% set group = _('ط§ظ„ط£ط²ط±ط§ط±') %}
+                  {% set group = _('الأزرار') %}
                 {% elif key.startswith('section.') %}
-                  {% set group = _('ط§ظ„ط£ظ‚ط³ط§ظ…') %}
+                  {% set group = _('الأقسام') %}
                 {% elif key.startswith('modules.') or key.startswith('tickets.') or key.startswith('cashflow.') or key.startswith('teams.') %}
-                  {% set group = _('ط§ظ„ط³ط¬ظ„ط§طھ ظˆط§ظ„ط¹ظ…ظ„') %}
+                  {% set group = _('السجلات والعمل') %}
                 {% elif key.startswith('users.') or key.startswith('audit.') or key.startswith('app.') or key.startswith('ops.tabs.') or key.startswith('api.') %}
-                  {% set group = _('ط§ظ„ط¥ط¯ط§ط±ط©') %}
+                  {% set group = _('الإدارة') %}
                 {% else %}
-                  {% set group = _('ط¹ط§ظ…') %}
+                  {% set group = _('عام') %}
                 {% endif %}
               <div class="permission-row"
                    data-permission-row
@@ -155,28 +155,28 @@
                   <code>{{ key }}</code>
                   <div class="permission-source">
                     {% if eff == 'allow' %}
-                    <span class="badge ok">{{ _('ظ…ظ…ظ†ظˆط­ط© ظ„ظ‡ط°ط§ ط§ظ„ظ…ط³طھط®ط¯ظ…') }}</span>
+                    <span class="badge ok">{{ _('ممنوحة لهذا المستخدم') }}</span>
                     {% elif eff == 'deny' %}
-                    <span class="badge danger">{{ _('ظ…ظ…ظ†ظˆط¹ط© ظ„ظ‡ط°ط§ ط§ظ„ظ…ط³طھط®ط¯ظ…') }}</span>
+                    <span class="badge danger">{{ _('ممنوعة لهذا المستخدم') }}</span>
                     {% elif in_role %}
-                    <span class="badge info">{{ _('ظ…ظ…ظ†ظˆط­ط© ظ…ظ† ط§ظ„ط¯ظˆط±') }}</span>
+                    <span class="badge info">{{ _('ممنوحة من الدور') }}</span>
                     {% else %}
-                    <span class="badge warn">{{ _('ط؛ظٹط± ظ…ظˆط¬ظˆط¯ط© ظپظٹ ط§ظ„ط¯ظˆط±') }}</span>
+                    <span class="badge warn">{{ _('غير موجودة في الدور') }}</span>
                     {% endif %}
                   </div>
                 </div>
                 <div class="permission-choice" role="radiogroup" aria-label="{{ _(label) }}">
                   <label class="choice inherit">
                     <input type="radio" name="perm__{{ key }}" value="" {% if not eff %}checked{% endif %}>
-                    <span>{{ _('ط­ط³ط¨ ط§ظ„ط¯ظˆط±') }}</span>
+                    <span>{{ _('حسب الدور') }}</span>
                   </label>
                   <label class="choice allow">
                     <input type="radio" name="perm__{{ key }}" value="allow" {% if eff == 'allow' %}checked{% endif %}>
-                    <span>{{ _('ظ…ظ†ط­') }}</span>
+                    <span>{{ _('منح') }}</span>
                   </label>
                   <label class="choice deny">
                     <input type="radio" name="perm__{{ key }}" value="deny" {% if eff == 'deny' %}checked{% endif %}>
-                    <span>{{ _('ظ…ظ†ط¹') }}</span>
+                    <span>{{ _('منع') }}</span>
                   </label>
                 </div>
               </div>
@@ -184,8 +184,8 @@
             </div>
 
             <div class="permission-savebar">
-              <div class="meta">{{ _('ظٹطھظ… طھط·ط¨ظٹظ‚ ط§ظ„طھط؛ظٹظٹط±ط§طھ ظپظˆط± ط­ظپط¸ظ‡ط§طŒ ظˆطھظ†ط¹ظƒط³ ط¹ظ„ظ‰ ط§ظ„ظ‚ظˆط§ط¦ظ… ظˆط§ظ„ط£ط²ط±ط§ط± ظˆط§ظ„طµظپط­ط§طھ.') }}</div>
-              {% if can('button.users.edit') %}<button class="btn primary" type="submit">{{ _('ط­ظپط¸ ظˆطھظپط¹ظٹظ„ ط§ظ„طµظ„ط§ط­ظٹط§طھ') }}</button>{% endif %}
+              <div class="meta">{{ _('يتم تطبيق التغييرات فور حفظها، وتنعكس على القوائم والأزرار والصفحات.') }}</div>
+              {% if can('button.users.edit') %}<button class="btn primary" type="submit">{{ _('حفظ وتفعيل الصلاحيات') }}</button>{% endif %}
             </div>
           </form>
         </details>
@@ -193,45 +193,45 @@
         <form method="post">
           <input type="hidden" name="action" value="toggle">
           <input type="hidden" name="id" value="{{ u.id }}">
-          {% if can('button.users.toggle') %}<button class="btn ghost" type="submit">{{ _('طھظپط¹ظٹظ„/ط¥ظٹظ‚ط§ظپ') }}</button>{% endif %}
+          {% if can('button.users.toggle') %}<button class="btn ghost" type="submit">{{ _('تفعيل/إيقاف') }}</button>{% endif %}
         </form>
-        <form method="post" class="js-delete-guard" data-delete-msg="{{ _('ط£ط¯ط®ظ„ ظƒظ„ظ…ط© ط³ط± ط§ظ„ط­ط°ظپ ظ„ط­ط°ظپ ط§ظ„ظ…ط³طھط®ط¯ظ…') }}">
+        <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف المستخدم') }}">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="id" value="{{ u.id }}">
           <input type="hidden" name="delete_password" value="">
-          {% if can('button.users.delete') %}<button class="btn danger" type="button" data-delete-confirm>{{ _('ط­ط°ظپ') }}</button>{% endif %}
+          {% if can('button.users.delete') %}<button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>{% endif %}
         </form>
       </div>
     </section>
     {% else %}
-    <div class="card"><div class="meta">{{ _('ظ„ط§ ظٹظˆط¬ط¯ ظ…ط³طھط®ط¯ظ…ظˆظ†') }}</div></div>
+    <div class="card"><div class="meta">{{ _('لا يوجد مستخدمون') }}</div></div>
     {% endfor %}
   </div>
 
   <div class="card role-matrix-card">
     <div class="toolbar">
       <div>
-        <h3 class="section-title">{{ _('ظ…طµظپظˆظپط© ط§ظ„طµظ„ط§ط­ظٹط§طھ ط­ط³ط¨ ط§ظ„ط¯ظˆط±') }}</h3>
-        <div class="meta">{{ _('ظ…ط±ط¬ط¹ ط³ط±ظٹط¹ ظ„ظ„ط£ط¯ظˆط§ط±. ط§ظ„طھط®طµظٹطµ ط§ظ„ظپط±ط¯ظٹ ظپظٹ ط¨ط·ط§ظ‚ط§طھ ط§ظ„ظ…ط³طھط®ط¯ظ…ظٹظ† ظ‡ظˆ ط§ظ„ظ‚ط±ط§ط± ط§ظ„ظ†ظ‡ط§ط¦ظٹ ط¹ظ†ط¯ ط§ظ„ط¯ط®ظˆظ„.') }}</div>
+        <h3 class="section-title">{{ _('مصفوفة الصلاحيات حسب الدور') }}</h3>
+        <div class="meta">{{ _('مرجع سريع للأدوار. التخصيص الفردي في بطاقات المستخدمين هو القرار النهائي عند الدخول.') }}</div>
       </div>
     </div>
     <div class="table-wrap">
       <table class="table">
         <thead>
           <tr>
-            <th>{{ _('ط§ظ„طµظ„ط§ط­ظٹط©') }}</th>
+            <th>{{ _('الصلاحية') }}</th>
             <th>admin</th>
-            <th>{{ _('ظ…ط´ط±ظپ') }}</th>
-            <th>{{ _('ظ…ط¯ط®ظ„ ط¨ظٹط§ظ†ط§طھ') }}</th>
-            <th>{{ _('ظ…ط±ط§ظ‚ط¨') }}</th>
+            <th>{{ _('مشرف') }}</th>
+            <th>{{ _('مدخل بيانات') }}</th>
+            <th>{{ _('مراقب') }}</th>
           </tr>
         </thead>
         <tbody>
           {% for row in role_matrix %}
           <tr>
             <td style="white-space:normal;">{{ row.label }}</td>
-            {% for r in ['admin','ظ…ط´ط±ظپ','ظ…ط¯ط®ظ„ ط¨ظٹط§ظ†ط§طھ','ظ…ط±ط§ظ‚ط¨'] %}
-            <td>{% if row.roles[r] %}<span class="badge ok">{{ _('ظ†ط¹ظ…') }}</span>{% else %}<span class="badge danger">{{ _('ظ„ط§') }}</span>{% endif %}</td>
+            {% for r in ['admin','مشرف','مدخل بيانات','مراقب'] %}
+            <td>{% if row.roles[r] %}<span class="badge ok">{{ _('نعم') }}</span>{% else %}<span class="badge danger">{{ _('لا') }}</span>{% endif %}</td>
             {% endfor %}
           </tr>
           {% endfor %}
@@ -281,4 +281,3 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
 });
 </script>
 {% endblock %}
-
