@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="{{ lang }}" dir="{{ 'rtl' if lang == 'ar' else 'ltr' }}">
 <head>
   <meta charset="utf-8">
@@ -31,15 +31,15 @@
         <a href="{{ url_for('set_lang', lang='en') }}" class="{% if lang=='en' %}active{% endif %}">EN</a>
         {% if session.get('user_id') and not is_login_page %}
         <span>|</span>
-        <a href="{{ url_for('global_search') }}">{{ tr('search') }}</a>
+        {% if can('button.search') %}<a href="{{ url_for('global_search') }}">{{ tr('search') }}</a>{% endif %}
         <span>|</span>
-        <a href="#" data-open-jump>{{ tr('quick_jump') }}</a>
+        {% if can('button.quick_jump') %}<a href="#" data-open-jump>{{ tr('quick_jump') }}</a>{% endif %}
         {% endif %}
       </div>
       {% if session.get('user_id') and not is_login_page %}
       <div class="actions">
         <span class="meta">{{ session.get('full_name', '') }} ({{ session.get('role', '') }})</span>
-        <a class="btn ghost" href="{{ url_for('logout') }}">{{ tr('logout') }}</a>
+        {% if can('button.logout') %}<a class="btn ghost" href="{{ url_for('logout') }}">{{ tr('logout') }}</a>{% endif %}
       </div>
       {% endif %}
     </div>
@@ -49,52 +49,52 @@
   {% set p = request.path or '' %}
   {# تبويبات النظام الرئيسية #}
   <nav class="tabs">
-    {% if can('section.constructions') %}
+    {% if can('tab.constructions') %}
     <a class="tab{% if p.startswith('/constructions') or p.startswith('/module/construction') %} active{% endif %}" href="{{ url_for('constructions_home') }}">{{ tr('nav_constructions') }}</a>
     {% endif %}
-    {% if can('section.projects') %}
+    {% if can('tab.projects') %}
     <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>
     {% endif %}
-    {% if can('section.ops') %}
+    {% if can('tab.ops') %}
     <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/ops/tabs') or p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %} active{% endif %}" href="{{ url_for('tickets_list') if can('tickets.read') else url_for('ops_primary_teams') }}">{{ tr('nav_ops') }}</a>
     {% endif %}
-    {% if can('section.contractors') %}
+    {% if can('tab.contractors') %}
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>
     {% endif %}
-    {% if can('section.quality') %}
+    {% if can('tab.quality') %}
     <a class="tab{% if p.startswith('/quality') or p.startswith('/module/coordination') or p.startswith('/module/quality_') or p.startswith('/module/new_coordinations') or p.startswith('/module/issued_licenses') or p.startswith('/new-coordinations') %} active{% endif %}" href="{{ url_for('quality_home') }}">{{ tr('nav_quality') }}</a>
     {% endif %}
-    {% if can('section.safety') %}
+    {% if can('tab.safety') %}
     <a class="tab{% if p.startswith('/safety') or p.startswith('/module/safety_') %} active{% endif %}" href="{{ url_for('safety_home') }}">{{ tr('nav_safety') }}</a>
     {% endif %}
-    {% if can('section.warehouses') %}
+    {% if can('tab.warehouses') %}
     <a class="tab{% if p.startswith('/warehouses') or p.startswith('/module/warehouse_') %} active{% endif %}" href="{{ url_for('warehouse_movements_summary') }}">{{ tr('nav_warehouses') }}</a>
     {% endif %}
-    {% if can('section.external') %}
+    {% if can('tab.external') %}
     <a class="tab{% if p.startswith('/external-purchases') or p.startswith('/module/external_') or p.startswith('/module/custody') %} active{% endif %}" href="{{ url_for('external_purchases_home') }}">{{ tr('nav_external') }}</a>
     {% endif %}
-    {% if can('section.financial') %}
+    {% if can('tab.financial') %}
     <a class="tab{% if p.startswith('/financial') or p.startswith('/module/invoices') %} active{% endif %}" href="{{ url_for('financial_home') }}">{{ tr('nav_financial') }}</a>
     {% endif %}
-    {% if can('section.maintenance') %}
+    {% if can('tab.maintenance') %}
     <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">{{ tr('nav_maintenance') }}</a>
     {% endif %}
-    {% if can('section.hr') %}
+    {% if can('tab.hr') %}
     <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') %} active{% endif %}" href="{{ url_for('hr_home') }}">{{ tr('nav_hr') }}</a>
     {% endif %}
-    {% if can('section.contracts') %}
+    {% if can('tab.contracts') %}
     <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">{{ tr('nav_contracts') }}</a>
     {% endif %}
 
-    {% if can('users.manage') %}
+    {% if can('tab.users') %}
     <a class="tab{% if p.startswith('/users') %} active{% endif %}" href="{{ url_for('users_home') }}">{{ tr('nav_users') }}</a>
     {% endif %}
-    {% if can('audit.read') %}
+    {% if can('tab.audit') %}
     <a class="tab{% if p.startswith('/admin/audit-log') %} active{% endif %}" href="{{ url_for('audit_log_home') }}">{{ tr('nav_audit') }}</a>
     {% endif %}
   </nav>
 
-  <button type="button" class="jump-fab" data-open-jump title="{{ tr('quick_jump_title') }}">⌘</button>
+  {% if can('button.quick_jump') %}<button type="button" class="jump-fab" data-open-jump title="{{ tr('quick_jump_title') }}">⌘</button>{% endif %}
 
   <div class="jump-backdrop" id="jumpBackdrop" hidden>
     <div class="jump-modal" role="dialog" aria-modal="true" aria-label="{{ tr('quick_jump') }}">
@@ -435,3 +435,4 @@
   </script>
 </body>
 </html>
+

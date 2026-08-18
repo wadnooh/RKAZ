@@ -8,8 +8,8 @@
         <div class="meta">{{ _('مؤشرات تشغيلية ومالية مستمدة من ملف متابعة أعمال طوارئ خريص') }}</div>
       </div>
       <div class="actions">
-        <a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>
-        <a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>
+        {% if can('button.ticket.new') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>{% endif %}
+        {% if can('button.ticket.export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>{% endif %}
       </div>
     </div>
 
@@ -21,11 +21,11 @@
       <div class="stat-card"><div>{{ _('صور ناقصة') }}</div><strong>{{ stats.photos_incomplete }}</strong></div>
       <div class="stat-card"><div>{{ _('تمتير معتمد') }}</div><strong>{{ stats.metering_approved }}</strong></div>
       <div class="stat-card"><div>{{ _('فواتير مرفوعة SAP') }}</div><strong>{{ stats.sap_raised }}</strong></div>
-      <div class="stat-card"><div>{{ _('قيمة الأعطال') }}</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>
-      <div class="stat-card"><div>{{ _('إجمالي المستخلصات') }}</div><strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong></div>
-      <div class="stat-card"><div>{{ _('المبالغ المحصلة') }}</div><strong style="font-size:1.05rem">{{ stats.collected|money }}</strong></div>
-      <div class="stat-card"><div>{{ _('المتبقي غير محصل') }}</div><strong style="font-size:1.05rem">{{ stats.remaining|money }}</strong></div>
-      <div class="stat-card"><div>{{ _('السيولة المطلوبة') }}</div><strong style="font-size:1.05rem">{{ stats.liquidity|money }}</strong></div>
+      {% if can('button.financial.amounts') %}<div class="stat-card"><div>{{ _('قيمة الأعطال') }}</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>{% endif %}
+      {% if can('button.financial.amounts') %}<div class="stat-card"><div>{{ _('إجمالي المستخلصات') }}</div><strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong></div>{% endif %}
+      {% if can('button.financial.amounts') %}<div class="stat-card"><div>{{ _('المبالغ المحصلة') }}</div><strong style="font-size:1.05rem">{{ stats.collected|money }}</strong></div>{% endif %}
+      {% if can('button.financial.amounts') %}<div class="stat-card"><div>{{ _('المتبقي غير محصل') }}</div><strong style="font-size:1.05rem">{{ stats.remaining|money }}</strong></div>{% endif %}
+      {% if can('button.financial.amounts') %}<div class="stat-card"><div>{{ _('السيولة المطلوبة') }}</div><strong style="font-size:1.05rem">{{ stats.liquidity|money }}</strong></div>{% endif %}
     </div>
   </div>
 
@@ -49,13 +49,15 @@
       <h3 class="section-title" style="font-size:1.05rem;margin-bottom:12px;">{{ _('ملخص السيولة (12 شهر)') }}</h3>
       <div class="table-wrap" style="max-height:360px">
         <table class="table">
-          <thead><tr><th>{{ _('الشهر') }}</th><th>{{ _('تحصيل') }}</th><th>{{ _('تراكمي') }}</th><th>{{ _('الحالة') }}</th></tr></thead>
+          <thead><tr><th>{{ _('الشهر') }}</th>{% if can('button.financial.amounts') %}<th>{{ _('تحصيل') }}</th><th>{{ _('تراكمي') }}</th>{% endif %}<th>{{ _('الحالة') }}</th></tr></thead>
           <tbody>
             {% for r in stats.cash %}
             <tr>
               <td>{{ r.month }}</td>
+              {% if can('button.financial.amounts') %}
               <td>{{ r.collection|money }}</td>
               <td>{{ r.cumulative|money }}</td>
+              {% endif %}
               <td>
                 {% if r.status == 'آمن' %}
                 <span class="badge ok">{{ tv(r.status) }}</span>

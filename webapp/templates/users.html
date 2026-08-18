@@ -37,7 +37,7 @@
     </div>
     <div class="field"><label>{{ _('ملاحظات') }}</label><input name="notes"></div>
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">{{ _('إضافة مستخدم') }}</button>
+      {% if can('button.users.add') %}<button class="btn primary" type="submit">{{ _('إضافة مستخدم') }}</button>{% endif %}
     </div>
   </form>
 </div>
@@ -54,12 +54,17 @@
           <td>{{ u.username }}</td>
           <td>{{ u.full_name }}</td>
           <td><span class="badge info">{{ tv(u.role) }}</span></td>
-          <td>{{ u.perm_count }} {{ _('صلاحية') }}</td>
+          <td>
+            {{ u.perm_count }} {{ _('صلاحية') }}
+            {% if u.perm_allow_count or u.perm_deny_count %}
+            <div class="meta">{{ _('خاص') }}: +{{ u.perm_allow_count }} / -{{ u.perm_deny_count }}</div>
+            {% endif %}
+          </td>
           <td>{% if u.active %}<span class="badge ok">{{ _('نشط') }}</span>{% else %}<span class="badge danger">{{ _('موقوف') }}</span>{% endif %}</td>
           <td>{{ u.notes or '—' }}</td>
           <td class="actions" style="flex-wrap:wrap;">
             <details>
-              <summary class="btn ghost" style="cursor:pointer;list-style:none;">{{ _('تعديل') }}</summary>
+              {% if can('button.users.edit') %}<summary class="btn ghost" style="cursor:pointer;list-style:none;">{{ _('تعديل') }}</summary>{% endif %}
               <form method="post" class="form-grid" style="margin-top:8px;min-width:280px;">
                 <input type="hidden" name="action" value="update">
                 <input type="hidden" name="id" value="{{ u.id }}">
@@ -82,20 +87,49 @@
                 </div>
                 <div class="field"><label>{{ _('ملاحظات') }}</label><input name="notes" value="{{ u.notes or '' }}"></div>
                 <div class="actions" style="grid-column:1/-1">
-                  <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
+                  {% if can('button.users.edit') %}<button class="btn primary" type="submit">{{ _('حفظ') }}</button>{% endif %}
+                </div>
+              </form>
+            </details>
+            <details>
+              {% if can('button.users.edit') %}<summary class="btn ghost" style="cursor:pointer;list-style:none;">{{ _('صلاحيات خاصة') }}</summary>{% endif %}
+              <form method="post" style="margin-top:8px;min-width:340px;max-height:520px;overflow:auto;">
+                <input type="hidden" name="action" value="user_permissions">
+                <input type="hidden" name="id" value="{{ u.id }}">
+                <div class="meta" style="margin-bottom:8px;">{{ _('حسب الدور = لا يوجد تخصيص. المنع يتغلب حتى على admin.') }}</div>
+                <table class="table" style="min-width:0">
+                  <thead><tr><th>{{ _('الصلاحية') }}</th><th>{{ _('الحكم') }}</th></tr></thead>
+                  <tbody>
+                    {% for key, label in perm_labels.items() %}
+                    <tr>
+                      <td style="white-space:normal;"><code>{{ key }}</code><br>{{ _(label) }}</td>
+                      <td>
+                        {% set eff = u.perm_overrides.get(key, '') %}
+                        <select name="perm__{{ key }}">
+                          <option value="" {% if not eff %}selected{% endif %}>{{ _('حسب الدور') }}</option>
+                          <option value="allow" {% if eff == 'allow' %}selected{% endif %}>{{ _('منح') }}</option>
+                          <option value="deny" {% if eff == 'deny' %}selected{% endif %}>{{ _('منع') }}</option>
+                        </select>
+                      </td>
+                    </tr>
+                    {% endfor %}
+                  </tbody>
+                </table>
+                <div class="actions" style="margin-top:8px;">
+                  {% if can('button.users.edit') %}<button class="btn primary" type="submit">{{ _('حفظ الصلاحيات الخاصة') }}</button>{% endif %}
                 </div>
               </form>
             </details>
             <form method="post">
               <input type="hidden" name="action" value="toggle">
               <input type="hidden" name="id" value="{{ u.id }}">
-              <button class="btn ghost" type="submit">{{ _('تفعيل/إيقاف') }}</button>
+              {% if can('button.users.toggle') %}<button class="btn ghost" type="submit">{{ _('تفعيل/إيقاف') }}</button>{% endif %}
             </form>
             <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف المستخدم') }}">
               <input type="hidden" name="action" value="delete">
               <input type="hidden" name="id" value="{{ u.id }}">
               <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+              {% if can('button.users.delete') %}<button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>{% endif %}
             </form>
           </td>
         </tr>

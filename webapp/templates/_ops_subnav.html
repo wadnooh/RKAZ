@@ -3,12 +3,12 @@
 {% set on_reinforcement = active=='reinforcement' or p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1" data-tab-strip-key="ops_rakaz_tabs">
-    {% if can('tickets.read') %}
+    {% if can('tab.ops.tickets') %}
     <a class="btn ghost{% if active=='tickets' %} primary{% endif %}" href="{{ url_for('tickets_list') }}">{{ _('الأعطال') }}</a>
     {% endif %}
-    <a class="btn ghost{% if active=='primary_teams' %} primary{% endif %}" href="{{ url_for('ops_primary_teams') }}">{{ _('الفرق الأولية') }}</a>
-    <a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام العاجلة') }}</a>
-    {% if can('section.reinforcement') %}
+    {% if can('tab.ops.primary_teams') %}<a class="btn ghost{% if active=='primary_teams' %} primary{% endif %}" href="{{ url_for('ops_primary_teams') }}">{{ _('الفرق الأولية') }}</a>{% endif %}
+    {% if can('tab.ops.teams') %}<a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام العاجلة') }}</a>{% endif %}
+    {% if can('tab.ops.reinforcement') %}
     <a class="btn ghost{% if on_reinforcement %} primary{% endif %}" href="{{ url_for('reinforcement_home') }}">{{ tr('nav_reinforcement') }}</a>
     {% endif %}
     {% for tab in ops_custom_tabs or [] %}

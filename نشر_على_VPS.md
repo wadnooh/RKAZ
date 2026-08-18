@@ -1,15 +1,17 @@
 # نشر نظام ركاز على VPS (الاستضافة الرسمية)
 
-**الرابط الرسمي:** https://report.ralenjaz.com
+**الرابط المؤقت الحالي:** https://rekaz.wadnooh.com
+
+> ملاحظة تشغيلية: تم إرجاع التطبيق مؤقتاً إلى `rekaz.wadnooh.com` لحين إصلاح `report.ralenjaz.com`.
 
 | البند | القيمة |
 |-------|--------|
-| السيرفر | نفس VPS الخاص بـ RTCREPORT (`191.101.2.59`) — دون المساس بـ `/opt/weeklyreport` |
+| السيرفر | VPS ركاز (`191.101.2.59`) |
 | مسار التطبيق | `/opt/rekaz` |
 | قاعدة البيانات | `/opt/rekaz/data/rakaz.db` (`RAKAZ_DATA_DIR=/opt/rekaz/data`) |
 | الخدمة | `systemd` → `rekaz.service` (Waitress على `127.0.0.1:8010`) |
-| الواجهة | nginx + Let's Encrypt → `report.ralenjaz.com` (ملف موقع منفصل عن `report.rtcco.org`) |
-| الدومين القديم | `rekaz.wadnooh.com` → تحويل 301 إلى الرابط الرسمي |
+| الواجهة | nginx + Let's Encrypt → `report.ralenjaz.com` |
+| الدومين الجديد | `report.ralenjaz.com` → تحويل 301 مؤقت إلى `rekaz.wadnooh.com` |
 | النسخ الاحتياطي | محلي تحت `/opt/rekaz/data/backups` + رفع تلقائي إلى Amazon S3 |
 
 المستودع: https://github.com/wadnooh/RKAZ
@@ -19,7 +21,7 @@
 ## فحص سريع بعد النشر
 
 ```bash
-curl -sS https://report.ralenjaz.com/health
+curl -sS https://rekaz.wadnooh.com/health
 systemctl status rekaz --no-pager
 nginx -t
 ```
@@ -42,7 +44,7 @@ sudo -u rekazapp /opt/rekaz/.venv/bin/pip install -r requirements.txt
 sudo systemctl restart rekaz
 ```
 
-لا تلمس `/opt/weeklyreport` ولا خدمة `weeklyreport` ولا موقع nginx `report.rtcco.org`.
+تحديث ركاز يتم فقط داخل `/opt/rekaz` وخدمة `rekaz`.
 
 ---
 
@@ -58,7 +60,7 @@ TRIAL_MODE=1
 SESSION_COOKIE_SECURE=1
 FORCE_HTTPS=1
 PREFERRED_URL_SCHEME=https
-APP_BASE_URL=https://report.ralenjaz.com
+APP_BASE_URL=https://rekaz.wadnooh.com
 AUTO_BACKUP=1
 AUTO_BACKUP_HOURS=2
 AUTO_BACKUP_ACTIVITY_SECONDS=45
@@ -111,20 +113,32 @@ sudo -u rekazapp /opt/rekaz/.venv/bin/python tools/restore_backup.py --s3-latest
 
 ---
 
-## DNS
+## DNS وربط الدومين الجديد على نفس الاستضافة القديمة
 
 | النوع | الاسم | القيمة | TTL |
 |-------|--------|--------|-----|
 | A | `report` | `191.101.2.59` | 300 أو الافتراضي |
+| A | `rekaz` | `191.101.2.59` | 300 أو الافتراضي |
 
 النطاق `ralenjaz.com` يُدار من حساب Hostinger الخاص بالعميل (ليس حساب `wadnooh.com`).
+يبقى التطبيق مؤقتاً على نفس VPS الخاص بالدومين القديم، والرابط المستخدم للعميل حالياً:
+`https://rekaz.wadnooh.com`
+
 بعد انتشار DNS نفّذ على السيرفر:
 
 ```bash
-bash /opt/rekaz/tools/finish_report_ralenjaz_ssl.sh
+sudo bash /opt/rekaz/tools/finish_report_ralenjaz_ssl.sh
 ```
 
-هذا يُصدر شهادة Let's Encrypt ويحوّل `rekaz.wadnooh.com` إلى `report.ralenjaz.com`.
+هذا السكربت يربط `report.ralenjaz.com` بخدمة ركاز الحالية على `127.0.0.1:8010`، ويصدر شهادة Let's Encrypt للدومين الجديد والقديم، ثم يحوّل `rekaz.wadnooh.com` إلى `report.ralenjaz.com`.
+
+للرجوع الطارئ إلى الدومين القديم إلى حين إصلاح الجديد:
+
+```bash
+sudo bash /opt/rekaz/tools/rollback_to_rekaz_wadnooh.sh
+```
+
+هذا يجعل `rekaz.wadnooh.com` هو الرابط الأساسي، ويحوّل `report.ralenjaz.com` إليه مؤقتاً إن كانت شهادة الدومين الجديد موجودة.
 
 ---
 

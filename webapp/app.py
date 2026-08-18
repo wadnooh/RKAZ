@@ -4576,6 +4576,24 @@ def users_list():
                     session["role"] = role
                 db.log_audit(current_user_name(), "تعديل", "مستخدم", uid)
                 flash(_t("تم تحديث المستخدم"), "ok")
+        elif action == "user_permissions":
+            uid = request.form.get("id")
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if db.user_is_hidden(target):
+                flash(_t("تعذر تحديث صلاحيات هذا المستخدم"), "danger")
+            else:
+                db.ensure_user_permission_overrides_table(conn)
+                conn.execute("DELETE FROM user_permission_overrides WHERE user_id=?", (uid,))
+                for perm in permissions.PERM_LABELS:
+                    effect = (request.form.get("perm__" + perm) or "").strip()
+                    if effect in {"allow", "deny"}:
+                        conn.execute(
+                            "INSERT INTO user_permission_overrides(user_id, perm, effect) VALUES (?,?,?)",
+                            (uid, perm, effect),
+                        )
+                conn.commit()
+                db.log_audit(current_user_name(), "تحديث صلاحيات فردية", "مستخدم", uid)
+                flash(_t("تم تحديث صلاحيات المستخدم الخاصة"), "ok")
         elif action == "regen_api_key":
             uid = request.form.get("id")
             target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
@@ -4622,10 +4640,14 @@ def users_list():
                 conn.commit()
                 flash(_t("تم تحديث الحالة"), "ok")
     rows = db.list_visible_users(conn)
-    conn.close()
+    db.ensure_user_permission_overrides_table(conn)
     for row in rows:
         row["role"] = permissions.normalize_role(row.get("role"))
-        row["perm_count"] = len(permissions.perms_for_role(row["role"]))
+        row["perm_overrides"] = db.user_permission_overrides(row["id"], conn)
+        row["perm_count"] = len(permissions.effective_perms_for_user(row))
+        row["perm_allow_count"] = sum(1 for effect in row["perm_overrides"].values() if effect == "allow")
+        row["perm_deny_count"] = sum(1 for effect in row["perm_overrides"].values() if effect == "deny")
+    conn.close()
     return render_template(
         "users.html",
         rows=rows,

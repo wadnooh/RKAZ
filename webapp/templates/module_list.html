@@ -62,7 +62,7 @@
     <div class="actions">
       {% set can_mod_write = can('modules.write') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
       {% set can_mod_delete = can('modules.delete') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
-      {% if export_href and can('export') %}
+      {% if export_href and can('button.module.' ~ name ~ '.export') %}
       <a class="btn ghost" href="{{ export_href }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>
       {% endif %}
       {% if name in ['coordination','quality_clearances'] %}
@@ -81,7 +81,7 @@
       {% if missing_amount %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=ticket_filter or none, department=department_filter or none, source=source_filter or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
       {% endif %}
-      {% if can_mod_write %}
+      {% if can_mod_write and can('button.module.' ~ name ~ '.add') %}
         {% if name == 'warehouse_items' %}
         <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب المواد Excel') }}</a>
         <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('عرض الأرصدة') }}</a>
@@ -101,7 +101,7 @@
     </div>
   </div>
 
-  {% if name == 'warehouse_items' and can('modules.write') %}
+  {% if name == 'warehouse_items' and can('button.module.warehouse_items.import') %}
   <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
     <div style="flex:1;min-width:220px;">
       <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('استيراد المواد (أصناف المستودع) من Excel') }}</label>
@@ -230,8 +230,8 @@
             {% if name == 'reinforcement_works' %}
             <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=r.id) }}">{{ _('فتح المعاملة') }}</a>
             {% endif %}
-            {% if can_mod_write %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
-            {% if can_mod_write and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
+            {% if can_mod_write and can('button.module.' ~ name ~ '.edit') %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
+            {% if can_mod_write and can('button.quality.transfer') and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
             <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">
               <button class="btn primary" type="submit">{{ _('نقل إلى متابعة التصاريح') }}</button>
             </form>
@@ -239,27 +239,27 @@
             {% if can_mod_write and name == 'new_coordinations' and r.transferred_license_id %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.transferred_license_id) }}">{{ _('الرخصة') }}</a>
             {% endif %}
-            {% if can_mod_write and name == 'construction_works' and r.work_no and can('section.warehouses') %}
+            {% if can_mod_write and can('button.warehouse.issue') and name == 'construction_works' and r.work_no and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}
-            {% if can('section.quality') and name == 'construction_works' and r.work_no %}
+            {% if can('button.quality.workflow') and name == 'construction_works' and r.work_no %}
             <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
               <a href="{{ url_for('quality_workflow_go', stage='coords', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions', district=r.district or r.site or none, location=r.site or none, work_desc=r.work_type or none) }}">1 {{ _('تنسيق') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='permits', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">2 {{ _('تصريح') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='evacuations', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">3 {{ _('إخلاء') }}</a>
             </span>
             {% endif %}
-            {% if can_mod_write and name == 'projects' and r.project_code and can('section.warehouses') %}
+            {% if can_mod_write and can('button.warehouse.issue') and name == 'projects' and r.project_code and can('section.warehouses') %}
             <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف مستودع') }}</a>
             {% endif %}
-            {% if can('section.quality') and name == 'projects' and r.project_code %}
+            {% if can('button.quality.workflow') and name == 'projects' and r.project_code %}
             <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
               <a href="{{ url_for('quality_workflow_go', stage='coords', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects', work_desc=r.project_name or none) }}">1 {{ _('تنسيق') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='permits', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">2 {{ _('تصريح') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='evacuations', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">3 {{ _('إخلاء') }}</a>
             </span>
             {% endif %}
-            {% if can_mod_delete %}
+            {% if can_mod_delete and can('button.module.' ~ name ~ '.delete') %}
             <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
               <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>

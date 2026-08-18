@@ -43,7 +43,7 @@
     </div>
     <div class="field" style="grid-column:1/-1"><label>{{ _('ملاحظات') }}</label><input name="notes" placeholder="{{ _('للتطوير لاحقاً — لا تظهر للمستخدمين') }}"></div>
     <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">{{ _('+ إضافة تبويب') }}</button>
+      {% if can('button.tabs.add') %}<button class="btn primary" type="submit">{{ _('+ إضافة تبويب') }}</button>{% endif %}
     </div>
   </form>
 </div>
@@ -73,7 +73,7 @@
                   <span class="badge">{{ r.section_title }}</span>
                   <strong>{% if r.icon %}{{ r.icon }} {% endif %}{{ r.title_ar }}{% if r.title_en %} <span class="meta">/ {{ r.title_en }}</span>{% endif %}</strong>
                   <span class="meta">{{ r.slug }}</span>
-                  <a class="btn ghost" href="{{ r.href }}">{{ _('فتح') }}</a>
+                  {% if can('button.tabs.open') %}<a class="btn ghost" href="{{ r.href }}">{{ _('فتح') }}</a>{% endif %}
                   {% if r.is_visible %}<span class="badge ok">{{ _('ظاهر') }}</span>{% else %}<span class="badge danger">{{ _('مخفي') }}</span>{% endif %}
                 </div>
               </summary>
@@ -111,14 +111,14 @@
                 </div>
                 <div class="field" style="grid-column:1/-1"><label>{{ _('ملاحظات') }}</label><input name="notes" value="{{ r.notes or '' }}"></div>
                 <div class="actions" style="grid-column:1/-1">
-                  <button class="btn primary" type="submit">{{ _('حفظ') }}</button>
+                  {% if can('button.tabs.edit') %}<button class="btn primary" type="submit">{{ _('حفظ') }}</button>{% endif %}
                 </div>
               </form>
               <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف التبويب') }}" style="margin-top:8px;">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="{{ r.id }}">
                 <input type="hidden" name="delete_password" value="">
-                <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف التبويب') }}</button>
+                {% if can('button.tabs.delete') %}<button class="btn danger" type="button" data-delete-confirm>{{ _('حذف التبويب') }}</button>{% endif %}
               </form>
             </details>
           </td>

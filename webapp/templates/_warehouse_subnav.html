@@ -3,12 +3,12 @@
 {% set p = request.path or '' %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1" data-tab-strip-key="warehouse_rakaz_tabs">
-    <a class="btn ghost{% if wh_active=='summary' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary') }}">{{ _('إجمالي الكميات') }}</a>
-    <a class="btn ghost{% if wh_active=='constructions' %} primary{% endif %}" href="{{ url_for('warehouse_constructions') }}">{{ _('الإنشاءات') }}</a>
-    <a class="btn ghost{% if wh_active=='ops' %} primary{% endif %}" href="{{ url_for('warehouse_ops') }}">{{ _('العمليات والصيانة') }}</a>
-    <a class="btn ghost{% if wh_active=='projects' %} primary{% endif %}" href="{{ url_for('warehouse_projects') }}">{{ _('المشاريع') }}</a>
-    <a class="btn ghost{% if wh_active=='contractors' %} primary{% endif %}" href="{{ url_for('module_list', name='contractor_supplies') }}">{{ _('مواد موردة من مقاول') }}</a>
-    <a class="btn ghost{% if wh_active=='balances' %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>
+    {% if can('tab.warehouse.summary') %}<a class="btn ghost{% if wh_active=='summary' %} primary{% endif %}" href="{{ url_for('warehouse_movements_summary') }}">{{ _('إجمالي الكميات') }}</a>{% endif %}
+    {% if can('tab.warehouse.constructions') %}<a class="btn ghost{% if wh_active=='constructions' %} primary{% endif %}" href="{{ url_for('warehouse_constructions') }}">{{ _('الإنشاءات') }}</a>{% endif %}
+    {% if can('tab.warehouse.ops') %}<a class="btn ghost{% if wh_active=='ops' %} primary{% endif %}" href="{{ url_for('warehouse_ops') }}">{{ _('العمليات والصيانة') }}</a>{% endif %}
+    {% if can('tab.warehouse.projects') %}<a class="btn ghost{% if wh_active=='projects' %} primary{% endif %}" href="{{ url_for('warehouse_projects') }}">{{ _('المشاريع') }}</a>{% endif %}
+    {% if can('tab.warehouse.contractors') %}<a class="btn ghost{% if wh_active=='contractors' %} primary{% endif %}" href="{{ url_for('module_list', name='contractor_supplies') }}">{{ _('مواد موردة من مقاول') }}</a>{% endif %}
+    {% if can('tab.warehouse.balances') %}<a class="btn ghost{% if wh_active=='balances' %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>{% endif %}
     {% for tab in (app_custom_tabs_by_section or {}).get('warehouses') or [] %}
     <a class="btn ghost{% if wh_active==('custom:' ~ tab.slug) or p == tab.href or p.startswith('/tabs/warehouses/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
     {% endfor %}

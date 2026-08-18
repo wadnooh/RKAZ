@@ -5,6 +5,7 @@
 {% if summary_cards %}
 <div class="stats-grid warehouse-qty-summary{% if summary_cards_class %} {{ summary_cards_class }}{% endif %}"{% if summary_cards_style %} style="{{ summary_cards_style }}"{% endif %}>
   {% for c in summary_cards %}
+  {% if not c.money or can('button.financial.amounts') %}
   {% if c.href %}
   <a class="stat-card{% if c.active %} is-active{% endif %}" href="{{ c.href }}" style="text-decoration:none;color:inherit;">
   {% else %}
@@ -18,6 +19,7 @@
   </a>
   {% else %}
   </div>
+  {% endif %}
   {% endif %}
   {% endfor %}
 </div>

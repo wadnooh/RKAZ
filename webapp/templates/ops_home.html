@@ -27,8 +27,10 @@
     <div class="stat-card"><div>{{ _('متأخرة استجابة') }}</div><strong>{{ stats.delayed }}</strong></div>
     <div class="stat-card"><div>{{ _('صور ناقصة') }}</div><strong>{{ stats.photos_incomplete }}</strong></div>
     <div class="stat-card"><div>{{ _('تمتير معتمد') }}</div><strong>{{ stats.metering_approved }}</strong></div>
+    {% if can('button.financial.amounts') %}
     <div class="stat-card"><div>{{ _('قيمة الأعطال') }}</div><strong style="font-size:1.05rem">{{ stats.tickets_value|money }}</strong></div>
-    {% if can('section.financial') %}
+    {% endif %}
+    {% if can('section.financial') and can('button.financial.amounts') %}
     <a class="stat-card" href="{{ url_for('financial_home') }}" style="text-decoration:none;color:inherit;">
       <div>{{ _('المتابعات المالية') }}</div>
       <strong style="font-size:1.05rem">{{ stats.invoices_total|money }}</strong>
@@ -60,7 +62,7 @@
           <th>{{ _('العطل') }}</th>
           <th>{{ _('الفرقة') }}</th>
           <th>{{ _('الحالة') }}</th>
-          <th>{{ _('القيمة') }}</th>
+          {% if can('button.financial.amounts') %}<th>{{ _('القيمة') }}</th>{% endif %}
           <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
@@ -84,7 +86,7 @@
             <span class="badge info">{{ t.status or '—' }}</span>
             {% endif %}
           </td>
-          <td>{% if t.final_value is not none %}{{ t.final_value|money }}{% else %}—{% endif %}</td>
+          {% if can('button.financial.amounts') %}<td>{% if t.final_value is not none %}{{ t.final_value|money }}{% else %}—{% endif %}</td>{% endif %}
           <td class="actions">
             <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=t.id) }}">{{ _('فتح') }}</a>
             {% if can('tickets.write') %}
@@ -93,7 +95,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">لا توجد أعطال بعد. {% if can('tickets.write') %}<a href="{{ url_for('ticket_new') }}">{{ _('أضف عطلاً جديداً') }}</a>{% endif %}</td></tr>
+        <tr><td colspan="{{ 9 if can('button.financial.amounts') else 8 }}" class="meta">لا توجد أعطال بعد. {% if can('tickets.write') %}<a href="{{ url_for('ticket_new') }}">{{ _('أضف عطلاً جديداً') }}</a>{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>

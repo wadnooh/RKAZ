@@ -736,6 +736,19 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 (k, json.dumps(v, ensure_ascii=False)),
             )
         # حساب المبرمج المخفي (لا يظهر في قوائم المستخدمين)
+        if "user_permission_overrides" not in existing and "user_permission_overrides" not in created:
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS user_permission_overrides (
+                    user_id INTEGER NOT NULL,
+                    perm TEXT NOT NULL,
+                    effect TEXT NOT NULL CHECK(effect IN ('allow','deny')),
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                    PRIMARY KEY(user_id, perm)
+                )
+                """
+            )
+            created.append("user_permission_overrides")
         if "users" in existing or "users" in created:
             if _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0"):
                 created.append("users.is_hidden")
@@ -749,6 +762,81 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         else:
             conn.commit()
         return created
+    finally:
+        if own:
+            conn.close()
+
+
+def ensure_user_permission_overrides_table(conn: sqlite3.Connection | None = None) -> None:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS user_permission_overrides (
+                user_id INTEGER NOT NULL,
+                perm TEXT NOT NULL,
+                effect TEXT NOT NULL CHECK(effect IN ('allow','deny')),
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY(user_id, perm)
+            )
+            """
+        )
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+def user_permission_overrides(user_id: int | str | None, conn: sqlite3.Connection | None = None) -> dict[str, str]:
+    if not user_id:
+        return {}
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_user_permission_overrides_table(conn)
+        rows = conn.execute(
+            "SELECT perm, effect FROM user_permission_overrides WHERE user_id=?",
+            (int(user_id),),
+        ).fetchall()
+        return {row["perm"]: row["effect"] for row in rows}
+    finally:
+        if own:
+            conn.close()
+
+
+def set_user_permission_override(user_id: int | str, perm: str, effect: str, conn: sqlite3.Connection | None = None) -> None:
+    effect = (effect or "").strip().lower()
+    if effect not in {"allow", "deny"}:
+        raise ValueError("effect must be allow or deny")
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_user_permission_overrides_table(conn)
+        conn.execute(
+            """
+            INSERT INTO user_permission_overrides(user_id, perm, effect)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, perm) DO UPDATE SET effect=excluded.effect
+            """,
+            (int(user_id), perm, effect),
+        )
+        conn.commit()
+    finally:
+        if own:
+            conn.close()
+
+
+def clear_user_permission_override(user_id: int | str, perm: str | None = None, conn: sqlite3.Connection | None = None) -> None:
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_user_permission_overrides_table(conn)
+        if perm:
+            conn.execute("DELETE FROM user_permission_overrides WHERE user_id=? AND perm=?", (int(user_id), perm))
+        else:
+            conn.execute("DELETE FROM user_permission_overrides WHERE user_id=?", (int(user_id),))
+        conn.commit()
     finally:
         if own:
             conn.close()
@@ -1055,6 +1143,13 @@ def init_db():
             notes TEXT,
             api_key TEXT,
             is_hidden INTEGER DEFAULT 0
+        );
+        CREATE TABLE IF NOT EXISTS user_permission_overrides (
+            user_id INTEGER NOT NULL,
+            perm TEXT NOT NULL,
+            effect TEXT NOT NULL CHECK(effect IN ('allow','deny')),
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            PRIMARY KEY(user_id, perm)
         );
         CREATE TABLE IF NOT EXISTS audit_log (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
