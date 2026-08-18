@@ -1465,8 +1465,7 @@ a.quality-metric.active {
 .users-admin-head {
   align-items: flex-start;
 }
-.user-create-card .section-title,
-.role-matrix-card .section-title {
+.user-create-card .section-title {
   font-size: 1.1rem;
 }
 .user-cards {

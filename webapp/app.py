@@ -4654,7 +4654,6 @@ def users_list():
     return render_template(
         "users.html",
         rows=rows,
-        role_matrix=permissions.role_matrix(),
         perm_labels=permissions.PERM_LABELS,
     )
 

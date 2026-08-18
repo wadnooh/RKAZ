@@ -1106,21 +1106,6 @@ def can(*perms: str, role: str | None = None) -> bool:
     return all(has_perm(p, role) for p in perms)
 
 
-def role_matrix() -> list[dict]:
-    """لعرض مصفوفة الصلاحيات في صفحة المستخدمين."""
-    roles = ["admin", "مشرف", "مدخل بيانات", "مراقب"]
-    rows = []
-    for perm, label in PERM_LABELS.items():
-        rows.append(
-            {
-                "perm": perm,
-                "label": i18n_phrase(session.get("lang") or "ar", label),
-                "roles": {r: has_perm(perm, r) for r in roles},
-            }
-        )
-    return rows
-
-
 def deny_ticket_mutate(message: str | None = None):
     """رفض تعديل عطل/بند بدون صلاحية tickets.write."""
     return deny_redirect(

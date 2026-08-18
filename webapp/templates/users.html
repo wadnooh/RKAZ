@@ -208,37 +208,6 @@
     {% endfor %}
   </div>
 
-  <div class="card role-matrix-card">
-    <div class="toolbar">
-      <div>
-        <h3 class="section-title">{{ _('مصفوفة الصلاحيات حسب الدور') }}</h3>
-        <div class="meta">{{ _('مرجع سريع للأدوار. التخصيص الفردي في بطاقات المستخدمين هو القرار النهائي عند الدخول.') }}</div>
-      </div>
-    </div>
-    <div class="table-wrap">
-      <table class="table">
-        <thead>
-          <tr>
-            <th>{{ _('الصلاحية') }}</th>
-            <th>admin</th>
-            <th>{{ _('مشرف') }}</th>
-            <th>{{ _('مدخل بيانات') }}</th>
-            <th>{{ _('مراقب') }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for row in role_matrix %}
-          <tr>
-            <td style="white-space:normal;">{{ row.label }}</td>
-            {% for r in ['admin','مشرف','مدخل بيانات','مراقب'] %}
-            <td>{% if row.roles[r] %}<span class="badge ok">{{ _('نعم') }}</span>{% else %}<span class="badge danger">{{ _('لا') }}</span>{% endif %}</td>
-            {% endfor %}
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-  </div>
 </div>
 
 <script>

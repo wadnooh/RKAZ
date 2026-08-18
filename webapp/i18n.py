@@ -1036,7 +1036,6 @@ PHRASE_EN = {
     'مسح الأرصدة': 'Clear balances',
     'مشاريع خاصة ومشاريع الكهرباء — أكواد PR وترقيم مستقل عن أعطال الطوارئ.': 'Private and electricity projects — PR codes with numbering independent of emergency tickets.',
     'مشرف': 'Supervisor',
-    'مصفوفة الصلاحيات حسب الدور': 'Permission matrix by role',
     'معاملات المستودع': 'Warehouse transactions',
     'مكتب خدمات خريص': 'Khurais Services Office',
     'مكتمل': 'Complete',
