@@ -15,6 +15,18 @@ SITE_NAME="rekaz"
 SITE_PATH="/etc/nginx/sites-available/${SITE_NAME}"
 SITE_LINK="/etc/nginx/sites-enabled/${SITE_NAME}"
 
+disable_stale_rekaz_sites() {
+  # Older RKAZ deployments may have left a domain-named nginx site enabled.
+  # Keep one RKAZ nginx entry only, otherwise nginx reports conflicting names.
+  for stale in \
+    "/etc/nginx/sites-enabled/${PRIMARY_DOMAIN}" \
+    "/etc/nginx/sites-enabled/report.ralenjaz.com"; do
+    if [ "${stale}" != "${SITE_LINK}" ] && [ -e "${stale}" ]; then
+      rm -f "${stale}"
+    fi
+  done
+}
+
 require_root() {
   if [ "$(id -u)" -ne 0 ]; then
     echo "Run as root: sudo bash $0" >&2
@@ -85,6 +97,7 @@ issue_certificates() {
     -d "${LEGACY_DOMAIN}" \
     --non-interactive \
     --agree-tos \
+    --expand \
     --redirect \
     -m "${CERTBOT_EMAIL}"
 }
@@ -103,6 +116,7 @@ verify() {
 
 require_root
 verify_dns
+disable_stale_rekaz_sites
 write_http_site
 nginx -t
 systemctl reload nginx

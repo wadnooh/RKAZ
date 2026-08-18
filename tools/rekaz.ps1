@@ -238,6 +238,7 @@ function Invoke-Deploy {
 
     $remote = @(
         "cd $DeployPath",
+        "chown -R $DeployUser`:$DeployUser $DeployPath/.git",
         "sudo -u $DeployUser git pull origin $DeployBranch",
         "sudo -u $DeployUser $DeployPath/.venv/bin/pip install -r requirements.txt"
     )
