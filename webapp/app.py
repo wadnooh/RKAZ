@@ -415,7 +415,7 @@ def dashboard_stats():
     conn.close()
 
     target = float(g.settings.get("response_target") or 30)
-    by_status = {s: 0 for s in g.lists.get("execution_status", [])}
+    by_status = {s: 0 for s in g.lists.get("ticket_status", g.lists.get("execution_status", []))}
     delayed = 0
     tickets_value = 0.0
     for t in tickets:

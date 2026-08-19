@@ -56,7 +56,9 @@
     <div class="field">
       <label>{{ _('حالة التنفيذ') }}</label>
       <select name="status">
-        {% for x in lists.execution_status %}<option value="{{ x }}" {% if row.status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
+        {% set status_choices = lists.ticket_status or lists.execution_status %}
+        {% if row.status and row.status not in status_choices %}<option value="{{ row.status }}" selected>{{ tv(row.status) }}</option>{% endif %}
+        {% for x in status_choices %}<option value="{{ x }}" {% if row.status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
     <div class="field"><label>{{ _('تاريخ التنفيذ') }}</label><input type="date" name="execution_date" value="{{ row.execution_date or '' }}"></div>

@@ -302,7 +302,7 @@ def _sample_row() -> list:
         "فرقة 1",
         "09:00",
         "09:25",
-        "جديد",
+        "تم الإسناد",
         "",
         "",
         "",
@@ -426,7 +426,7 @@ def import_tickets_from_excel(file_storage) -> dict:
         if data.get("items_value") == "":
             data["items_value"] = None
         if not data.get("status"):
-            data["status"] = "جديد"
+            data["status"] = "تم الإسناد"
         if not (data.get("rekaz_code") or "").strip():
             existing_code = conn.execute(
                 "SELECT rekaz_code FROM tickets WHERE ticket_no=?",

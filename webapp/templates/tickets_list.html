@@ -37,7 +37,8 @@
     <input type="text" name="q" value="{{ q }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;flex:1;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
-      {% for s in lists.execution_status %}
+      {% set filter_statuses = (lists.ticket_status or []) + (lists.execution_status or []) %}
+      {% for s in filter_statuses|unique %}
       <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ tv(s) }}</option>
       {% endfor %}
     </select>
@@ -88,7 +89,7 @@
             <span class="badge ok">{{ tv(t.status) }}</span>
             {% elif t.status in ['مرفوض/إعادة عمل'] %}
             <span class="badge danger">{{ tv(t.status) }}</span>
-            {% elif t.status in ['قيد التنفيذ','تم التوجيه'] %}
+            {% elif t.status in ['تم الإسناد','التحديد','الحفر','الأعمال الكهربائية','قيد التنفيذ','تم التوجيه'] %}
             <span class="badge warn">{{ tv(t.status) }}</span>
             {% else %}
             <span class="badge info">{{ t.status or '—' }}</span>

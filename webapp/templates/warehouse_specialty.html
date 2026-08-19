@@ -144,7 +144,8 @@
     <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم العطل / أمر العمل / كود ER / الحي...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:220px;">
     <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
       <option value="">{{ _('كل الحالات') }}</option>
-      {% for s in lists.execution_status %}
+      {% set filter_statuses = (lists.ticket_status or []) + (lists.execution_status or []) %}
+      {% for s in filter_statuses|unique %}
       <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ tv(s) }}</option>
       {% endfor %}
     </select>

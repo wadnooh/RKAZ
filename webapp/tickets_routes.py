@@ -197,7 +197,7 @@ def new():
             conn.close()
     blank = {f: "" for f in TICKET_FIELDS}
     blank["receive_date"] = datetime.now().strftime("%Y-%m-%d")
-    blank["status"] = "جديد"
+    blank["status"] = "تم الإسناد"
     blank["rekaz_code"] = ""
     return render_template("ticket_form.html", row=blank, mode="new")
 
