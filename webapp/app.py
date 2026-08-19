@@ -33,6 +33,7 @@ from webapp.tickets_routes import tickets_bp
 from webapp import backup as backup_svc
 from webapp.api_routes import api_bp
 from webapp import media as media_svc
+from webapp import mailer
 from webapp import programmer_guard as prog_guard
 from webapp import helpers
 
@@ -4531,10 +4532,12 @@ def users_list():
                 else:
                     role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
                     conn.execute(
-                        "INSERT INTO users(username, full_name, role, active, password, notes, is_hidden) VALUES (?,?,?,?,?,?,0)",
+                        "INSERT INTO users(username, full_name, email, mobile, role, active, password, notes, is_hidden) VALUES (?,?,?,?,?,?,?,?,0)",
                         (
                             username,
                             request.form.get("full_name"),
+                            (request.form.get("email") or "").strip(),
+                            (request.form.get("mobile") or "").strip(),
                             role,
                             1 if request.form.get("active") == "1" else 0,
                             request.form.get("password") or "1234",
@@ -4556,9 +4559,11 @@ def users_list():
                 password = (request.form.get("password") or "").strip()
                 if password:
                     conn.execute(
-                        "UPDATE users SET full_name=?, role=?, active=?, password=?, notes=? WHERE id=?",
+                        "UPDATE users SET full_name=?, email=?, mobile=?, role=?, active=?, password=?, notes=? WHERE id=?",
                         (
                             request.form.get("full_name"),
+                            (request.form.get("email") or "").strip(),
+                            (request.form.get("mobile") or "").strip(),
                             role,
                             1 if request.form.get("active") == "1" else 0,
                             password,
@@ -4568,9 +4573,11 @@ def users_list():
                     )
                 else:
                     conn.execute(
-                        "UPDATE users SET full_name=?, role=?, active=?, notes=? WHERE id=?",
+                        "UPDATE users SET full_name=?, email=?, mobile=?, role=?, active=?, notes=? WHERE id=?",
                         (
                             request.form.get("full_name"),
+                            (request.form.get("email") or "").strip(),
+                            (request.form.get("mobile") or "").strip(),
                             role,
                             1 if request.form.get("active") == "1" else 0,
                             request.form.get("notes"),
@@ -4611,6 +4618,29 @@ def users_list():
             else:
                 db.regenerate_api_key(uid, conn)
                 flash(_t("تم إنشاء مفتاح API جديد للمستخدم. المفتاح القديم لم يعد صالحاً."), "ok")
+        elif action == "send_test_email":
+            uid = request.form.get("id")
+            target = conn.execute("SELECT * FROM users WHERE id=?", (uid,)).fetchone()
+            if db.user_is_hidden(target):
+                flash(_t("تعذّر إرسال البريد"), "danger")
+            elif not target:
+                flash(_t("المستخدم غير موجود"), "danger")
+            else:
+                email = (target["email"] or "").strip()
+                if not email:
+                    flash(_t("لا يوجد بريد إلكتروني لهذا المستخدم"), "danger")
+                else:
+                    subject = _t("رسالة تجريبية من نظام ركاز")
+                    body = _t(
+                        "هذه رسالة مؤقتة لتأكيد ربط البريد في نظام ركاز.\n\nالمستخدم: {name}\n\nسيتم لاحقاً ترتيب رسائل الإشعارات الرسمية.",
+                        name=target["full_name"] or target["username"],
+                    )
+                    ok, err = mailer.send_email(to_addrs=[email], subject=subject, body=body)
+                    if ok:
+                        db.log_audit(current_user_name(), "إرسال بريد تجريبي", "مستخدم", uid, email)
+                        flash(_t("تم إرسال البريد التجريبي إلى {email}", email=email), "ok")
+                    else:
+                        flash(_t("تعذّر إرسال البريد: {err}", err=err), "danger")
         elif action == "delete":
             if not _delete_password_ok():
                 conn.close()

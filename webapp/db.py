@@ -492,6 +492,8 @@ def ensure_hidden_programmer_user(conn: sqlite3.Connection | None = None) -> boo
     conn = conn or connect()
     created = False
     try:
+        _ensure_column(conn, "users", "email", "TEXT")
+        _ensure_column(conn, "users", "mobile", "TEXT")
         _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
         row = conn.execute(
             "SELECT id FROM users WHERE lower(username)=lower(?)",
@@ -534,6 +536,8 @@ def list_visible_users(conn: sqlite3.Connection | None = None) -> list[dict]:
     own = conn is None
     conn = conn or connect()
     try:
+        _ensure_column(conn, "users", "email", "TEXT")
+        _ensure_column(conn, "users", "mobile", "TEXT")
         _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
         return rows_to_dicts(
             conn.execute(
@@ -756,6 +760,10 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             )
             created.append("user_permission_overrides")
         if "users" in existing or "users" in created:
+            if _ensure_column(conn, "users", "email", "TEXT"):
+                created.append("users.email")
+            if _ensure_column(conn, "users", "mobile", "TEXT"):
+                created.append("users.mobile")
             if _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0"):
                 created.append("users.is_hidden")
             # مفتاح API للتكاملات الخارجية
@@ -1143,6 +1151,8 @@ def init_db():
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE,
             full_name TEXT,
+            email TEXT,
+            mobile TEXT,
             role TEXT,
             active INTEGER DEFAULT 1,
             password TEXT,
@@ -1289,6 +1299,8 @@ def init_db():
         cur.execute("INSERT OR IGNORE INTO lists(key,value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
 
     _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
+    _ensure_column(conn, "users", "email", "TEXT")
+    _ensure_column(conn, "users", "mobile", "TEXT")
     if cur.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         cur.executemany(
             "INSERT INTO users(username, full_name, role, active, password, notes, is_hidden) VALUES (?,?,?,?,?,?,?)",

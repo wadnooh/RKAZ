@@ -28,6 +28,8 @@
       <input type="hidden" name="action" value="add">
       <div class="field"><label>{{ _('اسم المستخدم') }}</label><input name="username" required></div>
       <div class="field"><label>{{ _('الاسم الكامل') }}</label><input name="full_name" required></div>
+      <div class="field"><label>{{ _('البريد الإلكتروني') }}</label><input type="email" name="email" dir="ltr"></div>
+      <div class="field"><label>{{ _('الجوال') }}</label><input name="mobile" inputmode="tel" dir="ltr"></div>
       <div class="field">
         <label>{{ _('الدور') }}</label>
         <select name="role">
@@ -55,6 +57,13 @@
           <div>
             <h3>{{ u.full_name }}</h3>
             <div class="meta" dir="ltr">@{{ u.username }}</div>
+            {% if u.email or u.mobile %}
+            <div class="meta" dir="ltr">
+              {% if u.email %}{{ u.email }}{% endif %}
+              {% if u.email and u.mobile %} · {% endif %}
+              {% if u.mobile %}{{ u.mobile }}{% endif %}
+            </div>
+            {% endif %}
           </div>
         </div>
         <div class="user-status-stack">
@@ -77,6 +86,8 @@
             <input type="hidden" name="action" value="update">
             <input type="hidden" name="id" value="{{ u.id }}">
             <div class="field"><label>{{ _('الاسم') }}</label><input name="full_name" value="{{ u.full_name }}" required></div>
+            <div class="field"><label>{{ _('البريد الإلكتروني') }}</label><input type="email" name="email" value="{{ u.email or '' }}" dir="ltr"></div>
+            <div class="field"><label>{{ _('الجوال') }}</label><input name="mobile" value="{{ u.mobile or '' }}" inputmode="tel" dir="ltr"></div>
             <div class="field">
               <label>{{ _('الدور') }}</label>
               <select name="role">
@@ -195,6 +206,13 @@
           <input type="hidden" name="id" value="{{ u.id }}">
           {% if can('button.users.toggle') %}<button class="btn ghost" type="submit">{{ _('تفعيل/إيقاف') }}</button>{% endif %}
         </form>
+        {% if u.email %}
+        <form method="post">
+          <input type="hidden" name="action" value="send_test_email">
+          <input type="hidden" name="id" value="{{ u.id }}">
+          {% if can('button.users.edit') %}<button class="btn ghost" type="submit">{{ _('إرسال بريد تجريبي') }}</button>{% endif %}
+        </form>
+        {% endif %}
         <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف المستخدم') }}">
           <input type="hidden" name="action" value="delete">
           <input type="hidden" name="id" value="{{ u.id }}">
