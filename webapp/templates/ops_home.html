@@ -78,9 +78,9 @@
           <td>
             {% if t.status in ['منفذ','مغلق'] %}
             <span class="badge ok">{{ tv(t.status) }}</span>
-            {% elif t.status in ['مرفوض/إعادة عمل'] %}
+            {% elif t.status in ['مرفوض/إعادة عمل','ملغي'] %}
             <span class="badge danger">{{ tv(t.status) }}</span>
-            {% elif t.status in ['تم الإسناد','التحديد','الحفر','الأعمال الكهربائية','قيد التنفيذ','تم التوجيه'] %}
+            {% elif t.status in ['تم الإسناد','التحديد','الحفر','الأعمال الكهربائية','تم التحويل لقسم آخر','قيد التنفيذ','تم التوجيه'] %}
             <span class="badge warn">{{ tv(t.status) }}</span>
             {% else %}
             <span class="badge info">{{ t.status or '—' }}</span>

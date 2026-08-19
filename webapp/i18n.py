@@ -1108,6 +1108,7 @@ VALUE_EN = {
     'تركيب قاطع': 'Breaker installation',
     'تم التوجيه': 'Dispatched',
     'تم الإسناد': 'Assigned',
+    'تم التحويل لقسم آخر': 'Transferred to another department',
     'تم الشراء': 'Purchased',
     'تمديد كيبل': 'Cable extension',
     'ثقيل': 'Heavy',

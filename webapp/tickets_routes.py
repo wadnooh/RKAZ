@@ -33,6 +33,7 @@ TICKET_FIELDS = [
 
 def ticket_from_form():
     data = {f: (request.form.get(f) or "").strip() for f in TICKET_FIELDS}
+    data["status"] = db.normalize_ticket_status(data.get("status"))
     iv = data.get("items_value")
     data["items_value"] = float(iv) if iv not in ("", None) else None
     return data
@@ -57,9 +58,14 @@ def _load_filtered_tickets(
         where_clauses.append(f"({' OR '.join(f'{col} LIKE ?' for col in search_columns)})")
         params.extend([like_q] * len(search_columns))
 
+    status = db.normalize_ticket_status(status)
     if status:
-        where_clauses.append("status = ?")
-        params.append(status)
+        if status == "تم الإسناد":
+            where_clauses.append("status IN (?, ?)")
+            params.extend(["تم الإسناد", "جديد"])
+        else:
+            where_clauses.append("status = ?")
+            params.append(status)
 
     if classification:
         where_clauses.append("classification = ?")
@@ -79,6 +85,7 @@ def _load_filtered_tickets(
     try:
         rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
         for r in rows:
+            r["status"] = db.normalize_ticket_status(r.get("status"))
             r["response_min"] = helpers.response_minutes(r.get("dispatch_time"), r.get("arrival_time"))
         helpers.attach_ticket_final_values(rows, conn)
     finally:
@@ -95,6 +102,7 @@ def _load_filtered_tickets(
 def list_all():
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
+    status = db.normalize_ticket_status(status)
     classification = (request.args.get("classification") or "").strip()
     date_from = (request.args.get("date_from") or "").strip()
     date_to = (request.args.get("date_to") or "").strip()
@@ -232,6 +240,7 @@ def view(ticket_id):
         flash(helpers.t("العطل غير موجود"), "danger")
         return redirect(url_for(".list_all"))
     ticket = dict(row)
+    ticket["status"] = db.normalize_ticket_status(ticket.get("status"))
     tno = ticket["ticket_no"]
     related = {
         "quantities": db.rows_to_dicts(conn.execute("SELECT * FROM quantities WHERE ticket_no=?", (tno,)).fetchall()),
@@ -471,6 +480,7 @@ def print_view(ticket_id):
         flash(helpers.t("العطل غير موجود"), "danger")
         return redirect(url_for(".list_all"))
     ticket = dict(row)
+    ticket["status"] = db.normalize_ticket_status(ticket.get("status"))
     tno = ticket["ticket_no"]
     boq_lines = db.list_ticket_boq_lines(ticket_id=ticket_id, conn=conn)
     legacy_qty = db.rows_to_dicts(conn.execute("SELECT * FROM quantities WHERE ticket_no=?", (tno,)).fetchall())

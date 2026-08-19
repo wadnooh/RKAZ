@@ -122,8 +122,9 @@
       <label>{{ _('حالة التنفيذ') }}</label>
       <select name="status">
         {% set status_choices = lists.ticket_status or lists.execution_status %}
-        {% if ticket.status and ticket.status not in status_choices %}<option value="{{ ticket.status }}" selected>{{ tv(ticket.status) }}</option>{% endif %}
-        {% for x in status_choices %}<option value="{{ x }}" {% if ticket.status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
+        {% set current_status = 'تم الإسناد' if ticket.status == 'جديد' else ticket.status %}
+        {% if current_status and current_status not in status_choices %}<option value="{{ current_status }}" selected>{{ tv(current_status) }}</option>{% endif %}
+        {% for x in status_choices %}<option value="{{ x }}" {% if current_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
       </select>
     </div>
     <div class="field"><label>{{ _('تاريخ التنفيذ') }}</label><input type="date" name="execution_date" value="{{ ticket.execution_date or '' }}"></div>

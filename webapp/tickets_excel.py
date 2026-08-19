@@ -427,6 +427,7 @@ def import_tickets_from_excel(file_storage) -> dict:
             data["items_value"] = None
         if not data.get("status"):
             data["status"] = "تم الإسناد"
+        data["status"] = db.normalize_ticket_status(data.get("status"))
         if not (data.get("rekaz_code") or "").strip():
             existing_code = conn.execute(
                 "SELECT rekaz_code FROM tickets WHERE ticket_no=?",

@@ -146,7 +146,9 @@
       <option value="">{{ _('كل الحالات') }}</option>
       {% set filter_statuses = (lists.ticket_status or []) + (lists.execution_status or []) %}
       {% for s in filter_statuses|unique %}
+      {% if s != 'جديد' %}
       <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ tv(s) }}</option>
+      {% endif %}
       {% endfor %}
     </select>
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>

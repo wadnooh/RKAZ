@@ -419,6 +419,7 @@ def dashboard_stats():
     delayed = 0
     tickets_value = 0.0
     for t in tickets:
+        t["status"] = db.normalize_ticket_status(t.get("status"))
         by_status[t.get("status") or ""] = by_status.get(t.get("status") or "", 0) + 1
         mins = response_minutes(t.get("dispatch_time"), t.get("arrival_time"))
         if mins is not None and mins > target:
@@ -1469,12 +1470,18 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             like = f"%{q}%"
             params.extend([like, like, like, like, like, like])
         if status:
-            sql += " AND status=?"
-            params.append(status)
+            status = db.normalize_ticket_status(status)
+            if status == "تم الإسناد":
+                sql += " AND status IN (?, ?)"
+                params.extend(["تم الإسناد", "جديد"])
+            else:
+                sql += " AND status=?"
+                params.append(status)
         sql += " ORDER BY id DESC"
         rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
         cmap = _warehouse_tx_count_map("ops", conn)
         for r in rows:
+            r["status"] = db.normalize_ticket_status(r.get("status"))
             r["wh_count"] = cmap.get(str(r.get("ticket_no") or ""), 0)
     elif view == "reinforcement":
         rows = db.rows_to_dicts(

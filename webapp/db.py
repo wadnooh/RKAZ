@@ -40,7 +40,7 @@ DEFAULT_SETTINGS = {
 }
 
 DEFAULT_LISTS = {
-    "ticket_status": ["تم الإسناد", "التحديد", "الحفر", "الأعمال الكهربائية", "منفذ", "مغلق"],
+    "ticket_status": ["تم الإسناد", "التحديد", "الحفر", "الأعمال الكهربائية", "منفذ", "مغلق", "ملغي", "تم التحويل لقسم آخر"],
     "execution_status": ["جديد", "تم التوجيه", "قيد التنفيذ", "منفذ", "مغلق", "مرفوض/إعادة عمل"],
     "photo_status": ["غير مطلوب", "ناقص", "مكتمل", "مرفوض"],
     "coordination_status": ["غير مطلوب", "بانتظار المختبر", "مستخرج", "مرفوض"],
@@ -99,6 +99,11 @@ DEFAULT_LISTS = {
     "consultant_result": ["مقبول", "ملاحظات", "مرفوض", "بانتظار"],
     "linked_sections": ["الإنشاءات", "العمليات والصيانة", "المشاريع"],
 }
+
+
+def normalize_ticket_status(status):
+    return "تم الإسناد" if status == "جديد" else status
+
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
