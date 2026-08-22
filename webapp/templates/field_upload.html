@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="{{ lang }}" dir="{{ 'rtl' if lang == 'ar' else 'ltr' }}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>{{ _('رفع المرفقات') }} - {{ app_title }}</title>
+  <link rel="icon" type="image/png" href="{{ logo_rekaz }}">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v={{ asset_v }}">
+</head>
+<body class="field-upload-only">
+  <main class="field-upload-shell">
+  <header class="field-upload-top">
+    <img src="{{ logo_rekaz }}" alt="{{ _('شركة ركاز الإنجاز للمقاولات') }}">
+    <div>
+      <h1>{{ _('رفع المرفقات') }}</h1>
+      <span>{{ session.get('full_name', '') }}</span>
+    </div>
+    <a class="btn ghost" href="{{ url_for('logout') }}">{{ _('خروج') }}</a>
+  </header>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="flash-list">
+        {% for category, message in messages %}
+          <div class="flash {{ category }}">{{ message }}</div>
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {% if saved_ticket %}
+  <div class="field-upload__done">
+    <strong>{{ _('تم الحفظ') }}</strong>
+    <span>{{ _('رقم العطل') }}: {{ saved_ticket.ticket_no }}</span>
+    <span>{{ _('كود ركاز') }}: {{ saved_ticket.rekaz_code or '—' }}</span>
+    <span>{{ _('عدد الصور') }}: {{ uploaded_count }}</span>
+  </div>
+  <div class="actions field-upload__actions">
+    <a class="btn primary" href="{{ url_for('field_upload') }}">{{ _('رفع مرفقات أخرى') }}</a>
+  </div>
+  {% endif %}
+
+  <form method="post" enctype="multipart/form-data" class="field-upload__form" id="fieldUploadForm">
+    <div class="field-upload__grid">
+      <label class="field-upload__field">
+        <span>{{ _('رقم العطل') }}</span>
+        <input name="ticket_no" value="{{ form.get('ticket_no', '') }}" required autocomplete="off" inputmode="text">
+      </label>
+      <label class="field-upload__field">
+        <span>{{ _('رقم المحطة') }}</span>
+        <input name="station_no" value="{{ form.get('station_no', '') }}" required autocomplete="off" inputmode="text">
+      </label>
+      <label class="field-upload__field">
+        <span>{{ _('نوع العمل') }}</span>
+        <select name="work_kind" id="fieldWorkKind">
+          {% set wk = form.get('work_kind', 'أعمال كهربائية') %}
+          <option value="أعمال كهربائية" {% if wk == 'أعمال كهربائية' %}selected{% endif %}>{{ _('أعمال كهربائية') }}</option>
+          <option value="حفر" {% if wk == 'حفر' %}selected{% endif %}>{{ _('حفر') }}</option>
+        </select>
+      </label>
+      <label class="field-upload__field">
+        <span>{{ _('نوع الرقم') }}</span>
+        {% set ik = form.get('identifier_kind', 'rekaz') %}
+        <select name="identifier_kind" id="fieldIdentifierKind">
+          <option value="rekaz" {% if ik == 'rekaz' %}selected{% endif %}>{{ _('رقم ركاز') }}</option>
+          <option value="capital" {% if ik == 'capital' %}selected{% endif %}>{{ _('رقم رسملة') }}</option>
+        </select>
+      </label>
+      <label class="field-upload__field field-upload__field--wide">
+        <span id="fieldIdentifierLabel">{{ _('رقم ركاز أو رسملة') }}</span>
+        <input name="identifier_value" value="{{ form.get('identifier_value', '') }}" required autocomplete="off" inputmode="text" dir="ltr">
+      </label>
+    </div>
+
+    <div class="field-upload__photos" id="fieldPhotoPanel">
+      <label class="field-upload__picker">
+        <input type="file" name="photos" id="fieldPhotos" accept="image/*" capture="environment" multiple required>
+        <span class="field-upload__picker-icon">+</span>
+        <span>{{ _('التقاط أو اختيار الصور') }}</span>
+      </label>
+      <div class="field-upload__status" id="fieldPhotoStatus">{{ _('لم يتم اختيار صور') }}</div>
+      <div class="field-upload__preview" id="fieldPhotoPreview"></div>
+    </div>
+
+    <button class="btn primary field-upload__submit" type="submit">{{ _('حفظ المرفقات') }}</button>
+  </form>
+  </main>
+
+<script>
+(function () {
+  var form = document.getElementById("fieldUploadForm");
+  var panel = document.getElementById("fieldPhotoPanel");
+  var files = document.getElementById("fieldPhotos");
+  var status = document.getElementById("fieldPhotoStatus");
+  var preview = document.getElementById("fieldPhotoPreview");
+  var kind = document.getElementById("fieldIdentifierKind");
+  var label = document.getElementById("fieldIdentifierLabel");
+
+  function updateLabel() {
+    if (!label || !kind) return;
+    label.textContent = kind.value === "capital" ? {{ _('رقم الرسملة')|tojson }} : {{ _('رقم ركاز')|tojson }};
+  }
+
+  function requiredReady() {
+    if (!form) return false;
+    return ["ticket_no", "station_no", "identifier_value"].every(function (name) {
+      var input = form.querySelector('[name="' + name + '"]');
+      return input && String(input.value || "").trim();
+    });
+  }
+
+  function maybeOpenPicker() {
+    if (!panel || !files) return;
+    panel.classList.toggle("is-ready", requiredReady());
+  }
+
+  function renderFiles() {
+    var selected = Array.prototype.slice.call(files.files || []);
+    status.textContent = selected.length ? selected.length + " " + {{ _('صورة مختارة')|tojson }} : {{ _('لم يتم اختيار صور')|tojson }};
+    preview.innerHTML = "";
+    selected.slice(0, 5).forEach(function (file) {
+      if (!file.type || file.type.indexOf("image/") !== 0) return;
+      var img = document.createElement("img");
+      img.alt = file.name;
+      img.src = URL.createObjectURL(file);
+      img.onload = function () { URL.revokeObjectURL(img.src); };
+      preview.appendChild(img);
+    });
+    if (selected.length > 5) {
+      status.textContent = {{ _('اختر 5 صور كحد أقصى')|tojson }};
+    }
+  }
+
+  if (kind) kind.addEventListener("change", updateLabel);
+  if (form) {
+    form.querySelectorAll("input, select").forEach(function (input) {
+      input.addEventListener("input", maybeOpenPicker);
+      input.addEventListener("change", maybeOpenPicker);
+    });
+  }
+  if (files) files.addEventListener("change", renderFiles);
+  updateLabel();
+  maybeOpenPicker();
+})();
+</script>
+</body>
+</html>

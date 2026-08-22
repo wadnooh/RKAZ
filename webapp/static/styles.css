@@ -908,6 +908,192 @@ td.col-item-name[title]:hover {
   color: var(--muted);
 }
 
+.field-upload-container {
+  max-width: 760px !important;
+  margin-inline: auto !important;
+}
+.field-upload-only {
+  min-height: 100vh;
+  background: #f7f4ef;
+}
+.field-upload-only .app-watermark,
+.field-upload-only .topbar,
+.field-upload-only .tabs,
+.field-upload-only .app-footer {
+  display: none !important;
+}
+.field-upload-shell {
+  width: min(760px, 100%);
+  margin: 0 auto;
+  padding: 14px;
+  display: grid;
+  gap: 14px;
+}
+.field-upload-top {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: center;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px;
+}
+.field-upload-top img {
+  width: 64px;
+  height: 44px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+}
+.field-upload-top h1 {
+  margin: 0;
+  color: #123f69;
+  font-size: 1.15rem;
+}
+.field-upload-top span {
+  display: block;
+  color: var(--muted);
+  font-weight: 700;
+  margin-top: 2px;
+}
+.field-upload {
+  display: grid;
+  gap: 14px;
+}
+.field-upload__head,
+.field-upload__done {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+.field-upload__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+.field-upload__sub {
+  color: var(--muted);
+  font-weight: 700;
+  margin-top: 4px;
+}
+.field-upload__done {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: center;
+  background: #eefaf3;
+  border-color: #b7e0b0;
+  color: #1f6b3d;
+  font-weight: 800;
+}
+.field-upload__actions {
+  margin-top: -4px;
+}
+.field-upload__form {
+  display: grid;
+  gap: 14px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+}
+.field-upload__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.field-upload__field {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+  font-weight: 800;
+}
+.field-upload__field--wide {
+  grid-column: 1 / -1;
+}
+.field-upload__field input,
+.field-upload__field select {
+  width: 100%;
+  min-height: 48px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 1.02rem;
+  background: #fff;
+  color: var(--ink);
+}
+.field-upload__photos {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px dashed #b8c5d4;
+  border-radius: 12px;
+  background: #f7fafc;
+  opacity: 0.72;
+}
+.field-upload__photos.is-ready {
+  opacity: 1;
+  border-color: var(--accent);
+  background: #fffaf0;
+}
+.field-upload__picker {
+  position: relative;
+  min-height: 76px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #c4a574 0%, #8a7349 100%);
+  color: #fff;
+  font-size: 1.08rem;
+  font-weight: 900;
+  cursor: pointer;
+}
+.field-upload__picker input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.field-upload__picker-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: inline-grid;
+  place-items: center;
+  background: rgba(255, 255, 255, 0.2);
+  font-size: 1.3rem;
+}
+.field-upload__status {
+  color: var(--muted);
+  font-weight: 800;
+  text-align: center;
+}
+.field-upload__preview {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 8px;
+}
+.field-upload__preview img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: #fff;
+}
+.field-upload__submit {
+  min-height: 52px;
+  justify-content: center;
+  font-size: 1.02rem;
+}
+
 .login-wrap {
   min-height: 70vh;
   display: flex;
@@ -1413,6 +1599,23 @@ a.quality-metric.active {
 }
 @media (max-width: 720px) {
   .stats-grid, .form-grid, .meta-grid { grid-template-columns: 1fr; }
+  .field-upload__head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .field-upload__grid {
+    grid-template-columns: 1fr;
+  }
+  .field-upload-shell {
+    padding: 10px;
+  }
+  .field-upload-top {
+    grid-template-columns: auto 1fr;
+  }
+  .field-upload-top .btn {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
   /* Very small phones: compact 2-up wrap; still prefer equal cards */
   .warehouse-qty-summary {
     display: flex;
@@ -1747,4 +1950,3 @@ a.quality-metric.active {
     grid-template-columns: 1fr;
   }
 }
-

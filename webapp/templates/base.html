@@ -33,6 +33,7 @@
         <span>|</span>
         {% if can('button.search') %}<a href="{{ url_for('global_search') }}">{{ tr('search') }}</a>{% endif %}
         <span>|</span>
+        {% if can('section.ops', 'tickets.write') %}<a href="{{ url_for('field_upload') }}">{{ _('رفع ميداني') }}</a><span>|</span>{% endif %}
         {% if can('button.quick_jump') %}<a href="#" data-open-jump>{{ tr('quick_jump') }}</a>{% endif %}
         {% endif %}
       </div>
