@@ -1015,6 +1015,16 @@ _ROLE_PERMS = {'admin': {'api.access',
           'tickets.read',
           'tickets.write'}}
 
+_ROLE_PERMS["المواقع"] = {
+    "button.logout",
+    "button.module.photos.add",
+    "button.module.photos.edit",
+    "button.ticket.new",
+    "modules.write",
+    "section.ops",
+    "tickets.write",
+}
+
 # مرادفات أدوار إن وُجدت بصيغ أخرى
 _ROLE_ALIASES = {
     "administrator": "admin",
@@ -1024,6 +1034,12 @@ _ROLE_ALIASES = {
     "مدير النظام": "admin",
     "supervisor": "مشرف",
     "dataentry": "مدخل بيانات",
+    "field": "المواقع",
+    "field_user": "المواقع",
+    "site": "المواقع",
+    "sites": "المواقع",
+    "موقع": "المواقع",
+    "مراقب موقع": "المواقع",
     "viewer": "مراقب",
     "readonly": "مراقب",
 }

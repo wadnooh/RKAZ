@@ -503,7 +503,8 @@ def login():
             session["role"] = permissions.normalize_role(user["role"])
         session["lang"] = saved_lang
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
-        nxt = request.args.get("next") or url_for("ops_home")
+        default_next = url_for("field_upload") if session.get("role") == "المواقع" else url_for("ops_home")
+        nxt = request.args.get("next") or default_next
         if not str(nxt).startswith("/") or nxt in {"/", "/login"}:
             nxt = url_for("ops_home")
         return redirect(nxt)
