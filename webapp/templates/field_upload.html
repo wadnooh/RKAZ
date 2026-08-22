@@ -184,118 +184,20 @@
     }
   }
 
-  function canvasToBlob(canvas, type, quality) {
-    return new Promise(function (resolve) {
-      if (canvas.toBlob) {
-        canvas.toBlob(function (blob) { resolve(blob); }, type, quality);
-        return;
-      }
-      var dataUrl = canvas.toDataURL(type, quality);
-      var parts = dataUrl.split(",");
-      var raw = atob(parts[1]);
-      var bytes = new Uint8Array(raw.length);
-      for (var i = 0; i < raw.length; i++) bytes[i] = raw.charCodeAt(i);
-      resolve(new Blob([bytes], { type: type }));
-    });
-  }
-
-  function loadImage(file) {
-    return new Promise(function (resolve, reject) {
-      var url = URL.createObjectURL(file);
-      var img = new Image();
-      img.onload = function () {
-        URL.revokeObjectURL(url);
-        resolve(img);
-      };
-      img.onerror = function () {
-        URL.revokeObjectURL(url);
-        reject(new Error("image-load"));
-      };
-      img.src = url;
-    });
-  }
-
-  function compressImage(file) {
-    var maxSide = 1600;
-    var mime = "image/jpeg";
-    return loadImage(file).then(function (img) {
-      var width = img.naturalWidth || img.width;
-      var height = img.naturalHeight || img.height;
-      var scale = Math.min(1, maxSide / Math.max(width, height));
-      var targetWidth = Math.max(1, Math.round(width * scale));
-      var targetHeight = Math.max(1, Math.round(height * scale));
-      var canvas = document.createElement("canvas");
-      canvas.width = targetWidth;
-      canvas.height = targetHeight;
-      var ctx = canvas.getContext("2d", { alpha: false });
-      ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
-      return canvasToBlob(canvas, mime, 0.72).then(function (blob) {
-        if (!blob || blob.size >= file.size) return file;
-        return new File([blob], (file.name || "photo").replace(/\.[^.]+$/, "") + ".jpg", { type: mime });
-      });
-    }).catch(function () {
-      return file;
-    });
-  }
-
-  function buildCompressedFormData() {
-    var data = new FormData();
-    Array.prototype.slice.call(form.elements).forEach(function (el) {
-      if (!el.name || el.type === "file" || el.disabled) return;
-      data.append(el.name, el.value || "");
-    });
-    var selected = files.filter(function (input) {
-      return input.files && input.files[0];
-    });
-    return Promise.all(selected.map(function (input) {
-      return compressImage(input.files[0]).then(function (file) {
-        data.append(input.name, file, file.name || "photo.jpg");
-      });
-    })).then(function () {
-      return data;
-    });
-  }
-
-  function submitWithCompression(event) {
-    var selected = files.filter(function (item) {
-      return item.files && item.files.length;
-    });
-    if (!selected.length || !window.FormData || !window.fetch || !window.Promise) return;
-    event.preventDefault();
-    if (submitting) return;
-    setSubmitting(true);
-    if (status) status.textContent = {{ _('جاري تجهيز الصور للحفظ')|tojson }};
-    buildCompressedFormData().then(function (data) {
-      if (status) status.textContent = {{ _('جاري رفع الصور')|tojson }};
-      return fetch(form.action || window.location.href, {
-        method: "POST",
-        body: data,
-        credentials: "same-origin"
-      });
-    }).then(function (response) {
-      return response.text().then(function (html) {
-        document.open();
-        document.write(html);
-        document.close();
-      });
-    }).catch(function () {
-      setSubmitting(false);
-      if (status) status.textContent = {{ _('تعذر الحفظ. تحقق من الاتصال ثم حاول بصورة واحدة')|tojson }};
-    });
-  }
-
   if (kind) kind.addEventListener("change", updateLabel);
   if (form) {
     form.querySelectorAll("input, select").forEach(function (input) {
       input.addEventListener("input", maybeOpenPicker);
       input.addEventListener("change", maybeOpenPicker);
     });
-    form.addEventListener("submit", function (event) {
+    form.addEventListener("submit", function () {
       var selected = files.filter(function (item) {
         return item.files && item.files.length;
       });
       if (!selected.length) return;
-      submitWithCompression(event);
+      if (submitting) return;
+      setSubmitting(true);
+      if (status) status.textContent = {{ _('جاري رفع الصور')|tojson }};
     });
   }
   files.forEach(function (input) {
