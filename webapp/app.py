@@ -21,6 +21,7 @@ from flask import (
     url_for,
 )
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import RequestEntityTooLarge
 
 from webapp import db
 from webapp.i18n import tr as i18n_tr, _ as i18n_phrase, tv as i18n_tv, localize_module, localize_section_meta, localize_jump
@@ -94,8 +95,8 @@ else:
         os.environ.get("RENDER")
         or os.environ.get("FORCE_HTTPS", "").strip().lower() in {"1", "true", "yes", "on"}
     )
-# صور سجل الصور: عدة ملفات حتى ~6MB لكل منها
-app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024
+# صور الجوال قد تكون كبيرة، خصوصا عند رفع أكثر من مرحلة في نفس العملية.
+app.config["MAX_CONTENT_LENGTH"] = 128 * 1024 * 1024
 app.url_map.strict_slashes = False
 # Render / reverse proxies
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
@@ -143,6 +144,14 @@ def create_app():
     except Exception:
         pass
     return app
+
+
+@app.errorhandler(RequestEntityTooLarge)
+def request_entity_too_large(_exc):
+    flash(_t("حجم الصور كبير جدا. ارفع صورة أو صورتين في كل مرة أو خفف دقة الكاميرا."), "danger")
+    if request.path == "/field-upload":
+        return render_template("field_upload.html", form=request.form), 413
+    return redirect(request.referrer or url_for("ops_home"))
 
 
 def _register_legacy_ticket_endpoints() -> None:

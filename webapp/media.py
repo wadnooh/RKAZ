@@ -47,7 +47,7 @@ ALLOWED_MIME = {
     "application/zip",
     "application/x-zip-compressed",
 }
-MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024
 # توافق مع الاستيرادات القديمة
 MAX_IMAGE_BYTES = MAX_UPLOAD_BYTES
 
@@ -199,7 +199,7 @@ def validate_image(file: FileStorage) -> bytes:
     if not data:
         raise ValueError("الملف فارغ")
     if len(data) > MAX_UPLOAD_BYTES:
-        raise ValueError("حجم الملف يتجاوز 10 ميجابايت")
+        raise ValueError("حجم الملف يتجاوز 25 ميجابايت")
     try:
         file.stream.seek(0)
     except Exception:
