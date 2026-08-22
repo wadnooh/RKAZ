@@ -152,12 +152,22 @@
         </div>
       {% elif ftype == 'image' %}
         <div class="photo-slot">
-          {% if row[key] and row[key].startswith('/media/') %}
-            {% if is_pdf_ref(row[key]) %}
-            <a class="photo-pdf" href="{{ row[key] }}" target="_blank" rel="noopener">{{ _('ملف PDF') }} — {{ _('فتح / تحميل') }}</a>
-            {% else %}
-            <img class="photo-preview" src="{{ row[key] }}" alt="{{ label }}">
-            {% endif %}
+          {% set refs = photo_refs(row[key]) %}
+          {% if refs %}
+            <div class="attachment-list attachment-list--gallery">
+              {% for ref in refs %}
+                {% if is_pdf_ref(ref) %}
+                <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener">
+                  <span>PDF</span>
+                  <em>{{ media_filename(ref) }}</em>
+                </a>
+                {% else %}
+                <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener">
+                  <img src="{{ ref }}" alt="{{ label }}">
+                </a>
+                {% endif %}
+              {% endfor %}
+            </div>
             <input type="hidden" name="{{ key }}" value="{{ row[key] }}">
           {% elif row[key] == 'نعم' %}
             <div class="photo-empty">{{ _('مسجّل سابقاً (نعم) — ارفع صورة أو PDF للتحديث') }}</div>
@@ -166,8 +176,8 @@
             <div class="photo-empty">{{ _('لا توجد صورة أو PDF') }}</div>
             <input type="hidden" name="{{ key }}" value="">
           {% endif %}
-          <input type="file" name="file_{{ key }}" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf">
-          {% if row[key] and (row[key].startswith('/media/') or row[key] == 'نعم') %}
+          <input type="file" name="file_{{ key }}" accept="image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf" multiple>
+          {% if refs or row[key] == 'نعم' %}
           <label class="photo-actions">
             <input type="checkbox" name="clear_{{ key }}" value="1"> {{ _('حذف المرفق الحالي') }}
           </label>

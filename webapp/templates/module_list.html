@@ -163,12 +163,18 @@
             {% if key == 'ticket_no' and r[key] %}
               <a href="{{ url_for('tickets_list', q=r[key]) }}">{{ r[key] }}</a>
             {% elif ftype == 'image' %}
-              {% if r[key] and r[key].startswith('/media/') %}
-                {% if is_pdf_ref(r[key]) %}
-                <a class="photo-pdf-chip" href="{{ r[key] }}" target="_blank" rel="noopener">PDF</a>
-                {% else %}
-                <a href="{{ r[key] }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ r[key] }}" alt="{{ label }}"></a>
-                {% endif %}
+              {% set refs = photo_refs(r[key]) %}
+              {% if refs %}
+              <div class="attachment-list is-compact">
+                {% for ref in refs[:3] %}
+                  {% if is_pdf_ref(ref) %}
+                  <a class="photo-pdf-chip" href="{{ ref }}" target="_blank" rel="noopener">PDF</a>
+                  {% else %}
+                  <a href="{{ ref }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ ref }}" alt="{{ label }}"></a>
+                  {% endif %}
+                {% endfor %}
+                {% if refs|length > 3 %}<span class="badge">+{{ refs|length - 3 }}</span>{% endif %}
+              </div>
               {% elif r[key] == 'نعم' %}
                 <span class="badge ok">{{ _('نعم') }}</span>
               {% else %}

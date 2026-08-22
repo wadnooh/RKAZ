@@ -316,6 +316,7 @@ def inject_globals():
         "is_pdf_ref": media_svc.is_pdf_ref,
         "is_image_ref": media_svc.is_image_ref,
         "attachment_refs": media_svc.attachment_refs,
+        "photo_refs": media_svc.photo_refs,
         "media_filename": media_svc.media_filename,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "ops_custom_tabs": tabs_by_section.get("ops") or [],
@@ -622,9 +623,10 @@ def field_upload():
             location_url = f"https://maps.google.com/?q={latitude},{longitude}"
         uploaded_by_field = {}
         for field in FIELD_UPLOAD_FIELDS:
-            file = request.files.get(f"file_{field}") or request.files.get(field)
-            if file and (file.filename or "").strip():
-                uploaded_by_field[field] = file
+            field_files = request.files.getlist(f"file_{field}") or request.files.getlist(field)
+            field_files = [file for file in field_files if file and (file.filename or "").strip()]
+            if field_files:
+                uploaded_by_field[field] = field_files
         if not ticket_no or not station_no or not identifier_value or identifier_kind not in {"rekaz", "capital"}:
             flash(_t("أكمل رقم العطل ورقم المحطة ورقم ركاز/الرسملة."), "danger")
             return render_template("field_upload.html", form=request.form)
@@ -649,8 +651,13 @@ def field_upload():
             ).fetchone()
             photo_data = {field: ((existing_photo[field] if existing_photo else "") or "") for field in FIELD_UPLOAD_FIELDS}
             saved_labels = []
-            for field, file in uploaded_by_field.items():
-                photo_data[field] = media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no)
+            uploaded_count = 0
+            for field, field_files in uploaded_by_field.items():
+                refs = media_svc.photo_refs(photo_data.get(field))
+                for file in field_files:
+                    refs.append(media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no))
+                    uploaded_count += 1
+                photo_data[field] = media_svc.encode_attachment_refs(refs)
                 saved_labels.append(FIELD_UPLOAD_LABELS.get(field, field))
             notes = " / ".join(
                 x
@@ -709,11 +716,11 @@ def field_upload():
             "رفع ميداني",
             "صور الأعطال",
             ticket_id,
-            f"{ticket.get('ticket_no') or ticket_no} / {ticket.get('rekaz_code') or ''} / صور {len(uploaded_by_field)}",
+            f"{ticket.get('ticket_no') or ticket_no} / {ticket.get('rekaz_code') or ''} / صور {uploaded_count}",
         )
         _after_data_change()
         flash(_t("تم رفع الصور وربطها بالعطل. يمكن لموظف المكتب إكمال باقي التفاصيل."), "ok")
-        return render_template("field_upload.html", form={}, saved_ticket=ticket, created=created, uploaded_count=len(uploaded_by_field))
+        return render_template("field_upload.html", form={}, saved_ticket=ticket, created=created, uploaded_count=uploaded_count)
     return render_template("field_upload.html", form={})
 
 

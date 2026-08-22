@@ -85,12 +85,14 @@
       <span class="badge">{{ p.complete }}</span>
     </div>
     <div class="attachment-list attachment-list--gallery">
-      {% for ref in [p.before_shot, p.during_shot, p.after_shot, p.quantities_shot, p.location_shot] if ref %}
-        {% if is_image_ref(ref) %}
-        <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
-        {% elif is_pdf_ref(ref) %}
-        <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>PDF</span><em>{{ media_filename(ref) }}</em></a>
-        {% endif %}
+      {% for field_value in [p.before_shot, p.during_shot, p.after_shot, p.quantities_shot, p.location_shot] %}
+        {% for ref in photo_refs(field_value) %}
+          {% if is_image_ref(ref) %}
+          <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
+          {% elif is_pdf_ref(ref) %}
+          <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>PDF</span><em>{{ media_filename(ref) }}</em></a>
+          {% endif %}
+        {% endfor %}
       {% endfor %}
       {% for ref in attachment_refs(p.attachments) %}
         {% if is_image_ref(ref) %}

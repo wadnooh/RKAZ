@@ -115,7 +115,7 @@ def photo_field_filled(value: str | None) -> bool:
         return False
     if v == "نعم":
         return True
-    return is_media_ref(v)
+    return bool(photo_refs(v))
 
 
 def photos_complete(row: dict) -> bool:
@@ -157,6 +157,10 @@ def attachment_refs(value) -> list[str]:
     if isinstance(parsed, list):
         return [str(v).strip() for v in parsed if is_media_ref(str(v).strip())]
     return []
+
+
+def photo_refs(value) -> list[str]:
+    return attachment_refs(value)
 
 
 def encode_attachment_refs(refs: list[str]) -> str:
@@ -344,15 +348,21 @@ def apply_photo_uploads(
     clears = clear_flags or {}
     for field in PHOTO_FIELDS:
         existing = (form_data.get(field) or "").strip()
-        uploaded = None
+        existing_refs = [] if clears.get(field) else photo_refs(existing)
+        uploaded_files = []
         if files is not None:
-            uploaded = files.get(f"file_{field}") or files.get(field)
-        has_file = bool(uploaded and (uploaded.filename or "").strip())
+            uploaded_files = files.getlist(f"file_{field}") or files.getlist(field)
+        upload_count = 0
+        for uploaded in uploaded_files:
+            if uploaded and (uploaded.filename or "").strip():
+                existing_refs.append(save_photo(uploaded, field=field, ticket_no=tno))
+                upload_count += 1
+        has_file = upload_count > 0
         if clears.get(field) and not has_file:
             form_data[field] = ""
             continue
         if has_file:
-            form_data[field] = save_photo(uploaded, field=field, ticket_no=tno)
+            form_data[field] = encode_attachment_refs(existing_refs)
             continue
         form_data[field] = existing
 

@@ -82,7 +82,7 @@
       <div class="field-upload__photo-slots">
         {% for key, label in [('before_shot', _('قبل')), ('during_shot', _('أثناء')), ('after_shot', _('بعد')), ('quantities_shot', _('كميات')), ('location_shot', _('موقع'))] %}
         <label class="field-upload__slot">
-          <input type="file" name="file_{{ key }}" accept="image/*" capture="environment" data-label="{{ label }}">
+          <input type="file" name="file_{{ key }}" accept="image/*" capture="environment" multiple data-label="{{ label }}">
           <span class="field-upload__slot-icon">+</span>
           <span class="field-upload__slot-label">{{ label }}</span>
         </label>
@@ -135,14 +135,14 @@
   }
 
   function renderFile(input) {
-    var file = input && input.files && input.files[0];
+    var count = input && input.files ? input.files.length : 0;
     var slot = input ? input.closest(".field-upload__slot") : null;
-    if (slot) slot.classList.toggle("has-file", !!file);
-    var selected = files.filter(function (item) {
-      return item.files && item.files.length;
-    });
+    if (slot) slot.classList.toggle("has-file", count > 0);
+    var selectedCount = files.reduce(function (total, item) {
+      return total + (item.files ? item.files.length : 0);
+    }, 0);
     if (status) {
-      status.textContent = selected.length ? selected.length + " " + {{ _('صورة جاهزة للحفظ')|tojson }} : {{ _('اختر صورة واحدة على الأقل')|tojson }};
+      status.textContent = selectedCount ? selectedCount + " " + {{ _('صورة جاهزة للحفظ')|tojson }} : {{ _('اختر صورة واحدة على الأقل')|tojson }};
     }
     captureLocation();
   }
