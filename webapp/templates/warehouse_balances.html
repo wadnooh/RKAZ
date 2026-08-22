@@ -123,7 +123,7 @@
           <th>{{ _('منصرف') }}</th>
           <th>{{ _('الرصيد') }}</th>
           <th>{{ _('حد أدنى') }}</th>
-          <th></th>
+          <th>{{ _('الحركات') }}</th>
         </tr>
       </thead>
       <tbody>
@@ -143,6 +143,7 @@
           </td>
           <td>{{ r.min_qty or 0 }}</td>
           <td class="actions">
+            <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', item_no=r.item_no) }}">{{ _('تتبع') }} ({{ r.tx_count or 0 }})</a>
             {% if r.tickets %}
               {% for t in r.tickets[:3] %}
               <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=t) }}">{{ t }}</a>

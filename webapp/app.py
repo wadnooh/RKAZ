@@ -3336,6 +3336,8 @@ def _load_module_list_rows(name, module):
     if name == "warehouse_tx":
         db.backfill_warehouse_tx_sources()
         db.enrich_warehouse_txs_work_order(rows)
+        for r in rows:
+            r["unit"] = db.normalize_warehouse_unit(r.get("unit"))
     if name == "warehouse_items":
         for r in rows:
             r["balance"] = db.warehouse_balance(r.get("item_no"))
@@ -4383,6 +4385,7 @@ def warehouse_balances():
     items = db.rows_to_dicts(conn.execute("SELECT * FROM warehouse_items ORDER BY item_no").fetchall())
     conn.close()
     for item in items:
+        item["unit"] = db.normalize_warehouse_unit(item.get("unit"))
         detail = db.warehouse_balance_detail(item.get("item_no"))
         item.update(detail)
     if q:

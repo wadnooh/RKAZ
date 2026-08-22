@@ -253,7 +253,7 @@ def import_items_from_excel(file_storage) -> dict:
             continue
         if not item_no:
             item_no = f"AUTO-{i}"
-        unit = _cell(row, inv.get("unit")) or "عدد"
+        unit = db.normalize_warehouse_unit(_cell(row, inv.get("unit")) or "عدد")
         category = _cell(row, inv.get("category")) or "مواد كهربائية"
         min_qty = _to_float(_cell(row, inv.get("min_qty")) if "min_qty" in inv else None) or 0
         notes = _cell(row, inv.get("notes"))
@@ -369,7 +369,7 @@ def import_tx_from_excel(file_storage) -> dict:
             ).fetchone()
         if not item:
             item_no = item_no or f"AUTO-TX-{i}"
-            unit = _cell(row, inv.get("unit")) or "عدد"
+            unit = db.normalize_warehouse_unit(_cell(row, inv.get("unit")) or "عدد")
             conn.execute(
                 """
                 INSERT INTO warehouse_items(item_no, item_name, unit, category, min_qty, notes)
@@ -386,7 +386,7 @@ def import_tx_from_excel(file_storage) -> dict:
             if not item_name:
                 item_name = item["item_name"]
 
-        unit = _cell(row, inv.get("unit")) or (item["unit"] if item else "عدد")
+        unit = db.normalize_warehouse_unit(_cell(row, inv.get("unit")) or (item["unit"] if item else "عدد"))
         tx_type = _cell(row, inv.get("tx_type")) or "وارد من الكهرباء"
         ticket_no = _cell(row, inv.get("ticket_no"))
         work_order = _cell(row, inv.get("work_order"))

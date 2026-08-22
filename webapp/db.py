@@ -699,6 +699,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             n_scrub = scrub_ticket_numbers_from_warehouse_work_orders(conn)
             if n_scrub:
                 created.append(f"warehouse_tx.work_order_scrub:{n_scrub}")
+            n_units = normalize_warehouse_length_units_once(conn)
+            if n_units:
+                created.append(f"warehouse.length_units_normalized:{n_units}")
         if "safety_permits" in existing or "safety_permits" in created:
             if _ensure_column(conn, "safety_permits", "work_order"):
                 created.append("safety_permits.work_order")
@@ -1284,6 +1287,7 @@ def init_db():
     _ensure_column(conn, "warehouse_tx", "work_order")
     backfill_warehouse_tx_sources(conn)
     backfill_warehouse_tx_work_orders(conn)
+    normalize_warehouse_length_units_once(conn)
     for boq_table in ("boq_items", "contract_boq_items"):
         for col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
             _ensure_column(conn, boq_table, col)
@@ -3413,6 +3417,77 @@ def quality_hub_year_options(conn=None) -> list[str]:
     return sorted(years, reverse=True)
 
 
+def normalize_warehouse_unit(unit) -> str:
+    value = str(unit or "").strip()
+    if not value:
+        return ""
+    compact = (
+        value.casefold()
+        .replace(" ", "")
+        .replace(".", "")
+        .replace("-", "")
+        .replace("_", "")
+    )
+    kilometer_words = {
+        "km",
+        "kms",
+        "kilometer",
+        "kilometers",
+        "kilometre",
+        "kilometres",
+    }
+    meter_words = {"m", "meter", "meters", "metre", "metres"}
+    if compact in kilometer_words or ("\u0643\u064a\u0644\u0648" in value and "\u0645\u062a\u0631" in value):
+        return "M"
+    if compact in meter_words or value in {"\u0645", "\u0645\u062a\u0631"}:
+        return "M"
+    return value
+
+
+def normalize_warehouse_length_units_once(conn=None) -> int:
+    own = conn is None
+    conn = conn or connect()
+    changed = 0
+    try:
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        for table in (
+            "warehouse_items",
+            "warehouse_tx",
+            "boq_items",
+            "contract_boq_items",
+            "ticket_boq_lines",
+            "external_purchase_lines",
+            "contractor_supply_lines",
+        ):
+            if table not in tables:
+                continue
+            cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+            if "unit" not in cols:
+                continue
+            cur = conn.execute(
+                f"""
+                UPDATE {table}
+                SET unit='M'
+                WHERE lower(trim(coalesce(unit,''))) IN (
+                    'km', 'k.m', 'kms', 'kilometer', 'kilometers', 'kilometre', 'kilometres'
+                )
+                   OR unit LIKE '%\u0643\u064a\u0644\u0648%\u0645\u062a\u0631%'
+                """
+            )
+            changed += int(cur.rowcount or 0)
+        if own:
+            conn.commit()
+        return changed
+    finally:
+        if own:
+            conn.close()
+
+
 def warehouse_tx_sign(tx_type: str) -> int:
     """+1 وارد، -1 منصرف/إرجاع، 0 غير معروف."""
     t = tx_type or ""
@@ -3780,12 +3855,20 @@ def warehouse_balance(item_no):
 def warehouse_balance_detail(item_no):
     conn = connect()
     rows = conn.execute(
-        "SELECT tx_type, qty, ticket_no FROM warehouse_tx WHERE lower(item_no)=lower(?)",
+        """
+        SELECT id, voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+               ticket_no, rekaz_code, source_section, source_ref, work_order,
+               sender, recipient, notes
+        FROM warehouse_tx
+        WHERE lower(item_no)=lower(?)
+        ORDER BY tx_date DESC, id DESC
+        """,
         (item_no or "",),
     ).fetchall()
     conn.close()
     inbound = outbound = 0.0
     tickets = set()
+    movements = []
     for r in rows:
         qty = float(r["qty"] or 0)
         sign = warehouse_tx_sign(r["tx_type"])
@@ -3795,12 +3878,21 @@ def warehouse_balance_detail(item_no):
             outbound += qty
         if r["ticket_no"]:
             tickets.add(r["ticket_no"])
+        movements.append(
+            {
+                **dict(r),
+                "unit": normalize_warehouse_unit(r["unit"]),
+                "sign": sign,
+                "signed_qty": qty * sign,
+            }
+        )
     return {
         "balance": inbound - outbound,
         "inbound": inbound,
         "outbound": outbound,
         "tx_count": len(rows),
         "tickets": sorted(tickets),
+        "movements": movements,
     }
 
 
@@ -4114,7 +4206,7 @@ def add_purchase_line(
             po["purchase_no"] or "",
             item["item_no"],
             item["item_name"] or "",
-            item["unit"] or "",
+            normalize_warehouse_unit(item["unit"] or ""),
             q,
             price,
             line_total,
@@ -4204,7 +4296,7 @@ def receive_purchase_to_warehouse(purchase_id: int, conn=None) -> dict:
                 tx_type,
                 ln.get("item_no") or "",
                 ln.get("item_name") or "",
-                ln.get("unit") or "",
+                normalize_warehouse_unit(ln.get("unit") or ""),
                 float(ln.get("qty") or 0),
                 "المستودع",
                 po.get("supplier") or "مشتريات خارجية",
@@ -4343,7 +4435,7 @@ def add_contractor_supply_line(
             row["supply_no"] or "",
             item["item_no"],
             item["item_name"] or "",
-            item["unit"] or "",
+            normalize_warehouse_unit(item["unit"] or ""),
             q,
             price,
             line_total,
@@ -4424,7 +4516,7 @@ def receive_contractor_supply_to_warehouse(supply_id: int, conn=None) -> dict:
                 tx_type,
                 ln.get("item_no") or "",
                 ln.get("item_name") or "",
-                ln.get("unit") or "",
+                normalize_warehouse_unit(ln.get("unit") or ""),
                 float(ln.get("qty") or 0),
                 "المستودع",
                 header.get("contractor") or "مقاول",
@@ -4474,6 +4566,7 @@ def enrich_warehouse_tx_from_item(data: dict) -> dict:
             data["item_name"] = item["item_name"]
         if not data.get("unit"):
             data["unit"] = item["unit"]
+    data["unit"] = normalize_warehouse_unit(data.get("unit"))
     return data
 
 
