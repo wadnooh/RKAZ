@@ -535,6 +535,13 @@ FIELD_UPLOAD_FIELDS = (
     "quantities_shot",
     "location_shot",
 )
+FIELD_UPLOAD_LABELS = {
+    "before_shot": "قبل",
+    "during_shot": "أثناء",
+    "after_shot": "بعد",
+    "quantities_shot": "كميات",
+    "location_shot": "موقع",
+}
 
 
 def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_kind: str, identifier_value: str, work_kind: str, location_url: str = "") -> tuple[int, dict, bool]:
@@ -604,15 +611,16 @@ def field_upload():
         location_url = ""
         if latitude and longitude:
             location_url = f"https://maps.google.com/?q={latitude},{longitude}"
-        uploaded = [f for f in request.files.getlist("photos") if f and (f.filename or "").strip()]
+        uploaded_by_field = {}
+        for field in FIELD_UPLOAD_FIELDS:
+            file = request.files.get(f"file_{field}") or request.files.get(field)
+            if file and (file.filename or "").strip():
+                uploaded_by_field[field] = file
         if not ticket_no or not station_no or not identifier_value or identifier_kind not in {"rekaz", "capital"}:
             flash(_t("أكمل رقم العطل ورقم المحطة ورقم ركاز/الرسملة."), "danger")
             return render_template("field_upload.html", form=request.form)
-        if not uploaded:
+        if not uploaded_by_field:
             flash(_t("اختر صورة واحدة على الأقل من الكاميرا أو الهاتف."), "danger")
-            return render_template("field_upload.html", form=request.form)
-        if len(uploaded) > len(FIELD_UPLOAD_FIELDS):
-            flash(_t("يمكن رفع 5 صور كحد أقصى في العملية الواحدة."), "danger")
             return render_template("field_upload.html", form=request.form)
         conn = db.connect()
         try:
@@ -625,33 +633,61 @@ def field_upload():
                 work_kind=work_kind,
                 location_url=location_url,
             )
-            photo_data = {field: "" for field in FIELD_UPLOAD_FIELDS}
-            for idx, file in enumerate(uploaded):
-                field = FIELD_UPLOAD_FIELDS[idx]
-                photo_data[field] = media_svc.save_photo(file, field=field, ticket_no=ticket_no)
-            conn.execute(
-                """
-                INSERT INTO photos(ticket_no, before_shot, during_shot, after_shot, quantities_shot, location_shot, notes)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    ticket_no,
-                    photo_data["before_shot"],
-                    photo_data["during_shot"],
-                    photo_data["after_shot"],
-                    photo_data["quantities_shot"],
-                    photo_data["location_shot"],
-                    " / ".join(
-                        x
-                        for x in [
-                            f"رفع ميداني بواسطة {current_user_name()}",
-                            f"الإحداثيات: {location_url}" if location_url else "",
-                            f"دقة الموقع: {accuracy} متر" if accuracy else "",
-                        ]
-                        if x
-                    ),
-                ),
+            canonical_ticket_no = (ticket.get("ticket_no") or ticket_no).strip()
+            existing_photo = conn.execute(
+                "SELECT * FROM photos WHERE ticket_no=? ORDER BY id DESC LIMIT 1",
+                (canonical_ticket_no,),
+            ).fetchone()
+            photo_data = {field: ((existing_photo[field] if existing_photo else "") or "") for field in FIELD_UPLOAD_FIELDS}
+            saved_labels = []
+            for field, file in uploaded_by_field.items():
+                photo_data[field] = media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no)
+                saved_labels.append(FIELD_UPLOAD_LABELS.get(field, field))
+            notes = " / ".join(
+                x
+                for x in [
+                    f"رفع ميداني بواسطة {current_user_name()}",
+                    f"تم تحديث: {', '.join(saved_labels)}" if saved_labels else "",
+                    f"الإحداثيات: {location_url}" if location_url else "",
+                    f"دقة الموقع: {accuracy} متر" if accuracy else "",
+                ]
+                if x
             )
+            if existing_photo:
+                existing_notes = (existing_photo["notes"] or "").strip()
+                notes = f"{existing_notes}\n{notes}".strip() if existing_notes else notes
+                conn.execute(
+                    """
+                    UPDATE photos
+                    SET before_shot=?, during_shot=?, after_shot=?, quantities_shot=?, location_shot=?, notes=?
+                    WHERE id=?
+                    """,
+                    (
+                        photo_data["before_shot"],
+                        photo_data["during_shot"],
+                        photo_data["after_shot"],
+                        photo_data["quantities_shot"],
+                        photo_data["location_shot"],
+                        notes,
+                        existing_photo["id"],
+                    ),
+                )
+            else:
+                conn.execute(
+                    """
+                    INSERT INTO photos(ticket_no, before_shot, during_shot, after_shot, quantities_shot, location_shot, notes)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        canonical_ticket_no,
+                        photo_data["before_shot"],
+                        photo_data["during_shot"],
+                        photo_data["after_shot"],
+                        photo_data["quantities_shot"],
+                        photo_data["location_shot"],
+                        notes,
+                    ),
+                )
             conn.commit()
         except Exception as exc:
             conn.rollback()
@@ -664,11 +700,11 @@ def field_upload():
             "رفع ميداني",
             "صور الأعطال",
             ticket_id,
-            f"{ticket_no} / {ticket.get('rekaz_code') or ''} / صور {len(uploaded)}",
+            f"{ticket.get('ticket_no') or ticket_no} / {ticket.get('rekaz_code') or ''} / صور {len(uploaded_by_field)}",
         )
         _after_data_change()
         flash(_t("تم رفع الصور وربطها بالعطل. يمكن لموظف المكتب إكمال باقي التفاصيل."), "ok")
-        return render_template("field_upload.html", form={}, saved_ticket=ticket, created=created, uploaded_count=len(uploaded))
+        return render_template("field_upload.html", form={}, saved_ticket=ticket, created=created, uploaded_count=len(uploaded_by_field))
     return render_template("field_upload.html", form={})
 
 
