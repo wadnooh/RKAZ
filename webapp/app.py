@@ -989,7 +989,7 @@ def contractors_home():
 @app.route("/quality")
 @login_required
 def quality_home():
-    """مركز التنسيقات والجودة — واجهة بأسلوب رسملة (تبويبات / فلاتر / تقارير)."""
+    """مركز التنسيقات والجودة — واجهة مستقلة للتبويبات والفلاتر والتقارير."""
     tab = (request.args.get("tab") or "new_coords").strip().lower()
     if tab not in ("permits", "new_coords", "evacuations"):
         tab = "new_coords"
@@ -1109,7 +1109,7 @@ def quality_home():
 
     page_title = _t("التنسيقات والجودة") + " - " + current_tab_label
     page_subtitle = _t(
-        "واجهة متابعة التنسيقات والرخص والإخلاءات — بنفس هيكل رسملة: تبويبات وتصنيفات وتقرير موحد."
+        "واجهة متابعة التنسيقات والرخص والإخلاءات — تبويبات وتصنيفات وتقرير موحد."
     )
 
     # بطاقات الملخص لغير وضع الرخص (الرخص لها quality-metric-row الخاصة)

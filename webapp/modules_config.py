@@ -278,7 +278,7 @@ MODULES = {
         "hub_hidden": True,
         "fields": [
             ("license_no", "رقم الرخصة", "text"),
-            ("rtc_no", "رقم رسملة / RTC", "text"),
+            ("rtc_no", "رقم مرجع / RTC", "text"),
             ("work_order", "أمر العمل", "text"),
             ("issue_date", "تاريخ الإصدار", "date"),
             ("expiry_date", "تاريخ الانتهاء", "date"),
