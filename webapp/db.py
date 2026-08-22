@@ -2130,6 +2130,7 @@ def get_lists(conn=None):
     # تُدرج القيم الناقصة بترتيب DEFAULT_LISTS قدر الإمكان
     obsolete = {
         "license_workflow": {"من هنا تبدأ رحلة الإخلاءات"},
+        "user_roles": {"مراقب", "المواقع"},
     }
     for key, defaults in DEFAULT_LISTS.items():
         current = data.get(key) or []
