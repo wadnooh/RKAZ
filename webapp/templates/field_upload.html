@@ -44,6 +44,9 @@
   {% endif %}
 
   <form method="post" enctype="multipart/form-data" class="field-upload__form" id="fieldUploadForm">
+    <input type="hidden" name="latitude" id="fieldLatitude" value="{{ form.get('latitude', '') }}">
+    <input type="hidden" name="longitude" id="fieldLongitude" value="{{ form.get('longitude', '') }}">
+    <input type="hidden" name="accuracy" id="fieldAccuracy" value="{{ form.get('accuracy', '') }}">
     <div class="field-upload__grid">
       <label class="field-upload__field">
         <span>{{ _('رقم العطل') }}</span>
@@ -84,6 +87,10 @@
       <div class="field-upload__status" id="fieldPhotoStatus">{{ _('لم يتم اختيار صور') }}</div>
       <div class="field-upload__preview" id="fieldPhotoPreview"></div>
     </div>
+    <div class="field-upload__location">
+      <button class="btn ghost" type="button" id="fieldLocationButton">{{ _('تحديث الموقع') }}</button>
+      <span id="fieldLocationStatus">{{ _('جاري تحديد الموقع') }}</span>
+    </div>
 
     <button class="btn primary field-upload__submit" type="submit">{{ _('حفظ المرفقات') }}</button>
   </form>
@@ -98,6 +105,11 @@
   var preview = document.getElementById("fieldPhotoPreview");
   var kind = document.getElementById("fieldIdentifierKind");
   var label = document.getElementById("fieldIdentifierLabel");
+  var latitude = document.getElementById("fieldLatitude");
+  var longitude = document.getElementById("fieldLongitude");
+  var accuracy = document.getElementById("fieldAccuracy");
+  var locationButton = document.getElementById("fieldLocationButton");
+  var locationStatus = document.getElementById("fieldLocationStatus");
 
   function updateLabel() {
     if (!label || !kind) return;
@@ -132,6 +144,34 @@
     if (selected.length > 5) {
       status.textContent = {{ _('اختر 5 صور كحد أقصى')|tojson }};
     }
+    captureLocation();
+  }
+
+  function setLocationStatus(text, ok) {
+    if (!locationStatus) return;
+    locationStatus.textContent = text;
+    locationStatus.classList.toggle("is-ok", !!ok);
+  }
+
+  function captureLocation() {
+    if (!navigator.geolocation) {
+      setLocationStatus({{ _('الموقع غير مدعوم في هذا الجهاز')|tojson }}, false);
+      return;
+    }
+    setLocationStatus({{ _('جاري تحديد الموقع')|tojson }}, false);
+    navigator.geolocation.getCurrentPosition(function (position) {
+      var coords = position.coords || {};
+      if (latitude) latitude.value = coords.latitude || "";
+      if (longitude) longitude.value = coords.longitude || "";
+      if (accuracy) accuracy.value = coords.accuracy ? Math.round(coords.accuracy) : "";
+      setLocationStatus({{ _('تم التقاط الإحداثيات')|tojson }}, true);
+    }, function () {
+      setLocationStatus({{ _('تعذر تحديد الموقع، يمكن الحفظ بدون إحداثيات')|tojson }}, false);
+    }, {
+      enableHighAccuracy: true,
+      timeout: 12000,
+      maximumAge: 60000
+    });
   }
 
   if (kind) kind.addEventListener("change", updateLabel);
@@ -142,8 +182,10 @@
     });
   }
   if (files) files.addEventListener("change", renderFiles);
+  if (locationButton) locationButton.addEventListener("click", captureLocation);
   updateLabel();
   maybeOpenPicker();
+  captureLocation();
 })();
 </script>
 </body>

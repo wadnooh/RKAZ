@@ -1015,7 +1015,7 @@ _ROLE_PERMS = {'admin': {'api.access',
           'tickets.read',
           'tickets.write'}}
 
-_ROLE_PERMS["المواقع"] = {
+_ROLE_PERMS["مراقبي المواقع"] = {
     "button.logout",
     "button.module.photos.add",
     "button.module.photos.edit",
@@ -1024,6 +1024,8 @@ _ROLE_PERMS["المواقع"] = {
     "section.ops",
     "tickets.write",
 }
+_ROLE_PERMS.pop("مراقب", None)
+_ROLE_PERMS.pop("المواقع", None)
 
 # مرادفات أدوار إن وُجدت بصيغ أخرى
 _ROLE_ALIASES = {
@@ -1034,24 +1036,24 @@ _ROLE_ALIASES = {
     "مدير النظام": "admin",
     "supervisor": "مشرف",
     "dataentry": "مدخل بيانات",
-    "field": "المواقع",
-    "field_user": "المواقع",
-    "site": "المواقع",
-    "sites": "المواقع",
-    "موقع": "المواقع",
-    "مراقب موقع": "المواقع",
-    "viewer": "مراقب",
-    "readonly": "مراقب",
+    "field": "مراقبي المواقع",
+    "field_user": "مراقبي المواقع",
+    "site": "مراقبي المواقع",
+    "sites": "مراقبي المواقع",
+    "موقع": "مراقبي المواقع",
+    "المواقع": "مراقبي المواقع",
+    "مراقب": "مراقبي المواقع",
+    "مراقب موقع": "مراقبي المواقع",
+    "viewer": "مراقبي المواقع",
+    "readonly": "مراقبي المواقع",
 }
 
 
 def normalize_role(role: str | None) -> str:
     role = (role or "").strip()
     if not role:
-        return "مراقب"
-    if role in _ROLE_PERMS:
-        return role
-    return _ROLE_ALIASES.get(role, role if role in _ROLE_PERMS else "مراقب")
+        return "مراقبي المواقع"
+    return _ROLE_ALIASES.get(role, role if role in _ROLE_PERMS else "مراقبي المواقع")
 
 
 def perms_for_role(role: str | None) -> set[str]:

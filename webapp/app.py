@@ -503,7 +503,7 @@ def login():
             session["role"] = permissions.normalize_role(user["role"])
         session["lang"] = saved_lang
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
-        default_next = url_for("field_upload") if session.get("role") == "المواقع" else url_for("ops_home")
+        default_next = url_for("field_upload") if session.get("role") == "مراقبي المواقع" else url_for("ops_home")
         nxt = request.args.get("next") or default_next
         if not str(nxt).startswith("/") or nxt in {"/", "/login"}:
             nxt = url_for("ops_home")
@@ -537,7 +537,7 @@ FIELD_UPLOAD_FIELDS = (
 )
 
 
-def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_kind: str, identifier_value: str, work_kind: str) -> tuple[int, dict, bool]:
+def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_kind: str, identifier_value: str, work_kind: str, location_url: str = "") -> tuple[int, dict, bool]:
     ticket = db.resolve_ticket_ref(ticket_no, conn)
     today = datetime.now().strftime("%Y-%m-%d")
     notes_piece = f"رفع ميداني: {work_kind}"
@@ -545,8 +545,12 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_ki
         notes_piece += f" / رقم الرسملة: {identifier_value}"
     elif identifier_value:
         notes_piece += f" / رقم ركاز: {identifier_value}"
+    if location_url:
+        notes_piece += f" / الإحداثيات: {location_url}"
     if ticket:
         updates = {"station_no": station_no, "photographed": "نعم"}
+        if location_url:
+            updates["location"] = location_url
         if identifier_kind == "rekaz" and identifier_value:
             updates["rekaz_code"] = identifier_value
         if identifier_kind == "capital" and identifier_value:
@@ -567,16 +571,17 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_ki
         rekaz_code = db.next_series_code("er", conn)
     cur = conn.execute(
         """
-        INSERT INTO tickets(ticket_no, rekaz_code, receive_date, station_no, status, photographed, work_order, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO tickets(ticket_no, rekaz_code, receive_date, station_no, location, status, photographed, work_order, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (ticket_no, rekaz_code, today, station_no, "تم الإسناد", "نعم", work_order, notes_piece),
+        (ticket_no, rekaz_code, today, station_no, location_url, "تم الإسناد", "نعم", work_order, notes_piece),
     )
     ticket = {
         "id": cur.lastrowid,
         "ticket_no": ticket_no,
         "rekaz_code": rekaz_code,
         "station_no": station_no,
+        "location": location_url,
         "work_order": work_order,
     }
     return cur.lastrowid, ticket, True
@@ -593,6 +598,12 @@ def field_upload():
         identifier_kind = (request.form.get("identifier_kind") or "rekaz").strip()
         identifier_value = (request.form.get("identifier_value") or "").strip()
         work_kind = (request.form.get("work_kind") or "").strip()
+        latitude = (request.form.get("latitude") or "").strip()
+        longitude = (request.form.get("longitude") or "").strip()
+        accuracy = (request.form.get("accuracy") or "").strip()
+        location_url = ""
+        if latitude and longitude:
+            location_url = f"https://maps.google.com/?q={latitude},{longitude}"
         uploaded = [f for f in request.files.getlist("photos") if f and (f.filename or "").strip()]
         if not ticket_no or not station_no or not identifier_value or identifier_kind not in {"rekaz", "capital"}:
             flash(_t("أكمل رقم العطل ورقم المحطة ورقم ركاز/الرسملة."), "danger")
@@ -612,6 +623,7 @@ def field_upload():
                 identifier_kind=identifier_kind,
                 identifier_value=identifier_value,
                 work_kind=work_kind,
+                location_url=location_url,
             )
             photo_data = {field: "" for field in FIELD_UPLOAD_FIELDS}
             for idx, file in enumerate(uploaded):
@@ -629,7 +641,15 @@ def field_upload():
                     photo_data["after_shot"],
                     photo_data["quantities_shot"],
                     photo_data["location_shot"],
-                    f"رفع ميداني بواسطة {current_user_name()}",
+                    " / ".join(
+                        x
+                        for x in [
+                            f"رفع ميداني بواسطة {current_user_name()}",
+                            f"الإحداثيات: {location_url}" if location_url else "",
+                            f"دقة الموقع: {accuracy} متر" if accuracy else "",
+                        ]
+                        if x
+                    ),
                 ),
             )
             conn.commit()
