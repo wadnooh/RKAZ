@@ -1614,10 +1614,14 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
 
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
+    department_filter = (request.args.get("department") or "").strip()
     conn = db.connect()
     tx_count = db.count_warehouse_tx_by_source(source, conn)
     tx_rows = []
     rows = []
+    reinforcement_departments = []
+    if view == "reinforcement" or source == "reinforcement":
+        reinforcement_departments = db.list_reinforcement_departments(active_only=False, conn=conn)
 
     if view == "movements":
         tx_rows = db.rows_to_dicts(
@@ -1683,20 +1687,17 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             r["status"] = db.normalize_ticket_status(r.get("status"))
             r["wh_count"] = cmap.get(str(r.get("ticket_no") or ""), 0)
     elif view == "reinforcement":
-        rows = db.rows_to_dicts(
-            conn.execute("SELECT * FROM reinforcement_works ORDER BY id DESC").fetchall()
-        )
+        sql = "SELECT * FROM reinforcement_works WHERE 1=1"
+        params = []
+        if department_filter:
+            sql += " AND department=?"
+            params.append(department_filter)
         if q:
-            ql = q.lower()
-            rows = [
-                r
-                for r in rows
-                if ql in (r.get("work_no") or "").lower()
-                or ql in (r.get("department") or "").lower()
-                or ql in (r.get("location") or "").lower()
-                or ql in (r.get("work_type") or "").lower()
-                or ql in (r.get("ticket_no") or "").lower()
-            ]
+            sql += " AND (work_no LIKE ? OR department LIKE ? OR location LIKE ? OR work_type LIKE ? OR ticket_no LIKE ? OR status LIKE ?)"
+            like = f"%{q}%"
+            params.extend([like, like, like, like, like, like])
+        sql += " ORDER BY id DESC"
+        rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
         cmap = _warehouse_tx_count_map("reinforcement", conn)
         for r in rows:
             r["wh_count"] = cmap.get(str(r.get("work_no") or ""), 0)
@@ -1761,7 +1762,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             date_keys=("order_date",),
             detail_key="work_order",
         )
-    elif view == "works":
+    elif view in ("works", "reinforcement"):
         summary_cards = build_list_summary_cards(
             rows,
             count_label=_t("عدد المعاملات"),
@@ -1769,6 +1770,32 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             date_keys=("work_date",),
             detail_key="work_no",
         )
+        if view == "reinforcement":
+            active_depts = sum(
+                1
+                for d in reinforcement_departments
+                if (d.get("status") or "") not in ("موقوف", "لا")
+            )
+            summary_cards = [
+                _summary_card(_t("عدد الأقسام"), len(reinforcement_departments), _t("أقسام التعزيز")),
+                _summary_card(_t("أقسام نشطة"), active_depts, _t("جاهزة لحركات المستودع")),
+                _summary_card(_t("عدد المعاملات"), len(rows), _t("حسب الفلتر الحالي")),
+                _summary_card(
+                    _t("حركات المواد"),
+                    sum(int(r.get("wh_count") or 0) for r in rows),
+                    _t("مرتبطة بمعاملات التعزيز المعروضة"),
+                ),
+                _summary_card(
+                    _t("آخر معاملة"),
+                    ((_latest_row(rows, "work_date") or {}).get("work_no") or "—"),
+                    ((_latest_row(rows, "work_date") or {}).get("department") or _t("تفاصيل أحدث حركة")),
+                ),
+                _summary_card(
+                    _t("تاريخ آخر حركة"),
+                    ((_latest_row(rows, "work_date") or {}).get("work_date") or "—"),
+                    _t("أحدث تاريخ في القائمة"),
+                ),
+            ]
     elif view == "projects":
         summary_cards = build_list_summary_cards(
             rows,
@@ -1806,6 +1833,8 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         view=view,
         q=q,
         status=status,
+        department_filter=department_filter,
+        reinforcement_departments=reinforcement_departments,
         rows=rows,
         tx_rows=tx_rows,
         tx_count=tx_count,

@@ -206,16 +206,42 @@
   {% elif view in ['works', 'reinforcement'] %}
   {% set is_reinforcement_work = (view == 'reinforcement' or source == 'reinforcement') %}
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="hidden" name="view" value="works">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أمر العمل / الموقع...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="hidden" name="view" value="{{ 'reinforcement' if is_reinforcement_work else 'works' }}">
+    {% if is_reinforcement_work and department_filter %}<input type="hidden" name="department" value="{{ department_filter }}">{% endif %}
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{% if is_reinforcement_work %}{{ _('بحث برقم أمر العمل / القسم / الموقع / رقم العطل...') }}{% else %}{{ _('بحث برقم أمر العمل / الموقع...') }}{% endif %}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
-    <a class="btn ghost" href="{{ url_for(list_endpoint, view='works') }}">{{ _('مسح') }}</a>
+    <a class="btn ghost" href="{{ url_for(list_endpoint, view='reinforcement' if is_reinforcement_work else 'works', department=department_filter or none) }}">{{ _('مسح') }}</a>
   </form>
+  {% if is_reinforcement_work %}
+  <p class="meta" style="margin-bottom:10px;">{{ _('تفصيل التعزيز والاسكيمات داخل المستودع بنفس أقسام صفحة التعزيز الرئيسية، مع حركات وارد / منصرف / مرتجع لكل معاملة.') }}</p>
+  {% if reinforcement_departments %}
+  <div class="actions" style="margin-bottom:12px;flex-wrap:wrap;" data-tab-strip="1">
+    <a class="btn ghost{% if not department_filter %} primary{% endif %}" href="{{ url_for(list_endpoint, view='reinforcement', q=q or none) }}">{{ _('الكل') }}</a>
+    {% for d in reinforcement_departments %}
+    <a class="btn ghost{% if department_filter == d.dept_name %} primary{% endif %}" href="{{ url_for(list_endpoint, view='reinforcement', department=d.dept_name, q=q or none) }}">{{ d.dept_name }}</a>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
   {% set summary_cards_style = 'margin-bottom:14px;' %}
   {% include "_summary_cards.html" %}
   <div class="table-wrap">
     <table class="table">
       <thead>
+        {% if is_reinforcement_work %}
+        <tr>
+          <th>{{ _('رقم أمر العمل') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('القسم') }}</th>
+          <th>{{ _('نوع العمل') }}</th>
+          <th>{{ _('الموقع') }}</th>
+          <th>{{ _('رقم العطل') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('القيمة') }}</th>
+          <th>{{ _('حركات المواد') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+        {% else %}
         <tr>
           <th>{{ _('رقم أمر العمل') }}</th>
           <th>{{ _('التاريخ') }}</th>
@@ -226,17 +252,30 @@
           <th>{{ _('حركات المواد') }}</th>
           <th>{{ _('إجراءات') }}</th>
         </tr>
+        {% endif %}
       </thead>
       <tbody>
         {% for r in rows %}
         <tr>
+          {% if is_reinforcement_work %}
           <td><strong>{{ r.work_no or '—' }}</strong></td>
           <td>{{ r.work_date or '—' }}</td>
-          <td>{% if is_reinforcement_work %}{{ r.department or '—' }}{% if r.location %} - {{ r.location }}{% endif %}{% else %}{{ r.site or '—' }}{% endif %}</td>
+          <td>{{ r.department or '—' }}</td>
+          <td>{{ r.work_type or '—' }}</td>
+          <td>{{ r.location or '—' }}</td>
+          <td>{{ r.ticket_no or '—' }}</td>
+          <td>{{ tv(r.status) if r.status else '—' }}</td>
+          <td>{{ r.value|money if r.value is not none else '—' }}</td>
+          <td><span class="badge info">{{ r.wh_count or 0 }}</span></td>
+          {% else %}
+          <td><strong>{{ r.work_no or '—' }}</strong></td>
+          <td>{{ r.work_date or '—' }}</td>
+          <td>{{ r.site or '—' }}</td>
           <td>{{ r.work_type or '—' }}</td>
           <td>{{ tv(r.status) if r.status else '—' }}</td>
           <td>{{ r.value|money if r.value is not none else '—' }}</td>
           <td><span class="badge info">{{ r.wh_count or 0 }}</span></td>
+          {% endif %}
           <td class="actions">
             {% if is_reinforcement_work %}
             <a class="btn ghost" href="{{ url_for('reinforcement_work_view', row_id=r.id) }}">{{ _('عرض') }}</a>
@@ -259,7 +298,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="meta">{{ _('لا توجد معاملات إنشاءات') }}</td></tr>
+        <tr><td colspan="{{ 10 if is_reinforcement_work else 8 }}" class="meta">{% if is_reinforcement_work %}{{ _('لا توجد معاملات تعزيز / اسكيمات') }}{% else %}{{ _('لا توجد معاملات إنشاءات') }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
