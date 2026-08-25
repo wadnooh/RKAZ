@@ -41,6 +41,10 @@ def pct(value) -> str:
     return f"{_num(value):.1f}%"
 
 
+def _setting_ratio(settings: dict, key: str) -> float:
+    return max(0.0, min(100.0, _num((settings or {}).get(key))))
+
+
 def _date_where(column: str, date_from: str = "", date_to: str = "") -> tuple[str, list]:
     where = ["1=1"]
     params: list = []
@@ -128,9 +132,10 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         warehouse = db.warehouse_movements_totals(conn=conn)
 
         total_work_value = ticket_value + construction_value + project_value + contractor_value
-        rekaz_value = max(total_work_value - contractor_value, 0.0)
-        contractor_pct = (contractor_value / total_work_value * 100) if total_work_value else 0.0
-        rekaz_pct = (rekaz_value / total_work_value * 100) if total_work_value else 0.0
+        rekaz_pct = _setting_ratio(settings, "rekaz_ratio")
+        contractor_pct = _setting_ratio(settings, "main_contractor_ratio")
+        rekaz_value = round(total_work_value * rekaz_pct / 100, 2)
+        contractor_ratio_value = round(total_work_value * contractor_pct / 100, 2)
 
         by_status: dict[str, int] = {}
         for row in tickets:
@@ -157,6 +162,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
                 "contractor": contractor_value,
                 "total_work": total_work_value,
                 "rekaz": rekaz_value,
+                "contractor_ratio": contractor_ratio_value,
                 "contractor_pct": contractor_pct,
                 "rekaz_pct": rekaz_pct,
                 "invoices": invoice_value,
@@ -440,7 +446,7 @@ def build_general_report_pdf(report: dict) -> bytes:
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
         [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
         [_p("نسبة ركاز", styles["body"]), _p(pct(metrics["rekaz_pct"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(pct(metrics["contractor_pct"]), styles["body"])],
-        [_p("قيمة ركاز", styles["body"]), _p(money(metrics["rekaz"]), styles["body"]), _p("قيمة المقاول الرئيسي", styles["body"]), _p(money(metrics["contractor"]), styles["body"])],
+        [_p("قيمة ركاز", styles["body"]), _p(money(metrics["rekaz"]), styles["body"]), _p("قيمة المقاول الرئيسي", styles["body"]), _p(money(metrics["contractor_ratio"]), styles["body"])],
         [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
         [_p("الوارد مستودع", styles["body"]), _p(f"{metrics['warehouse_inbound']:.2f}", styles["body"]), _p("المنصرف مستودع", styles["body"]), _p(f"{metrics['warehouse_outbound']:.2f}", styles["body"])],
     ]

@@ -2970,9 +2970,8 @@ def reports_home():
     page_url = url_for("reports_home", date_from=date_from or None, date_to=date_to or None, _external=True)
     whatsapp_url = reports_svc.whatsapp_url(report, page_url, pdf_url, phone)
     summary_cards = [
-        _summary_card(_t("إجمالي الأعمال"), reports_svc.money(report["metrics"]["total_work"]), _t("كل الأقسام المالية")),
-        _summary_card(_t("نسبة ركاز"), reports_svc.pct(report["metrics"]["rekaz_pct"]), reports_svc.money(report["metrics"]["rekaz"])),
-        _summary_card(_t("نسبة المقاول الرئيسي"), reports_svc.pct(report["metrics"]["contractor_pct"]), reports_svc.money(report["metrics"]["contractor"])),
+        _summary_card(_t("إجمالي الأعمال"), report["metrics"]["total_work"], _t("كل الأقسام المالية"), money=True),
+        *helpers.work_ratio_cards(report["settings"], base_amount=report["metrics"]["total_work"]),
         _summary_card(_t("عدد الأعطال"), report["cards"]["tickets"], _t("منفذ/مغلق: {n}", n=report["cards"]["done_tickets"])),
     ]
     return render_template(
