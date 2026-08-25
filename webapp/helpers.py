@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import hashlib
 import io
+import secrets
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -18,12 +21,15 @@ from flask import (
 from webapp import db
 from webapp import media as media_svc
 from webapp import backup as backup_svc
+from webapp import mailer
+from webapp import whatsapp as whatsapp_svc
 from webapp.i18n import _ as i18n_phrase, tv as i18n_tv, tr as i18n_tr, localize_module, localize_section_meta
 from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import permissions
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "bootstrap-email-btn-4"
+_LAYOUT_ASSET_TAG = "delete-email-code-1"
+DELETE_CODE_TTL_SECONDS = 10 * 60
 
 
 def lang():
@@ -62,22 +68,111 @@ def after_data_change():
         pass
 
 
-def delete_password_ok() -> bool:
-    """يتحقق من كلمة مرور المستخدم الحالي لتأكيد عمليات الحذف."""
-    password = (request.form.get("delete_password") or "").strip()
+def _delete_scope() -> str:
+    parts = [
+        request.path or "",
+        request.form.get("action") or "",
+        request.form.get("id") or "",
+        request.form.get("next") or "",
+    ]
+    return "|".join(str(p) for p in parts)
+
+
+def _hash_delete_code(code: str) -> str:
+    return hashlib.sha256((code or "").strip().encode("utf-8")).hexdigest()
+
+
+def _current_user_contact() -> tuple[str, str, str]:
     if not session.get("user_id"):
-        return False
+        return "", "", ""
     conn = db.connect()
-    user = conn.execute("SELECT password FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    user = conn.execute("SELECT full_name, username, email, mobile FROM users WHERE id=?", (session["user_id"],)).fetchone()
     conn.close()
     if not user:
+        return "", "", ""
+    email = (user["email"] or "").strip()
+    mobile = (user["mobile"] or "").strip()
+    name = (user["full_name"] or user["username"] or current_user_name()).strip()
+    return email, mobile, name
+
+
+def _send_delete_code(scope: str) -> bool:
+    email, mobile, name = _current_user_contact()
+    if not email and not mobile:
+        g.delete_confirm_message = t("لا يمكن الحذف: لا يوجد بريد إلكتروني أو رقم جوال مسجل لحسابك.")
         return False
-    # للمستقبل: يجب استخدام hash لكلمات المرور بدلاً من النص الصريح
-    return (user["password"] or "") == password
+    code = f"{secrets.randbelow(1_000_000):06d}"
+    session["delete_email_confirm"] = {
+        "scope": scope,
+        "code_hash": _hash_delete_code(code),
+        "expires_at": time.time() + DELETE_CODE_TTL_SECONDS,
+    }
+    subject = "كود تأكيد الحذف - ركاز"
+    body = "\n".join(
+        [
+            f"مرحباً {name},",
+            "",
+            "تم طلب تنفيذ عملية حذف في نظام ركاز.",
+            f"كود تأكيد الحذف: {code}",
+            "صلاحية الكود 10 دقائق، ولا يعمل إلا لهذه العملية فقط.",
+            "",
+            "إذا لم تطلب الحذف فتجاهل هذه الرسالة وراجع مدير النظام.",
+        ]
+    )
+    sent_channels = []
+    errors = []
+    if email:
+        if mailer.smtp_configured():
+            ok, err = mailer.send_email(to_addrs=[email], subject=subject, body=body)
+            if ok:
+                sent_channels.append(t("البريد"))
+            else:
+                errors.append(t("البريد: {err}", err=err))
+        else:
+            errors.append(t("البريد غير مفعل"))
+    if mobile:
+        if whatsapp_svc.configured():
+            ok, err = whatsapp_svc.send_text(to_phone=mobile, body=body)
+            if ok:
+                sent_channels.append(t("واتساب"))
+            else:
+                errors.append(t("واتساب: {err}", err=err))
+        else:
+            errors.append(t("واتساب غير مفعل"))
+    if sent_channels:
+        g.delete_confirm_message = t("تم إرسال كود تأكيد الحذف عبر {channels}. أدخل الكود لإتمام الحذف.", channels=" / ".join(sent_channels))
+        g.delete_confirm_category = "ok"
+        return False
+    g.delete_confirm_message = t("تعذر إرسال كود تأكيد الحذف: {err}", err=" | ".join(errors) or "لا توجد قناة إرسال مفعلة")
+    return False
+
+
+def delete_password_ok() -> bool:
+    """يتحقق من كود حذف مرسل لبريد المستخدم، مع ربط الكود بعملية الحذف الحالية."""
+    code = (request.form.get("delete_code") or request.form.get("delete_password") or "").strip()
+    if not session.get("user_id"):
+        return False
+    scope = _delete_scope()
+    record = session.get("delete_email_confirm") or {}
+    if code:
+        expires_at = float(record.get("expires_at") or 0)
+        if (
+            record.get("scope") == scope
+            and expires_at >= time.time()
+            and record.get("code_hash") == _hash_delete_code(code)
+        ):
+            session.pop("delete_email_confirm", None)
+            return True
+        g.delete_confirm_message = t("كود تأكيد الحذف غير صحيح أو منتهي. اطلب كوداً جديداً ثم أعد المحاولة.")
+        return False
+    return _send_delete_code(scope)
 
 
 def reject_bad_delete_password(fallback_url: str):
-    flash(t("كلمة مرور حسابك غير صحيحة. أدخل كلمة مرورك لتأكيد الحذف."), "danger")
+    flash(
+        getattr(g, "delete_confirm_message", None) or t("أدخل كود تأكيد الحذف المرسل إلى بريدك أو واتساب."),
+        getattr(g, "delete_confirm_category", "danger"),
+    )
     nxt = (request.form.get("next") or "").strip()
     return redirect(nxt or fallback_url)
 
@@ -425,21 +520,29 @@ def _ratio_value(value) -> float:
     return max(0.0, min(100.0, n))
 
 
-def work_ratio_cards(settings=None):
-    """بطاقات نسب ركاز والمقاول الرئيسي، وإدخالها محصور بالمبرمج."""
+def work_ratio_cards(settings=None, *, base_amount=None):
+    """بطاقات مبالغ ركاز والمقاول الرئيسي المحسوبة من نسب المبرمج."""
     settings = settings or getattr(g, "settings", None) or db.get_settings()
     href = url_for("programmer_work_ratios") if db.is_hidden_username(session.get("username")) else None
+    try:
+        base = float(base_amount or 0)
+    except (TypeError, ValueError):
+        base = 0.0
+    rekaz_ratio = _ratio_value(settings.get("rekaz_ratio"))
+    contractor_ratio = _ratio_value(settings.get("main_contractor_ratio"))
     return [
         summary_card(
             t("نسبة ركاز"),
-            f"{_ratio_value(settings.get('rekaz_ratio')):.1f}%",
-            t("مدخلة من المبرمج فقط"),
+            round(base * rekaz_ratio / 100, 2),
+            t("{pct}% من المبالغ المدخلة", pct=f"{rekaz_ratio:.1f}"),
+            money=True,
             href=href,
         ),
         summary_card(
             t("نسبة المقاول الرئيسي"),
-            f"{_ratio_value(settings.get('main_contractor_ratio')):.1f}%",
-            t("مدخلة من المبرمج فقط"),
+            round(base * contractor_ratio / 100, 2),
+            t("{pct}% من المبالغ المدخلة", pct=f"{contractor_ratio:.1f}"),
+            money=True,
             href=href,
         ),
     ]

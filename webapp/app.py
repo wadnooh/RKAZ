@@ -2689,23 +2689,11 @@ def warehouse_tx_multi():
 
 
 def _delete_password_ok() -> bool:
-    """يتحقق من كلمة مرور المستخدم الحالي لتأكيد عمليات الحذف."""
-    password = (request.form.get("delete_password") or "").strip()
-    if not session.get("user_id"):
-        return False
-    conn = db.connect()
-    user = conn.execute("SELECT password FROM users WHERE id=?", (session["user_id"],)).fetchone()
-    conn.close()
-    if not user:
-        return False
-    # للمستقبل: يجب استخدام hash لكلمات المرور بدلاً من النص الصريح
-    return (user["password"] or "") == password
+    return helpers.delete_password_ok()
 
 
 def _reject_bad_delete_password(fallback_url: str):
-    flash(_t("كلمة مرور حسابك غير صحيحة. أدخل كلمة مرورك لتأكيد الحذف."), "danger")
-    nxt = (request.form.get("next") or "").strip()
-    return redirect(nxt or fallback_url)
+    return helpers.reject_bad_delete_password(fallback_url)
 
 
 @app.route("/warehouses/tx/<int:row_id>/delete", methods=["POST"])
@@ -3805,7 +3793,11 @@ def module_list(name):
             missing_amount_endpoint_kwargs={"name": name} if money_keys else None,
         )
         if section in ("constructions", "projects", "maintenance"):
-            summary_cards.extend(helpers.work_ratio_cards())
+            summary_cards.extend(
+                helpers.work_ratio_cards(
+                    base_amount=_sum_money_field(rows, *money_keys) if money_keys else 0,
+                )
+            )
     return render_template(
         "module_list.html",
         name=name,
@@ -4672,7 +4664,7 @@ def module_delete(name, row_id):
     module = MODULES.get(name)
     if not module:
         return redirect(url_for("ops_home"))
-    # كل عمليات الحذف في التطبيق تتطلب كلمة سر التأكيد
+    # كل عمليات الحذف تتطلب كود تأكيد يُرسل للمستخدم
     if not _delete_password_ok():
         fallback = (
             url_for("warehouse_balances", view="items")
@@ -4844,7 +4836,7 @@ def ops_primary_teams():
         missing_amount_active=missing_amount,
         missing_amount_endpoint="ops_primary_teams",
     )
-    summary_cards.extend(helpers.work_ratio_cards())
+    summary_cards.extend(helpers.work_ratio_cards(base_amount=_sum_money_field(rows, "amount")))
     return render_template(
         "primary_teams.html",
         rows=rows,
