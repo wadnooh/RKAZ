@@ -501,6 +501,37 @@ td.col-item-name[title]:hover {
 .report-page .report-metric-grid {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
+.report-page .report-money-cards {
+  display: grid;
+  align-items: stretch;
+}
+.report-page .report-money-cards .stat-card:first-child {
+  grid-column: 1 / -1;
+  min-height: 118px;
+  padding: 22px 24px;
+  background:
+    linear-gradient(90deg, rgba(183, 156, 98, 0.18), rgba(255, 255, 255, 0) 46%),
+    #fff;
+  border-color: #d8c8a8;
+  box-shadow:
+    inset 0 4px 0 rgba(183, 156, 98, 0.55),
+    0 10px 24px rgba(46, 48, 42, 0.06);
+}
+.report-page .report-money-cards .stat-card:first-child div:first-child {
+  font-size: 1.02rem;
+  font-weight: 800;
+  color: #6f6448;
+}
+.report-page .report-money-cards .stat-card:first-child strong {
+  margin-top: 8px;
+  font-size: clamp(1.75rem, 3vw, 2.65rem) !important;
+  line-height: 1.15;
+  color: #2c302a;
+}
+.report-page .report-money-cards .stat-card:first-child .meta {
+  margin-top: 8px;
+  font-size: 0.95rem;
+}
 .report-page .stat-card {
   position: relative;
   overflow: hidden;
