@@ -15,6 +15,7 @@
       {% endif %}
       <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
       {% if can('modules.write') %}
+      {% set warehouse_tx_options_enabled = true %}
       {% include '_warehouse_tx_options.html' %}
       {% endif %}
     </div>

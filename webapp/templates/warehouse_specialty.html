@@ -127,6 +127,7 @@
             {% set in_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order, 'tx_type': 'وارد من الكهرباء'}) %}
             {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order, 'tx_type': 'منصرف للمقاول'}) %}
             {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_order, 'tx_type': 'إرجاع للكهرباء'}) %}
+            {% set warehouse_tx_options_enabled = true %}
             {% include '_warehouse_tx_options.html' %}
             {% endif %}
           </td>
@@ -190,6 +191,7 @@
             {% set in_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': wh_from, 'tx_type': 'وارد من الكهرباء'}) %}
             {% set out_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': wh_from, 'tx_type': 'منصرف للمقاول'}) %}
             {% set return_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': wh_from, 'tx_type': 'إرجاع للكهرباء'}) %}
+            {% set warehouse_tx_options_enabled = true %}
             {% include '_warehouse_tx_options.html' %}
             {% endif %}
           </td>
@@ -251,6 +253,7 @@
               {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'منصرف للمقاول'}) %}
               {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.work_no, 'tx_type': 'إرجاع للمجمعة'}) %}
             {% endif %}
+            {% set warehouse_tx_options_enabled = true %}
             {% include '_warehouse_tx_options.html' %}
             {% endif %}
           </td>
@@ -299,6 +302,7 @@
             {% set in_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.project_code, 'tx_type': 'وارد من موقع العمل'}) %}
             {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.project_code, 'tx_type': 'منصرف للمقاول'}) %}
             {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': wh_from, 'source_ref': r.project_code, 'tx_type': 'إرجاع للمجمعة'}) %}
+            {% set warehouse_tx_options_enabled = true %}
             {% include '_warehouse_tx_options.html' %}
             {% endif %}
           </td>

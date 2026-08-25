@@ -12,6 +12,7 @@
       <a class="btn ghost" href="{{ back_url }}">{{ _('رجوع') }}</a>
       {% if can('modules.write') and (in_url or out_url or return_url or issue_url) %}
       {% if issue_url and not out_url %}{% set out_url = issue_url %}{% endif %}
+      {% set warehouse_tx_options_enabled = true %}
       {% include '_warehouse_tx_options.html' %}
       {% endif %}
     </div>

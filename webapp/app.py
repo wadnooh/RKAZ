@@ -2220,7 +2220,7 @@ def warehouse_tx_multi():
     if form_ctx not in _warehouse_create_contexts():
         flash(
             _t(
-                "إدخال معاملات المستودع يتم من الصفحات الرئيسية فقط، وتظهر الحركات هنا تلقائياً."
+                "إدخال معاملات المستودع يتم من صفحات المستودعات فقط، والصفحات الرئيسية للعرض فقط."
             ),
             "danger",
         )
@@ -3285,13 +3285,13 @@ def _warehouse_source_from_ctx(form_ctx: str) -> str:
 
 
 def _warehouse_create_contexts():
-    """السياقات المسموح منها إنشاء حركة: الصفحات الرئيسية فقط."""
+    """السياقات المسموح منها إنشاء حركة: صفحات المستودعات فقط."""
     return (
-        "ops",
-        "constructions",
-        "projects",
-        "contractors",
-        "reinforcement",
+        "wh_ops",
+        "wh_constructions",
+        "wh_projects",
+        "wh_contractors",
+        "wh_reinforcement",
     )
 
 
@@ -3420,10 +3420,10 @@ def _redirect_after_module(name, data, form_ctx=None):
 
 
 def _prepare_warehouse_tx_create(data: dict, form_ctx: str, conn) -> tuple:
-    """يملأ مصدر الحركة — مسموح من الصفحات الرئيسية فقط."""
+    """يملأ مصدر الحركة — مسموح من صفحات المستودعات فقط."""
     if form_ctx not in _warehouse_create_contexts():
         return None, _t(
-            "إدخال معاملات المستودع يتم من الصفحات الرئيسية فقط، وتظهر الحركات هنا تلقائياً."
+            "إدخال معاملات المستودع يتم من صفحات المستودعات فقط، والصفحات الرئيسية للعرض فقط."
         )
 
     source = _warehouse_source_from_ctx(form_ctx)
@@ -3772,7 +3772,7 @@ def module_new(name):
             conn.close()
             flash(
                 _t(
-                    "إدخال معاملات المستودع يتم من الصفحات الرئيسية فقط، وتظهر الحركات هنا تلقائياً."
+                    "إدخال معاملات المستودع يتم من صفحات المستودعات فقط، والصفحات الرئيسية للعرض فقط."
                 ),
                 "danger",
             )
@@ -4844,7 +4844,7 @@ def warehouse_tx_import():
         return permissions.deny_redirect()
     flash(
         _t(
-            "إدخال معاملات المستودع يتم فقط من الصفحات الرئيسية: الإنشاءات، العمليات والصيانة، والمشاريع."
+            "إدخال معاملات المستودع يتم من صفحات المستودعات فقط، والصفحات الرئيسية للعرض فقط."
         ),
         "danger",
     )
