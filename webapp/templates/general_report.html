@@ -39,22 +39,22 @@
   <div class="stats-grid">
     <div class="stat-card">
       <div>{{ _('قيمة العمليات والصيانة') }}</div>
-      <strong style="font-size:1.05rem">{{ report.values.tickets|money }}</strong>
+      <strong style="font-size:1.05rem">{{ report.metrics.tickets|money }}</strong>
       <div class="meta">{{ report.cards.done_tickets }} {{ _('منفذ / مغلق') }}</div>
     </div>
     <div class="stat-card">
       <div>{{ _('قيمة الإنشاءات') }}</div>
-      <strong style="font-size:1.05rem">{{ report.values.construction|money }}</strong>
+      <strong style="font-size:1.05rem">{{ report.metrics.construction|money }}</strong>
       <div class="meta">{{ report.cards.construction_count }} {{ _('معاملة') }}</div>
     </div>
     <div class="stat-card">
       <div>{{ _('قيمة المشاريع') }}</div>
-      <strong style="font-size:1.05rem">{{ report.values.projects|money }}</strong>
+      <strong style="font-size:1.05rem">{{ report.metrics.projects|money }}</strong>
       <div class="meta">{{ report.cards.project_count }} {{ _('مشروع') }}</div>
     </div>
     <div class="stat-card">
       <div>{{ _('قيمة المقاول الرئيسي') }}</div>
-      <strong style="font-size:1.05rem">{{ report.values.contractor|money }}</strong>
+      <strong style="font-size:1.05rem">{{ report.metrics.contractor|money }}</strong>
       <div class="meta">{{ report.cards.contractor_count }} {{ _('معاملة') }}</div>
     </div>
   </div>
@@ -77,11 +77,11 @@
         </tr>
       </thead>
       <tbody>
-        <tr><td>{{ _('إجمالي المستخلصات') }}</td><td>{{ report.values.invoices|money }}</td><td>{{ _('المحصل') }} {{ report.values.collected|money }}</td></tr>
-        <tr><td>{{ _('المتبقي غير محصل') }}</td><td>{{ report.values.remaining|money }}</td><td>{{ _('من واقع المستخلصات') }}</td></tr>
-        <tr><td>{{ _('المشتريات الخارجية') }}</td><td>{{ report.values.purchases|money }}</td><td>{{ _('أصناف مرتبطة بالمستودع') }}</td></tr>
-        <tr><td>{{ _('وارد المستودع') }}</td><td>{{ '%.2f'|format(report.values.warehouse_inbound or 0) }}</td><td>{{ _('عدد الحركات') }} {{ report.cards.warehouse_count }}</td></tr>
-        <tr><td>{{ _('منصرف المستودع') }}</td><td>{{ '%.2f'|format(report.values.warehouse_outbound or 0) }}</td><td>{{ _('الرصيد') }} {{ '%.2f'|format(report.values.warehouse_balance or 0) }}</td></tr>
+        <tr><td>{{ _('إجمالي المستخلصات') }}</td><td>{{ report.metrics.invoices|money }}</td><td>{{ _('المحصل') }} {{ report.metrics.collected|money }}</td></tr>
+        <tr><td>{{ _('المتبقي غير محصل') }}</td><td>{{ report.metrics.remaining|money }}</td><td>{{ _('من واقع المستخلصات') }}</td></tr>
+        <tr><td>{{ _('المشتريات الخارجية') }}</td><td>{{ report.metrics.purchases|money }}</td><td>{{ _('أصناف مرتبطة بالمستودع') }}</td></tr>
+        <tr><td>{{ _('وارد المستودع') }}</td><td>{{ '%.2f'|format(report.metrics.warehouse_inbound or 0) }}</td><td>{{ _('عدد الحركات') }} {{ report.cards.warehouse_count }}</td></tr>
+        <tr><td>{{ _('منصرف المستودع') }}</td><td>{{ '%.2f'|format(report.metrics.warehouse_outbound or 0) }}</td><td>{{ _('الرصيد') }} {{ '%.2f'|format(report.metrics.warehouse_balance or 0) }}</td></tr>
       </tbody>
     </table>
   </div>

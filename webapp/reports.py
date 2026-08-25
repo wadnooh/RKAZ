@@ -150,7 +150,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
                 "contractor_count": _count_table(conn, "contractor_works", "work_date", date_from, date_to),
                 "warehouse_count": warehouse.get("tx_count") or 0,
             },
-            "values": {
+            "metrics": {
                 "tickets": ticket_value,
                 "construction": construction_value,
                 "projects": project_value,
@@ -174,7 +174,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
 
 
 def whatsapp_url(report: dict, page_url: str, pdf_url: str, phone: str = "") -> str:
-    values = report["values"]
+    values = report["metrics"]
     msg = "\n".join(
         [
             "تقرير ركاز العام",
@@ -191,11 +191,23 @@ def whatsapp_url(report: dict, page_url: str, pdf_url: str, phone: str = "") -> 
     return f"https://wa.me/?text={quote(msg)}"
 
 
+INK = colors.HexColor("#1A1814")
+GOLD = colors.HexColor("#8A7349")
+GOLD_DARK = colors.HexColor("#6E5A38")
+CREAM = colors.HexColor("#F7F4EF")
+IVORY = colors.HexColor("#FBFAF7")
+LINE = colors.HexColor("#DDD2C0")
+WHITE = colors.white
+COMPANY_FALLBACK = "شركة ركاز الإنجاز للمقاولات"
+OFFICE_FALLBACK = "مكتب خدمات خريص"
+
+
 def _font_path() -> str | None:
     candidates = [
         os.environ.get("RAKAZ_REPORT_FONT", ""),
         r"C:\Windows\Fonts\arial.ttf",
         r"C:\Windows\Fonts\ARIALUNI.TTF",
+        "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
         "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
         "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
     ]
@@ -203,6 +215,16 @@ def _font_path() -> str | None:
         if candidate and Path(candidate).exists():
             return candidate
     return None
+
+
+def _font_name() -> str:
+    font_file = _font_path()
+    if not font_file:
+        return "Helvetica"
+    name = "RakazArabic"
+    if name not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont(name, font_file))
+    return name
 
 
 def _rtl(text) -> str:
@@ -216,6 +238,141 @@ def _p(text, style):
     return Paragraph(_rtl(text), style)
 
 
+def _styles(font_name: str) -> dict:
+    base = getSampleStyleSheet()
+    return {
+        "title": ParagraphStyle(
+            "RakazLuxTitle",
+            parent=base["Title"],
+            fontName=font_name,
+            fontSize=18,
+            leading=24,
+            alignment=TA_CENTER,
+            textColor=INK,
+            spaceAfter=2,
+        ),
+        "kicker": ParagraphStyle(
+            "RakazLuxKicker",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=8.5,
+            leading=12,
+            alignment=TA_CENTER,
+            textColor=GOLD_DARK,
+        ),
+        "meta": ParagraphStyle(
+            "RakazLuxMeta",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=8,
+            leading=11,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#6B655C"),
+        ),
+        "h2": ParagraphStyle(
+            "RakazLuxH2",
+            parent=base["Heading2"],
+            fontName=font_name,
+            fontSize=11,
+            leading=15,
+            alignment=TA_RIGHT,
+            textColor=GOLD_DARK,
+            spaceBefore=4,
+            spaceAfter=6,
+        ),
+        "body": ParagraphStyle(
+            "RakazLuxBody",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=8.5,
+            leading=12,
+            alignment=TA_RIGHT,
+            textColor=INK,
+        ),
+        "head": ParagraphStyle(
+            "RakazLuxHead",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=8,
+            leading=11,
+            alignment=TA_CENTER,
+            textColor=WHITE,
+        ),
+        "cell": ParagraphStyle(
+            "RakazLuxCell",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=7.4,
+            leading=10,
+            alignment=TA_RIGHT,
+            textColor=INK,
+        ),
+    }
+
+
+def _luxury_table_style(*, header=True) -> TableStyle:
+    cmds = [
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+        ("GRID", (0, 0), (-1, -1), 0.35, LINE),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+    ]
+    if header:
+        cmds.extend(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), GOLD),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, CREAM]),
+            ]
+        )
+    else:
+        cmds.append(("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, CREAM]))
+    return TableStyle(cmds)
+
+
+def _draw_page(canvas, doc, *, subtitle: str = ""):
+    font_name = _font_name()
+    page_w, page_h = canvas._pagesize
+    canvas.saveState()
+    canvas.setFillColor(INK)
+    canvas.rect(0, page_h - 16 * mm, page_w, 16 * mm, fill=1, stroke=0)
+    canvas.setFillColor(GOLD)
+    canvas.rect(0, page_h - 18.2 * mm, page_w, 2.2 * mm, fill=1, stroke=0)
+    canvas.setFillColor(WHITE)
+    canvas.setFont(font_name, 9)
+    canvas.drawRightString(page_w - 12 * mm, page_h - 8 * mm, _rtl(COMPANY_FALLBACK))
+    canvas.setFont(font_name, 8)
+    canvas.drawString(12 * mm, page_h - 8 * mm, _rtl(subtitle or "نظام ركاز — تصدير رسمي"))
+
+    canvas.setFillColor(GOLD)
+    canvas.rect(0, 0, page_w, 11 * mm, fill=1, stroke=0)
+    canvas.setFillColor(WHITE)
+    canvas.setFont(font_name, 8)
+    canvas.drawCentredString(page_w / 2, 4.4 * mm, _rtl(f"{OFFICE_FALLBACK}  ·  صفحة {doc.page}"))
+    canvas.restoreState()
+
+
+def _build_pdf(story, *, pagesize, subtitle: str = "") -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=pagesize,
+        rightMargin=12 * mm,
+        leftMargin=12 * mm,
+        topMargin=24 * mm,
+        bottomMargin=16 * mm,
+    )
+    doc.build(
+        story,
+        onFirstPage=lambda c, d: _draw_page(c, d, subtitle=subtitle),
+        onLaterPages=lambda c, d: _draw_page(c, d, subtitle=subtitle),
+    )
+    return buffer.getvalue()
+
+
 def build_table_pdf(
     *,
     title_text: str,
@@ -225,47 +382,8 @@ def build_table_pdf(
     filters: list[str] | None = None,
     generated_at: str | None = None,
 ) -> bytes:
-    font_name = "Helvetica"
-    font_file = _font_path()
-    if font_file:
-        font_name = "RakazArabic"
-        if font_name not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(font_name, font_file))
-
-    styles = getSampleStyleSheet()
-    title = ParagraphStyle(
-        "RakazTableTitle",
-        parent=styles["Title"],
-        fontName=font_name,
-        fontSize=16,
-        leading=22,
-        alignment=TA_CENTER,
-        textColor=colors.HexColor("#214E34"),
-    )
-    meta = ParagraphStyle(
-        "RakazTableMeta",
-        parent=styles["BodyText"],
-        fontName=font_name,
-        fontSize=8,
-        leading=11,
-        alignment=TA_RIGHT,
-        textColor=colors.HexColor("#667085"),
-    )
-    cell = ParagraphStyle(
-        "RakazTableCell",
-        parent=styles["BodyText"],
-        fontName=font_name,
-        fontSize=7,
-        leading=9,
-        alignment=TA_RIGHT,
-    )
-    head = ParagraphStyle(
-        "RakazTableHead",
-        parent=cell,
-        fontSize=7.5,
-        leading=10,
-        textColor=colors.HexColor("#214E34"),
-    )
+    font_name = _font_name()
+    styles = _styles(font_name)
 
     def _val(row: dict, key: str):
         value = row.get(key) if isinstance(row, dict) else ""
@@ -275,160 +393,79 @@ def build_table_pdf(
 
     safe_headers = headers or field_keys or ["البيان"]
     safe_keys = field_keys or headers or ["value"]
-    width = 270 * mm
+    width = 273 * mm
     col_count = max(len(safe_headers), 1)
     col_widths = [width / col_count for _ in range(col_count)]
-    table_data = [[_p(h, head) for h in safe_headers]]
+    table_data = [[_p(h, styles["head"]) for h in safe_headers]]
     for row in rows or []:
-        table_data.append([_p(_val(row, key), cell) for key in safe_keys])
+        table_data.append([_p(_val(row, key), styles["cell"]) for key in safe_keys])
     if not rows:
-        table_data.append([_p("لا توجد بيانات حسب الفلترة الحالية", cell)] + [_p("", cell) for _ in safe_keys[1:]])
+        table_data.append([_p("لا توجد بيانات حسب الفلترة الحالية", styles["cell"])] + [_p("", styles["cell"]) for _ in safe_keys[1:]])
 
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(A4),
-        rightMargin=10 * mm,
-        leftMargin=10 * mm,
-        topMargin=10 * mm,
-        bottomMargin=10 * mm,
-    )
+    stamp = generated_at or datetime.now().strftime("%Y-%m-%d %H:%M")
     story = [
-        _p(title_text, title),
-        _p(f"عدد السجلات: {len(rows or [])}", meta),
+        _p("تصدير رسمي", styles["kicker"]),
+        _p(title_text, styles["title"]),
+        _p(f"{COMPANY_FALLBACK} — {OFFICE_FALLBACK}", styles["meta"]),
+        _p(f"عدد السجلات: {len(rows or [])}  ·  تاريخ التصدير: {stamp}", styles["meta"]),
     ]
     filter_text = " | ".join([f for f in (filters or []) if f])
     if filter_text:
-        story.append(_p(f"الفلاتر: {filter_text}", meta))
-    story.append(_p(f"تاريخ التصدير: {generated_at or datetime.now().strftime('%Y-%m-%d %H:%M')}", meta))
-    story.append(Spacer(1, 7))
-
+        story.append(_p(f"الفلاتر: {filter_text}", styles["meta"]))
+    story.append(Spacer(1, 8))
     table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF3EE")),
-                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#D0D5DD")),
-                ("VALIGN", (0, 0), (-1, -1), "TOP"),
-                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAF7")]),
-                ("TOPPADDING", (0, 0), (-1, -1), 4),
-                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-            ]
-        )
-    )
+    table.setStyle(_luxury_table_style())
     story.append(table)
-    doc.build(story)
-    return buffer.getvalue()
+    return _build_pdf(story, pagesize=landscape(A4), subtitle=title_text)
 
 
 def build_general_report_pdf(report: dict) -> bytes:
-    font_name = "Helvetica"
-    font_file = _font_path()
-    if font_file:
-        font_name = "RakazArabic"
-        if font_name not in pdfmetrics.getRegisteredFontNames():
-            pdfmetrics.registerFont(TTFont(font_name, font_file))
-
-    styles = getSampleStyleSheet()
-    title = ParagraphStyle(
-        "RakazTitle",
-        parent=styles["Title"],
-        fontName=font_name,
-        fontSize=18,
-        leading=24,
-        alignment=TA_CENTER,
-        textColor=colors.HexColor("#214E34"),
-    )
-    h2 = ParagraphStyle(
-        "RakazH2",
-        parent=styles["Heading2"],
-        fontName=font_name,
-        fontSize=12,
-        leading=16,
-        alignment=TA_RIGHT,
-        textColor=colors.HexColor("#8A7349"),
-    )
-    body = ParagraphStyle(
-        "RakazBody",
-        parent=styles["BodyText"],
-        fontName=font_name,
-        fontSize=9,
-        leading=13,
-        alignment=TA_RIGHT,
-    )
-
-    buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        buffer,
-        pagesize=landscape(A4),
-        rightMargin=12 * mm,
-        leftMargin=12 * mm,
-        topMargin=12 * mm,
-        bottomMargin=12 * mm,
-    )
-    values = report["values"]
+    font_name = _font_name()
+    styles = _styles(font_name)
+    metrics = report["metrics"]
     cards = report["cards"]
+    company = report["settings"].get("company_name") or COMPANY_FALLBACK
     period = "كل الفترات"
     if report.get("date_from") or report.get("date_to"):
         period = f"من {report.get('date_from') or 'البداية'} إلى {report.get('date_to') or 'اليوم'}"
 
     story = [
-        _p("التقرير العام لأعمال ركاز", title),
-        _p(f"{report['settings'].get('company_name') or 'شركة ركاز الإنجاز للمقاولات'} - {period} - {report['generated_at']}", body),
-        Spacer(1, 8),
+        _p("تقرير تنفيذي", styles["kicker"]),
+        _p("التقرير العام لأعمال ركاز", styles["title"]),
+        _p(f"{company} — {period} — {report['generated_at']}", styles["meta"]),
+        Spacer(1, 10),
     ]
 
     summary_data = [
-        [_p("المؤشر", h2), _p("القيمة", h2), _p("المؤشر", h2), _p("القيمة", h2)],
-        [_p("إجمالي الأعمال", body), _p(money(values["total_work"]), body), _p("عدد الأعطال", body), _p(cards["tickets"], body)],
-        [_p("نسبة ركاز", body), _p(pct(values["rekaz_pct"]), body), _p("نسبة المقاول الرئيسي", body), _p(pct(values["contractor_pct"]), body)],
-        [_p("قيمة ركاز", body), _p(money(values["rekaz"]), body), _p("قيمة المقاول الرئيسي", body), _p(money(values["contractor"]), body)],
-        [_p("المستخلصات", body), _p(money(values["invoices"]), body), _p("المحصل", body), _p(money(values["collected"]), body)],
-        [_p("الوارد مستودع", body), _p(f"{values['warehouse_inbound']:.2f}", body), _p("المنصرف مستودع", body), _p(f"{values['warehouse_outbound']:.2f}", body)],
+        [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
+        [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
+        [_p("نسبة ركاز", styles["body"]), _p(pct(metrics["rekaz_pct"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(pct(metrics["contractor_pct"]), styles["body"])],
+        [_p("قيمة ركاز", styles["body"]), _p(money(metrics["rekaz"]), styles["body"]), _p("قيمة المقاول الرئيسي", styles["body"]), _p(money(metrics["contractor"]), styles["body"])],
+        [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
+        [_p("الوارد مستودع", styles["body"]), _p(f"{metrics['warehouse_inbound']:.2f}", styles["body"]), _p("المنصرف مستودع", styles["body"]), _p(f"{metrics['warehouse_outbound']:.2f}", styles["body"])],
     ]
     table = Table(summary_data, colWidths=[58 * mm, 42 * mm, 58 * mm, 42 * mm], hAlign="CENTER")
-    table.setStyle(
-        TableStyle(
-            [
-                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF3EE")),
-                ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#D0D5DD")),
-                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAF7")]),
-            ]
-        )
-    )
+    table.setStyle(_luxury_table_style())
     story.append(table)
-    story.append(Spacer(1, 10))
+    story.append(Spacer(1, 12))
 
     sections = [
         ("الأعمال حسب القسم", [
-            ("العمليات والصيانة", money(values["tickets"])),
-            ("الإنشاءات", money(values["construction"])),
-            ("المشاريع", money(values["projects"])),
-            ("المقاول الرئيسي", money(values["contractor"])),
-            ("المشتريات الخارجية", money(values["purchases"])),
+            ("العمليات والصيانة", money(metrics["tickets"])),
+            ("الإنشاءات", money(metrics["construction"])),
+            ("المشاريع", money(metrics["projects"])),
+            ("المقاول الرئيسي", money(metrics["contractor"])),
+            ("المشتريات الخارجية", money(metrics["purchases"])),
         ]),
         ("حالات الأعطال", [(k, v) for k, v in report["ticket_status"]] or [("لا توجد بيانات", 0)]),
     ]
     for heading, rows in sections:
-        story.append(_p(heading, h2))
-        data = [[_p("البند", body), _p("القيمة", body)]]
-        data.extend([[_p(a, body), _p(b, body)] for a, b in rows])
-        t = Table(data, colWidths=[90 * mm, 50 * mm], hAlign="RIGHT")
-        t.setStyle(
-            TableStyle(
-                [
-                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F2EEE6")),
-                    ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D0D5DD")),
-                    ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
-                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-                ]
-            )
-        )
+        story.append(_p(heading, styles["h2"]))
+        data = [[_p("البند", styles["head"]), _p("القيمة", styles["head"])]]
+        data.extend([[_p(a, styles["body"]), _p(b, styles["body"])] for a, b in rows])
+        t = Table(data, colWidths=[110 * mm, 50 * mm], hAlign="CENTER")
+        t.setStyle(_luxury_table_style())
         story.append(t)
         story.append(Spacer(1, 8))
 
-    doc.build(story)
-    return buffer.getvalue()
+    return _build_pdf(story, pagesize=landscape(A4), subtitle="التقرير العام")
