@@ -9,7 +9,7 @@
       <h2 class="section-title">{% if view == 'items' %}{{ _('أصناف المستودع') }}{% else %}{{ _('أرصدة المواد') }}{% endif %}</h2>
       <div class="meta">
         {% if view == 'items' %}
-        {{ _('إدارة قائمة المواد المستخدمة في الحركات والأرصدة') }}
+        {{ _('عرض قائمة المواد المستخدمة في الحركات والأرصدة') }}
         {% else %}
         {{ _('الرصيد يتحدث تلقائياً من حركات الإنشاءات والعمليات والمشاريع') }}
         {% endif %}
@@ -24,19 +24,9 @@
   {% if view == 'items' %}
   <div class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
     {% if can('modules.write') %}
-    <a class="btn primary" href="{{ url_for('module_new', name='warehouse_items') }}">{{ _('+ صنف') }}</a>
     <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب Excel') }}</a>
     {% endif %}
   </div>
-  {% if can('modules.write') %}
-  <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="actions" style="margin-bottom:14px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:220px;">
-      <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('استيراد الأصناف من Excel') }}</label>
-      <input type="file" name="file" accept=".xlsx,.xlsm" required>
-    </div>
-    <button class="btn primary" type="submit">{{ _('رفع') }}</button>
-  </form>
-  {% endif %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="items">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم/اسم المادة أو التصنيف...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
@@ -152,7 +142,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="meta">{{ _('لا توجد أصناف — أضفها من تبويب الأصناف.') }}</td></tr>
+        <tr><td colspan="8" class="meta">{{ _('لا توجد أصناف مرتبطة بالحركات بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

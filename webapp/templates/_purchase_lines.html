@@ -7,7 +7,7 @@
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('أصناف الطلب') }}</h3>
-      <div class="meta">{{ _('أضف أكثر من صنف من دليل المستودع ثم رحّل الطلب لزيادة الرصيد') }}</div>
+      <div class="meta">{{ _('أصناف الطلب المرتبطة بدليل المستودع تُرحّل لزيادة الرصيد') }}</div>
     </div>
     <div class="actions">
       {% if received %}
@@ -22,32 +22,8 @@
   </div>
 
   {% if mode == 'new' %}
-  <p class="meta">{{ _('احفظ رأس الطلب أولاً، ثم أضف الأصناف من صفحة التعديل.') }}</p>
+  <p class="meta">{{ _('احفظ رأس الطلب أولاً، ثم راجع الأصناف من صفحة التعديل.') }}</p>
   {% else %}
-
-  {% if not received and can('modules.write') %}
-  <form method="post" action="{{ url_for('purchase_line_add', row_id=row.id) }}" class="form-grid" style="align-items:end;margin-bottom:14px;" id="purchaseLineAddForm">
-    <div class="field" style="grid-column:span 2;position:relative;">
-      <label>{{ _('بحث برقم المادة (المستودع)') }}</label>
-      <input type="text" id="purchaseItemSearch" autocomplete="off" dir="ltr" style="text-align:left"
-             placeholder="{{ _('مثال: 10001234') }}">
-      <div id="purchaseItemSuggest" class="item-suggest" hidden></div>
-      <div class="meta" id="purchaseItemPreview" style="margin-top:6px;"></div>
-      <input type="hidden" name="item_no" id="purchaseItemNo" required>
-    </div>
-    <div class="field">
-      <label>{{ _('الكمية') }}</label>
-      <input type="number" name="qty" id="purchaseQty" step="0.01" min="0" value="1" required>
-    </div>
-    <div class="field">
-      <label>{{ _('سعر الوحدة') }}</label>
-      <input type="number" name="unit_price" id="purchaseUnitPrice" step="0.01" min="0" value="0">
-    </div>
-    <div class="field">
-      <button class="btn primary" type="submit" style="width:100%;">{{ _('+ إضافة صنف') }}</button>
-    </div>
-  </form>
-  {% endif %}
 
   <div class="table-wrap">
     <table class="table">
@@ -86,7 +62,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="8" class="meta">{{ _('لا توجد أصناف بعد — ابحث برقم المادة من المستودع لإضافتها.') }}</td></tr>
+        <tr><td colspan="8" class="meta">{{ _('لا توجد أصناف مرتبطة بهذا الطلب بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
       {% if lines %}

@@ -11,8 +11,8 @@
     </div>
     <div class="actions">
       {% if can('modules.write') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='reinforcement_departments') }}">{{ _('+ قسم جديد') }}</a>
-      <a class="btn ghost" href="{{ url_for('module_new', name='reinforcement_works') }}">{{ _('+ معاملة') }}</a>
+      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='reinforcement_departments') }}">{{ _('+ قسم جديد') }}</a>{% endif %}
+      {% if false %}<a class="btn ghost" href="{{ url_for('module_new', name='reinforcement_works') }}">{{ _('+ معاملة') }}</a>{% endif %}
       {% endif %}
     </div>
   </div>
@@ -45,7 +45,7 @@
         <a class="btn primary" href="{{ url_for('module_list', name='reinforcement_works', department=d.dept_name) }}">{{ _('المعاملات') }}</a>
         {% if can('modules.write') %}
         <a class="btn ghost" href="{{ url_for('module_edit', name='reinforcement_departments', row_id=d.id) }}">{{ _('تعديل') }}</a>
-        <a class="btn ghost" href="{{ url_for('module_new', name='reinforcement_works', department=d.dept_name) }}">{{ _('+ معاملة') }}</a>
+        {% if false %}<a class="btn ghost" href="{{ url_for('module_new', name='reinforcement_works', department=d.dept_name) }}">{{ _('+ معاملة') }}</a>{% endif %}
         {% endif %}
       </div>
     </div>

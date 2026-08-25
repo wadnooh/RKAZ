@@ -106,8 +106,6 @@
               {% endif %}
               {% if r.clearance_id %}
               <a class="btn primary" href="{{ url_for('quality_home', tab='evacuations', sub='initial') }}">{{ _('إخلاء') }}</a>
-              {% elif can('modules.write') %}
-              <a class="btn primary" href="{{ url_for('module_new', name='quality_clearances', ticket_no=r.ticket_no) }}">{{ _('+ إخلاء') }}</a>
               {% endif %}
             </td>
           </tr>

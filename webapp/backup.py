@@ -672,6 +672,7 @@ def s3_settings() -> dict:
         "bucket": os.environ.get("AWS_S3_BUCKET", "").strip(),
         "region": os.environ.get("AWS_S3_REGION", "").strip() or "eu-north-1",
         "prefix": (os.environ.get("AWS_S3_PREFIX", "").strip() or "rekaz-backups").strip("/"),
+        "photos_prefix": (os.environ.get("AWS_S3_PHOTOS_PREFIX", "").strip() or "rekaz-photos").strip("/"),
         "configured": s3_configured(),
     }
 

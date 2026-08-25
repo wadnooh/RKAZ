@@ -35,7 +35,7 @@
       </h2>
       <div class="meta">
         {% if name == 'warehouse_items' %}
-        {{ _('سجل المواد المستخدمة في المعاملات — الاستيراد والإضافة من هنا') }}
+        {{ _('سجل المواد المستخدمة في المعاملات — تظهر من الصفحات الرئيسية') }}
         {% elif name == 'warehouse_tx' and source_filter == 'constructions' %}
         {{ _('حركات أُدخلت من صفحة الإنشاءات وتظهر هنا تلقائياً') }}
         {% elif name == 'warehouse_tx' and source_filter == 'ops' %}
@@ -55,7 +55,7 @@
         {% elif linked_section_filter == 'projects' %}
         {{ _('الرخص المصدرة المرتبطة بالمشاريع') }}
         {% else %}
-        {{ _('مرتبط بتبويب') }} {{ section_meta.title if section_meta else _('النظام') }} — {{ _('إضافة / تعديل / ربط بالأعطال') }}
+        {{ _('مرتبط بتبويب') }} {{ section_meta.title if section_meta else _('النظام') }} — {{ _('عرض / تعديل / ربط بالأعطال') }}
         {% endif %}
       </div>
     </div>
@@ -81,7 +81,7 @@
       {% if missing_amount %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=ticket_filter or none, department=department_filter or none, source=source_filter or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
       {% endif %}
-      {% if can_mod_write and can('button.module.' ~ name ~ '.add') %}
+      {% if can_mod_write and can('button.module.' ~ name ~ '.add') and name in ['construction_works', 'projects'] %}
         {% if name == 'warehouse_items' %}
         <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب المواد Excel') }}</a>
         <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('عرض الأرصدة') }}</a>
@@ -92,28 +92,10 @@
         <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
         {% elif name == 'projects' %}
         <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
-        {% elif ticket_filter %}
-        <a class="btn primary" href="{{ url_for('module_new', name=name, ticket_no=ticket_filter) }}">{{ _('+ إضافة') }}</a>
-        {% else %}
-        <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
         {% endif %}
       {% endif %}
     </div>
   </div>
-
-  {% if name == 'warehouse_items' and can('button.module.warehouse_items.import') %}
-  <form method="post" action="{{ url_for('warehouse_items_import') }}" enctype="multipart/form-data" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:220px;">
-      <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('استيراد المواد (أصناف المستودع) من Excel') }}</label>
-      <input type="file" name="file" accept=".xlsx,.xlsm" required>
-    </div>
-    <button class="btn primary" type="submit">{{ _('رفع المواد') }}</button>
-  </form>
-  <p class="meta" style="margin-top:-4px;margin-bottom:12px;">
-    {{ _('الأصناف هنا هي المواد المستخدمة في المعاملات. لمتابعة الوارد والمنصرف والرصيد افتح') }}
-    <a href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>.
-  </p>
-  {% endif %}
 
   {% if ticket_filter or (name == 'warehouse_tx' and (item_filter or source_filter)) %}
   <p class="meta" style="margin-bottom:10px;">
@@ -148,6 +130,7 @@
           {% endfor %}
           {% if name == 'quantities' or name == 'external_purchases' or name == 'contractor_supplies' %}<th>{{ _('الإجمالي') }}</th>{% endif %}
           {% if name == 'external_purchases' or name == 'contractor_supplies' %}<th>{{ _('الأصناف') }}</th><th>{{ _('المستودع') }}</th>{% endif %}
+          {% if name == 'custody' %}<th>{{ _('المستودع') }}</th>{% endif %}
           {% if name == 'photos' %}<th>{{ _('مكتمل؟') }}</th>{% endif %}
           {% if name == 'invoices' %}<th>{{ _('المتبقي') }}</th>{% endif %}
           {% if name == 'warehouse_items' %}<th>{{ _('الرصيد') }}</th>{% endif %}
@@ -202,6 +185,10 @@
               {% if r[key] == 'ops' %}{{ _('العمليات والصيانة') }}
               {% elif r[key] == 'constructions' %}{{ _('الإنشاءات') }}
               {% elif r[key] == 'projects' %}{{ _('المشاريع') }}
+              {% elif r[key] == 'external' %}{{ _('المشتريات الخارجية') }}
+              {% elif r[key] == 'custody' %}{{ _('العهد') }}
+              {% elif r[key] == 'contractors' %}{{ _('مواد موردة من مقاول') }}
+              {% elif r[key] == 'reinforcement' %}{{ _('التعزيز - اسكيمات') }}
               {% else %}{{ r[key] if r[key] not in [None, ''] else '—' }}{% endif %}
             {% elif ftype == 'number' and r[key] is not none %}
               {% if 'value' in key or 'price' in key or 'collected' in key or 'approved' in key %}
@@ -226,6 +213,19 @@
               {% endif %}
             {% else %}
               <span class="badge">{{ _('لم يُرحَّل') }}</span>
+            {% endif %}
+          </td>
+          {% endif %}
+          {% if name == 'custody' %}
+          <td>
+            {% if r.returned %}
+              <span class="badge ok">{{ _('مرتجعة') }}</span>
+              <a class="meta" href="{{ url_for('warehouse_voucher_detail', voucher_no=r.return_voucher_no) }}">{{ r.return_voucher_no }}</a>
+            {% elif r.issued %}
+              <span class="badge ok">{{ _('مصروفة') }}</span>
+              <a class="meta" href="{{ url_for('warehouse_voucher_detail', voucher_no=r.issued_voucher_no) }}">{{ r.issued_voucher_no }}</a>
+            {% else %}
+              <span class="badge">{{ _('لم تُصرف') }}</span>
             {% endif %}
           </td>
           {% endif %}

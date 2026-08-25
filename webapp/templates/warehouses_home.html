@@ -76,6 +76,8 @@
             {% elif w.source_section == 'projects' %}{{ _('المشاريع') }}
             {% elif w.source_section == 'contractors' %}{{ _('مواد موردة من مقاول') }}
             {% elif w.source_section == 'external' %}{{ _('المشتريات الخارجية') }}
+            {% elif w.source_section == 'custody' %}{{ _('العهد') }}
+            {% elif w.source_section == 'reinforcement' %}{{ _('التعزيز - اسكيمات') }}
             {% else %}{{ w.source_section or '—' }}{% endif %}
           </td>
           <td><strong>{{ w.work_order or '—' }}</strong></td>

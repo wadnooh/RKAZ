@@ -36,6 +36,7 @@ from webapp.api_routes import api_bp
 from webapp import media as media_svc
 from webapp import mailer
 from webapp import programmer_guard as prog_guard
+from webapp import reports as reports_svc
 from webapp import helpers
 
 _t = helpers.t
@@ -1539,7 +1540,7 @@ def warehouse_movements_summary():
     """صفحة إجمالي كميات الوارد والمنصرف والمتبقي بدون تفصيل الحركات."""
     db.backfill_warehouse_tx_sources()
     source = (request.args.get("source") or "").strip().lower()
-    if source not in ("", "ops", "constructions", "projects", "external", "contractors", "reinforcement"):
+    if source not in ("", "ops", "constructions", "projects", "external", "custody", "contractors", "reinforcement"):
         source = ""
     totals = db.warehouse_movements_totals(source or None)
     by_source = db.warehouse_movements_totals_by_source()
@@ -2564,6 +2565,42 @@ def external_purchases_home():
     return _redirect_section_first_child("external")
 
 
+@app.route("/module/custody/<int:row_id>/issue", methods=["POST"])
+@login_required
+def custody_issue_warehouse(row_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    try:
+        result = db.issue_custody_to_warehouse(row_id)
+        if result.get("already"):
+            flash(_t("العهدة مصروفة مسبقاً بسند {no}", no=result.get("voucher_no")), "ok")
+        else:
+            flash(_t("تم صرف العهدة من المستودع بسند {no}", no=result.get("voucher_no")), "ok")
+            db.log_audit(current_user_name(), "صرف عهدة من المستودع", "العهد", row_id, result.get("voucher_no") or "")
+            _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="custody", row_id=row_id))
+
+
+@app.route("/module/custody/<int:row_id>/return", methods=["POST"])
+@login_required
+def custody_return_warehouse(row_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    try:
+        result = db.return_custody_to_warehouse(row_id)
+        if result.get("already"):
+            flash(_t("العهدة مرتجعة مسبقاً بسند {no}", no=result.get("voucher_no")), "ok")
+        else:
+            flash(_t("تم إرجاع العهدة للمستودع بسند {no}", no=result.get("voucher_no")), "ok")
+            db.log_audit(current_user_name(), "إرجاع عهدة للمستودع", "العهد", row_id, result.get("voucher_no") or "")
+            _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="custody", row_id=row_id))
+
+
 @app.route("/module/external_purchases/<int:row_id>/lines/add", methods=["POST"])
 @login_required
 def purchase_line_add(row_id):
@@ -2734,6 +2771,62 @@ def contractor_supply_receive_warehouse(row_id):
 @login_required
 def financial_home():
     return _redirect_section_first_child("financial")
+
+
+@app.route("/reports")
+@login_required
+def reports_home():
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    phone = (request.args.get("phone") or "").strip()
+    report = reports_svc.build_general_report(date_from=date_from, date_to=date_to)
+    pdf_url = url_for("general_report_pdf", date_from=date_from or None, date_to=date_to or None, _external=True)
+    page_url = url_for("reports_home", date_from=date_from or None, date_to=date_to or None, _external=True)
+    whatsapp_url = reports_svc.whatsapp_url(report, page_url, pdf_url, phone)
+    summary_cards = [
+        _summary_card(_t("إجمالي الأعمال"), reports_svc.money(report["values"]["total_work"]), _t("كل الأقسام المالية")),
+        _summary_card(_t("نسبة ركاز"), reports_svc.pct(report["values"]["rekaz_pct"]), reports_svc.money(report["values"]["rekaz"])),
+        _summary_card(_t("نسبة المقاول الرئيسي"), reports_svc.pct(report["values"]["contractor_pct"]), reports_svc.money(report["values"]["contractor"])),
+        _summary_card(_t("عدد الأعطال"), report["cards"]["tickets"], _t("منفذ/مغلق: {n}", n=report["cards"]["done_tickets"])),
+    ]
+    return render_template(
+        "general_report.html",
+        report=report,
+        date_from=date_from,
+        date_to=date_to,
+        phone=phone,
+        pdf_url=pdf_url,
+        whatsapp_url=whatsapp_url,
+        summary_cards=summary_cards,
+    )
+
+
+@app.route("/reports/general.pdf")
+@login_required
+def general_report_pdf():
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    report = reports_svc.build_general_report(date_from=date_from, date_to=date_to)
+    data = reports_svc.build_general_report_pdf(report)
+    stamp = datetime.now().strftime("%Y%m%d")
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"تقرير-ركاز-العام-{stamp}.pdf",
+        mimetype="application/pdf",
+    )
+
+
+@app.route("/reports/whatsapp")
+@login_required
+def general_report_whatsapp():
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    phone = (request.args.get("phone") or "").strip()
+    report = reports_svc.build_general_report(date_from=date_from, date_to=date_to)
+    pdf_url = url_for("general_report_pdf", date_from=date_from or None, date_to=date_to or None, _external=True)
+    page_url = url_for("reports_home", date_from=date_from or None, date_to=date_to or None, _external=True)
+    return redirect(reports_svc.whatsapp_url(report, page_url, pdf_url, phone))
 
 
 @app.route("/maintenance")
@@ -3218,6 +3311,8 @@ def _warehouse_source_label(section: str) -> str:
         "projects": _t("المشاريع"),
         "contractors": _t("مواد موردة من مقاول"),
         "external": _t("المشتريات الخارجية"),
+        "custody": _t("العهد"),
+        "reinforcement": _t("التعزيز - اسكيمات"),
         "warehouses": _t("المستودعات"),
     }.get(section or "", section or "")
 
@@ -3450,6 +3545,7 @@ def module_list(name):
             "warehouse_tx": _t("عدد الحركات"),
             "external_purchases": _t("عدد المشتريات"),
             "contractor_supplies": _t("عدد التوريدات"),
+            "custody": _t("عدد العهد"),
             "new_coordinations": _t("عدد التنسيقات"),
             "issued_licenses": _t("عدد الرخص"),
             "quality_clearances": _t("عدد الإخلاءات"),
@@ -3527,6 +3623,10 @@ def _load_module_list_rows(name, module):
                 r["items_summary"] = f"{sm.get('first_item') or '—'} (+{sm['line_count'] - 1})"
             r["total"] = sm.get("total") or 0
             r["received"] = bool((r.get("received_voucher_no") or "").strip())
+    if name == "custody":
+        for r in rows:
+            r["issued"] = bool((r.get("issued_voucher_no") or "").strip())
+            r["returned"] = bool((r.get("return_voucher_no") or "").strip())
     item_filter = (request.args.get("item_no") or "").strip()
     ticket_filter = (request.args.get("ticket_no") or "").strip()
     source_filter = (request.args.get("source") or "").strip().lower()
@@ -3540,7 +3640,7 @@ def _load_module_list_rows(name, module):
             r["balance"] = db.warehouse_balance(r.get("item_no"))
     if name == "warehouse_tx" and item_filter:
         rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
-    if name == "warehouse_tx" and source_filter in ("ops", "constructions", "projects", "reinforcement"):
+    if name == "warehouse_tx" and source_filter in ("ops", "constructions", "projects", "external", "custody", "contractors", "reinforcement"):
         rows = [
             r
             for r in rows
@@ -3817,6 +3917,23 @@ def module_new(name):
                 data["supply_date"] = datetime.now().strftime("%Y-%m-%d")
             if not (data.get("status") or "").strip():
                 data["status"] = "جديد"
+        if name == "custody":
+            if not (data.get("custody_no") or "").strip():
+                data["custody_no"] = db.next_series_code("cu", conn)
+            if not (data.get("custody_date") or "").strip():
+                data["custody_date"] = datetime.now().strftime("%Y-%m-%d")
+            if not (data.get("status") or "").strip():
+                data["status"] = "مسلمة"
+            item_no = (data.get("item_no") or "").strip()
+            if item_no:
+                item = conn.execute(
+                    "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+                    (item_no,),
+                ).fetchone()
+                if item:
+                    data["item_no"] = item["item_no"]
+                    data["item_name"] = item["item_name"] or data.get("item_name") or ""
+                    data["unit"] = db.normalize_warehouse_unit(item["unit"] or data.get("unit") or "")
         if name == "reinforcement_works":
             if not (data.get("work_no") or "").strip():
                 data["work_no"] = db.next_series_code("rf", conn)
@@ -3937,7 +4054,7 @@ def module_new(name):
             if journey:
                 return journey
         return _redirect_after_module(name, data, form_ctx=_warehouse_form_ctx() if name == "warehouse_tx" else None)
-    warehouse_items = db.list_warehouse_items() if name == "warehouse_tx" else []
+    warehouse_items = db.list_warehouse_items() if name in ("warehouse_tx", "custody") else []
     reinforcement_departments = (
         db.list_reinforcement_departments(active_only=True)
         if name == "reinforcement_works"
@@ -4087,6 +4204,27 @@ def module_edit(name, row_id):
                 data["supply_no"] = dict(row).get("supply_no") or db.next_series_code("cs", conn)
             if not (data.get("status") or "").strip():
                 data["status"] = dict(row).get("status") or "جديد"
+        if name == "custody":
+            old = dict(row)
+            if not (data.get("custody_no") or "").strip():
+                data["custody_no"] = old.get("custody_no") or db.next_series_code("cu", conn)
+            if not (data.get("status") or "").strip():
+                data["status"] = old.get("status") or "مسلمة"
+            if (old.get("issued_voucher_no") or "").strip():
+                for k in ("item_no", "item_name", "unit", "qty", "issued_voucher_no", "return_voucher_no"):
+                    if k in data:
+                        data[k] = old.get(k)
+            else:
+                item_no = (data.get("item_no") or "").strip()
+                if item_no:
+                    item = conn.execute(
+                        "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+                        (item_no,),
+                    ).fetchone()
+                    if item:
+                        data["item_no"] = item["item_no"]
+                        data["item_name"] = item["item_name"] or data.get("item_name") or ""
+                        data["unit"] = db.normalize_warehouse_unit(item["unit"] or data.get("unit") or "")
         if name == "reinforcement_works":
             if not (data.get("work_no") or "").strip():
                 data["work_no"] = dict(row).get("work_no") or db.next_series_code("rf", conn)
@@ -4174,7 +4312,7 @@ def module_edit(name, row_id):
     data = dict(row)
     warehouse_items = (
         db.list_warehouse_items()
-        if name in ("warehouse_tx", "external_purchases", "contractor_supplies")
+        if name in ("warehouse_tx", "external_purchases", "contractor_supplies", "custody")
         else []
     )
     boq_items = []

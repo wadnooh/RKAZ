@@ -8,7 +8,7 @@
         <div class="meta">{{ _('مؤشرات تشغيلية ومالية مستمدة من ملف متابعة أعمال طوارئ خريص') }}</div>
       </div>
       <div class="actions">
-        {% if can('button.ticket.new') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>{% endif %}
+        {% if false and can('button.ticket.new') %}<a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>{% endif %}
         {% if can('button.ticket.export') %}<a class="btn ghost" href="{{ url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}</a>{% endif %}
       </div>
     </div>

@@ -38,7 +38,7 @@
     </div>
     <div class="actions">
       {% if can_mutate %}
-      <a class="btn primary" href="{{ url_for('module_new', name='quantities', ticket_no=work.work_no) }}">{{ _('إضافة كمية') }}</a>
+      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='quantities', ticket_no=work.work_no) }}">{{ _('إضافة كمية') }}</a>{% endif %}
       {% endif %}
       <a class="btn ghost" href="{{ url_for('module_list', name='quantities', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
     </div>
@@ -73,7 +73,7 @@
     </div>
     <div class="actions">
       {% if can_mutate %}
-      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=work.work_no) }}">{{ _('إضافة صور') }}</a>
+      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=work.work_no) }}">{{ _('إضافة صور') }}</a>{% endif %}
       {% endif %}
       <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
     </div>
@@ -119,7 +119,7 @@
     </div>
     <div class="actions">
       {% if can_mutate %}
-      <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=work.work_no) }}">{{ _('إضافة تمتر') }}</a>
+      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=work.work_no) }}">{{ _('إضافة تمتر') }}</a>{% endif %}
       {% endif %}
       <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
     </div>
@@ -154,7 +154,7 @@
     </div>
     <div class="actions">
       {% if can_mutate and can_warehouse %}
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'reinforcement', 'source_ref': work.work_no, 'work_order': work.work_no, 'ticket_no': work.ticket_no or none}) }}">{{ _('إضافة حركة') }}</a>
+      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'reinforcement', 'source_ref': work.work_no, 'work_order': work.work_no, 'ticket_no': work.ticket_no or none}) }}">{{ _('إضافة حركة') }}</a>{% endif %}
       {% endif %}
       <a class="btn ghost" href="{{ url_for('warehouse_movements_summary', source='reinforcement') }}">{{ _('حركات التعزيز') }}</a>
     </div>

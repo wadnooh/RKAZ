@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('التقرير العام') }}</h2>
+      <div class="meta">
+        {{ _('إجمالي الأعمال ونسب ركاز والمقاول الرئيسي') }}
+        — {{ _('آخر تحديث') }} {{ report.generated_at }}
+      </div>
+    </div>
+    <div class="actions">
+      <a class="btn primary" href="{{ pdf_url }}">{{ _('تصدير PDF') }}</a>
+      <a class="btn ghost" href="{{ whatsapp_url }}" target="_blank" rel="noopener">{{ _('إرسال واتساب') }}</a>
+    </div>
+  </div>
+
+  <form method="get" class="form-grid" style="margin-bottom:14px;align-items:end;">
+    <div class="field">
+      <label>{{ _('من تاريخ') }}</label>
+      <input type="date" name="date_from" value="{{ date_from or '' }}">
+    </div>
+    <div class="field">
+      <label>{{ _('إلى تاريخ') }}</label>
+      <input type="date" name="date_to" value="{{ date_to or '' }}">
+    </div>
+    <div class="field">
+      <label>{{ _('رقم واتساب اختياري') }}</label>
+      <input type="text" name="phone" value="{{ phone or '' }}" dir="ltr" style="text-align:left" placeholder="9665xxxxxxxx">
+    </div>
+    <div class="field">
+      <button class="btn primary" type="submit" style="width:100%;">{{ _('تحديث التقرير') }}</button>
+    </div>
+  </form>
+
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div>{{ _('قيمة العمليات والصيانة') }}</div>
+      <strong style="font-size:1.05rem">{{ report.values.tickets|money }}</strong>
+      <div class="meta">{{ report.cards.done_tickets }} {{ _('منفذ / مغلق') }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('قيمة الإنشاءات') }}</div>
+      <strong style="font-size:1.05rem">{{ report.values.construction|money }}</strong>
+      <div class="meta">{{ report.cards.construction_count }} {{ _('معاملة') }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('قيمة المشاريع') }}</div>
+      <strong style="font-size:1.05rem">{{ report.values.projects|money }}</strong>
+      <div class="meta">{{ report.cards.project_count }} {{ _('مشروع') }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('قيمة المقاول الرئيسي') }}</div>
+      <strong style="font-size:1.05rem">{{ report.values.contractor|money }}</strong>
+      <div class="meta">{{ report.cards.contractor_count }} {{ _('معاملة') }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('تفاصيل مالية وتشغيلية') }}</h3>
+      <div class="meta">{{ _('الأرقام المالية تظهر حسب صلاحية عرض المبالغ') }}</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr>
+          <th>{{ _('البند') }}</th>
+          <th>{{ _('القيمة') }}</th>
+          <th>{{ _('ملاحظة') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>{{ _('إجمالي المستخلصات') }}</td><td>{{ report.values.invoices|money }}</td><td>{{ _('المحصل') }} {{ report.values.collected|money }}</td></tr>
+        <tr><td>{{ _('المتبقي غير محصل') }}</td><td>{{ report.values.remaining|money }}</td><td>{{ _('من واقع المستخلصات') }}</td></tr>
+        <tr><td>{{ _('المشتريات الخارجية') }}</td><td>{{ report.values.purchases|money }}</td><td>{{ _('أصناف مرتبطة بالمستودع') }}</td></tr>
+        <tr><td>{{ _('وارد المستودع') }}</td><td>{{ '%.2f'|format(report.values.warehouse_inbound or 0) }}</td><td>{{ _('عدد الحركات') }} {{ report.cards.warehouse_count }}</td></tr>
+        <tr><td>{{ _('منصرف المستودع') }}</td><td>{{ '%.2f'|format(report.values.warehouse_outbound or 0) }}</td><td>{{ _('الرصيد') }} {{ '%.2f'|format(report.values.warehouse_balance or 0) }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('حالات الأعطال') }}</h3>
+      <div class="meta">{{ _('توزيع إجمالي الأعطال في فترة التقرير') }}</div>
+    </div>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead><tr><th>{{ _('الحالة') }}</th><th>{{ _('العدد') }}</th></tr></thead>
+      <tbody>
+        {% for status, count in report.ticket_status %}
+        <tr><td>{{ tv(status) }}</td><td>{{ count }}</td></tr>
+        {% else %}
+        <tr><td colspan="2" class="meta">{{ _('لا توجد أعطال في الفترة المحددة.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

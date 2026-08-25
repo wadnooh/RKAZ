@@ -1,7 +1,14 @@
 # Pull automatic Rekaz backups to the main workstation
+1
+[CmdletBinding()]
+param (
+  [string]$ConfigPath = (Join-Path (Split-Path -Parent $MyInvocation.MyCommand.Path) "sync_config.json")
+)
+
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ConfigPath = Join-Path $Root "sync_config.json"
+$Root = Split-Path -Parent $ConfigPath
 
 if (-not (Test-Path $ConfigPath)) {
   $example = Join-Path $Root "sync_config.example.json"

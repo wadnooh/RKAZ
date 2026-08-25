@@ -69,6 +69,8 @@ DEFAULT_LISTS = {
         "وارد من موقع العمل",
         "وارد من مشتريات خارجية",
         "وارد مواد موردة من مقاول",
+        "صرف عهدة",
+        "إرجاع عهدة",
         "رصيد افتتاحي",
     ],
     "purchase_status": ["جديد", "معتمد", "تم الشراء", "ملغي"],
@@ -658,6 +660,18 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             migrated = migrate_external_purchase_lines(conn)
             if migrated:
                 created.append(f"external_purchase_lines_migrate:{migrated}")
+        if "custody" in existing or "custody" in created:
+            for col in (
+                "item_no",
+                "unit",
+                "issued_voucher_no",
+                "return_voucher_no",
+                "warehouse_tx_id",
+                "return_warehouse_tx_id",
+            ):
+                ddl_type = "INTEGER" if col.endswith("_tx_id") else "TEXT"
+                if _ensure_column(conn, "custody", col, ddl_type):
+                    created.append(f"custody.{col}")
         if "contractor_supplies" in existing or "contractor_supplies" in created:
             if _ensure_column(conn, "contractor_supplies", "received_voucher_no"):
                 created.append("contractor_supplies.received_voucher_no")
@@ -1091,10 +1105,16 @@ def init_db():
             custody_no TEXT,
             custody_date TEXT,
             employee TEXT,
+            item_no TEXT,
             item_name TEXT,
+            unit TEXT,
             qty REAL,
             status TEXT,
             return_date TEXT,
+            issued_voucher_no TEXT,
+            return_voucher_no TEXT,
+            warehouse_tx_id INTEGER,
+            return_warehouse_tx_id INTEGER,
             notes TEXT
         );
         CREATE TABLE IF NOT EXISTS workshop_cars (
@@ -1285,6 +1305,15 @@ def init_db():
     _ensure_column(conn, "warehouse_tx", "source_ref")
     _ensure_column(conn, "warehouse_tx", "sender")
     _ensure_column(conn, "warehouse_tx", "work_order")
+    for col in (
+        "item_no",
+        "unit",
+        "issued_voucher_no",
+        "return_voucher_no",
+        "warehouse_tx_id",
+        "return_warehouse_tx_id",
+    ):
+        _ensure_column(conn, "custody", col, "INTEGER" if col.endswith("_tx_id") else "TEXT")
     backfill_warehouse_tx_sources(conn)
     backfill_warehouse_tx_work_orders(conn)
     normalize_warehouse_length_units_once(conn)
@@ -1446,6 +1475,7 @@ def next_series_code(series: str, conn=None) -> str:
         "rl": ("RL", "rl_next", "rl_prefix"),
         "cs": ("CS", "cs_next", "cs_prefix"),
         "rf": ("RF", "rf_next", "rf_prefix"),
+        "cu": ("CU", "cu_next", "cu_prefix"),
     }
     if series not in defaults:
         raise ValueError(f"سلسلة غير معروفة: {series}")
@@ -1486,6 +1516,10 @@ def next_series_code(series: str, conn=None) -> str:
         elif series == "rf":
             taken = conn.execute(
                 "SELECT 1 FROM reinforcement_works WHERE lower(work_no)=lower(?) LIMIT 1", (code,)
+            ).fetchone()
+        elif series == "cu":
+            taken = conn.execute(
+                "SELECT 1 FROM custody WHERE lower(custody_no)=lower(?) LIMIT 1", (code,)
             ).fetchone()
         if not taken:
             conn.execute(
@@ -3492,9 +3526,11 @@ def normalize_warehouse_length_units_once(conn=None) -> int:
 def warehouse_tx_sign(tx_type: str) -> int:
     """+1 وارد، -1 منصرف/إرجاع، 0 غير معروف."""
     t = tx_type or ""
+    if "إرجاع عهدة" in t:
+        return 1
     if "وارد" in t or "افتتاح" in t:
         return 1
-    if "منصرف" in t or "إرجاع" in t:
+    if "منصرف" in t or "إرجاع" in t or "صرف عهدة" in t:
         return -1
     return 0
 
@@ -3904,7 +3940,7 @@ def warehouse_movements_totals(source_section: str | None = None, conn=None) -> 
     params: list = []
     where = "1=1"
     section = (source_section or "").strip().lower()
-    if section in ("ops", "constructions", "projects", "external", "contractors", "reinforcement"):
+    if section in ("ops", "constructions", "projects", "external", "custody", "contractors", "reinforcement"):
         where = "lower(coalesce(source_section,''))=?"
         params.append(section)
     rows = conn.execute(
@@ -3940,6 +3976,7 @@ def warehouse_movements_totals_by_source(conn=None) -> list[dict]:
         ("constructions", "الإنشاءات"),
         ("projects", "المشاريع"),
         ("external", "المشتريات الخارجية"),
+        ("custody", "العهد"),
         ("contractors", "مواد موردة من مقاول"),
         ("", "غير مصنّف"),
     ]
@@ -3952,7 +3989,7 @@ def warehouse_movements_totals_by_source(conn=None) -> list[dict]:
                 """
                 SELECT tx_type, qty FROM warehouse_tx
                 WHERE trim(coalesce(source_section,''))=''
-                   OR lower(trim(source_section)) NOT IN ('ops','constructions','projects','external','contractors','reinforcement')
+                   OR lower(trim(source_section)) NOT IN ('ops','constructions','projects','external','custody','contractors','reinforcement')
                 """
             ).fetchall()
             inbound = outbound = 0.0
@@ -4329,6 +4366,164 @@ def receive_purchase_to_warehouse(purchase_id: int, conn=None) -> dict:
         conn.commit()
         conn.close()
     return {"already": False, "voucher_no": voucher, "created": created}
+
+
+def _custody_row(custody_id: int, conn) -> dict:
+    ensure_schema(conn)
+    row = conn.execute("SELECT * FROM custody WHERE id=?", (custody_id,)).fetchone()
+    if not row:
+        raise ValueError("سجل العهدة غير موجود")
+    return dict(row)
+
+
+def issue_custody_to_warehouse(custody_id: int, conn=None) -> dict:
+    """يصرف العهدة من رصيد المستودع بسند مستقل مصدره custody."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = _custody_row(custody_id, conn)
+        if (row.get("issued_voucher_no") or "").strip():
+            return {"already": True, "voucher_no": row["issued_voucher_no"], "tx_id": row.get("warehouse_tx_id")}
+        item_no = (row.get("item_no") or "").strip()
+        if not item_no:
+            raise ValueError("اختر رقم المادة من المستودع قبل صرف العهدة")
+        item = conn.execute(
+            "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+            (item_no,),
+        ).fetchone()
+        if not item:
+            raise ValueError(f"رقم المادة «{item_no}» غير موجود في المستودع")
+        try:
+            qty = float(row.get("qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        if qty <= 0:
+            raise ValueError("أدخل كمية صحيحة قبل صرف العهدة")
+        available = float(warehouse_balance(item_no) or 0)
+        if available < qty:
+            raise ValueError(f"رصيد المادة غير كافٍ. المتاح: {available:.2f}")
+        custody_no = (row.get("custody_no") or "").strip() or next_series_code("cu", conn)
+        tx_date = (row.get("custody_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+        voucher = next_warehouse_voucher_no(conn)
+        cur = conn.execute(
+            """
+            INSERT INTO warehouse_tx(
+              voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+              recipient, sender, ticket_no, rekaz_code, source_section, source_ref, work_order, region, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                voucher,
+                tx_date,
+                "صرف عهدة",
+                item["item_no"],
+                item["item_name"] or row.get("item_name") or "",
+                normalize_warehouse_unit(item["unit"] or row.get("unit") or ""),
+                qty,
+                row.get("employee") or "مستلم عهدة",
+                "المستودع",
+                "",
+                "",
+                "custody",
+                custody_no,
+                custody_no,
+                "",
+                (row.get("notes") or "").strip(),
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE custody
+            SET custody_no=?, item_no=?, item_name=?, unit=?, status='مسلمة',
+                issued_voucher_no=?, warehouse_tx_id=?
+            WHERE id=?
+            """,
+            (
+                custody_no,
+                item["item_no"],
+                item["item_name"] or row.get("item_name") or "",
+                normalize_warehouse_unit(item["unit"] or row.get("unit") or ""),
+                voucher,
+                cur.lastrowid,
+                custody_id,
+            ),
+        )
+        if own:
+            conn.commit()
+        return {"already": False, "voucher_no": voucher, "tx_id": cur.lastrowid}
+    finally:
+        if own:
+            conn.close()
+
+
+def return_custody_to_warehouse(custody_id: int, conn=None) -> dict:
+    """يرجع العهدة للمستودع بسند وارد مستقل مصدره custody."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = _custody_row(custody_id, conn)
+        if not (row.get("issued_voucher_no") or "").strip():
+            raise ValueError("لا يمكن إرجاع عهدة لم تُصرف من المستودع بعد")
+        if (row.get("return_voucher_no") or "").strip():
+            return {"already": True, "voucher_no": row["return_voucher_no"], "tx_id": row.get("return_warehouse_tx_id")}
+        item_no = (row.get("item_no") or "").strip()
+        if not item_no:
+            raise ValueError("رقم المادة غير موجود في سجل العهدة")
+        try:
+            qty = float(row.get("qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        if qty <= 0:
+            raise ValueError("كمية العهدة غير صالحة")
+        item = conn.execute(
+            "SELECT * FROM warehouse_items WHERE lower(item_no)=lower(?)",
+            (item_no,),
+        ).fetchone()
+        item_name = (item["item_name"] if item else None) or row.get("item_name") or ""
+        unit = normalize_warehouse_unit((item["unit"] if item else None) or row.get("unit") or "")
+        custody_no = (row.get("custody_no") or "").strip() or str(custody_id)
+        tx_date = (row.get("return_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+        voucher = next_warehouse_voucher_no(conn)
+        cur = conn.execute(
+            """
+            INSERT INTO warehouse_tx(
+              voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+              recipient, sender, ticket_no, rekaz_code, source_section, source_ref, work_order, region, notes
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                voucher,
+                tx_date,
+                "إرجاع عهدة",
+                item_no,
+                item_name,
+                unit,
+                qty,
+                "المستودع",
+                row.get("employee") or "مستلم عهدة",
+                "",
+                "",
+                "custody",
+                custody_no,
+                custody_no,
+                "",
+                (row.get("notes") or "").strip(),
+            ),
+        )
+        conn.execute(
+            """
+            UPDATE custody
+            SET status='مرتجعة', return_date=?, return_voucher_no=?, return_warehouse_tx_id=?
+            WHERE id=?
+            """,
+            (tx_date, voucher, cur.lastrowid, custody_id),
+        )
+        if own:
+            conn.commit()
+        return {"already": False, "voucher_no": voucher, "tx_id": cur.lastrowid}
+    finally:
+        if own:
+            conn.close()
 
 
 def list_contractor_supply_lines(supply_id: int, conn=None) -> list[dict]:

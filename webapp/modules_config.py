@@ -424,13 +424,17 @@ MODULES = {
             ("custody_no", "رقم العهدة", "text"),
             ("custody_date", "التاريخ", "date"),
             ("employee", "الموظف", "text"),
+            ("item_no", "رقم المادة", "warehouse_item"),
             ("item_name", "المادة / المعدة", "text"),
+            ("unit", "الوحدة", "text"),
             ("qty", "الكمية", "number"),
             ("status", "الحالة", "list:custody_status"),
             ("return_date", "تاريخ الإرجاع", "date"),
+            ("issued_voucher_no", "سند صرف العهدة", "text"),
+            ("return_voucher_no", "سند إرجاع العهدة", "text"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["custody_no", "custody_date", "employee", "item_name", "qty", "status"],
+        "list_cols": ["custody_no", "custody_date", "employee", "item_no", "item_name", "qty", "status"],
     },
     # ---- الورشة ----
     "workshop_cars": {

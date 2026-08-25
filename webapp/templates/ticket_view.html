@@ -234,9 +234,6 @@
       <div class="meta">{{ _('اعتيادي = بدون زيادة على القيمة النهائية — طوارئ = تُطبَّق النسبة مرة واحدة على إجمالي البنود في القيمة النهائية') }}</div>
     </div>
     <div class="field full"><label>{{ _('ملاحظات البند') }}</label><input name="notes" value=""></div>
-    <div class="actions" style="grid-column:1/-1">
-      <button class="btn primary" type="submit">{{ _('+ إضافة بند وحساب التكلفة') }}</button>
-    </div>
   </form>
   <script>
   (function () {
@@ -354,9 +351,6 @@
       </div>
     </div>
     <div class="actions">
-      {% if editing and can('tickets.write') and can('modules.write') and can('section.ops') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">{{ _('+ سجل صور') }}</a>
-      {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
@@ -426,9 +420,6 @@
       </div>
     </div>
     <div class="actions">
-      {% if editing and can('tickets.write') and can('modules.write') and can('section.ops') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=ticket.ticket_no) }}">{{ _('+ تمتير') }}</a>
-      {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
@@ -475,9 +466,6 @@
       </div>
     </div>
     <div class="actions">
-      {% if editing and can('tickets.write') and can('modules.write') %}
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none, **{'from': 'ops'}) }}">{{ _('+ صرف / حركة') }}</a>
-      {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
@@ -542,15 +530,6 @@
     </div>
   </div>
   <div class="actions">
-    {% if can('section.financial') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='invoices', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none) }}">{{ _('+ مستخلص') }}</a>
-    {% endif %}
-    {% if can('section.warehouses') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none, **{'from': 'ops'}) }}">{{ _('+ حركة مستودع') }}</a>
-    {% endif %}
-    {% if can('section.safety') %}
-    <a class="btn ghost" href="{{ url_for('module_new', name='safety_permits', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none) }}">{{ _('+ تصريح سلامة') }}</a>
-    {% endif %}
   </div>
   {% elif not editing %}
   {# في وضع العرض لا نعرض أزرار الربط — الأقسام ظاهرة أعلاه للقراءة #}

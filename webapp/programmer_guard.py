@@ -35,11 +35,6 @@ APPROVE_CODE_LEN = 8
 OTP_SEND_COOLDOWN_SEC = 60
 
 # بريد المبرمج فقط — لا يُقبل غيره للموافقة
-DEFAULT_PROGRAMMER_EMAILS = (
-    "wadnooh@gmail.com",
-    "wadnooh@wadnooh.com",
-)
-
 # POST يغيّر هيكل البرنامج / البرمجة — وليس إدارة مستخدمين أو صلاحيات
 PRIVILEGED_POST_ENDPOINTS = frozenset(
     {
@@ -68,18 +63,9 @@ def change_pin() -> str:
 
 def programmer_emails() -> list[str]:
     raw = (os.environ.get("PROGRAMMER_EMAILS") or "").strip()
-    if raw:
-        emails = [e.strip().lower() for e in raw.replace(";", ",").split(",") if e.strip()]
-    else:
-        emails = list(DEFAULT_PROGRAMMER_EMAILS)
-    # لا تسمح بتجاوز القائمة الافتراضية بأخرى فقط — ادمج واحتفظ بالمعتمدة
-    allowed = {e.lower() for e in DEFAULT_PROGRAMMER_EMAILS}
-    out = []
-    for e in emails:
-        el = e.lower()
-        if el in allowed and el not in out:
-            out.append(el)
-    return out or list(DEFAULT_PROGRAMMER_EMAILS)
+    if not raw:
+        return []
+    return [e.strip().lower() for e in raw.replace(";", ",").split(",") if e.strip()]
 
 
 def masked_programmer_emails() -> list[str]:
@@ -88,7 +74,7 @@ def masked_programmer_emails() -> list[str]:
 
 
 def secrets_configured() -> bool:
-    return bool(bootstrap_code() and change_pin())
+    return bool(bootstrap_code() and change_pin() and programmer_emails())
 
 
 def smtp_ready() -> bool:
@@ -117,7 +103,8 @@ def _hash_secret(value: str) -> str:
 
 
 def hash_device_token(token: str) -> str:
-    secret = (os.environ.get("SECRET_KEY") or "rakaz-khurais-emergency-2026").encode("utf-8")
+    secret = (os.environ.get("SECRET_KEY") or "").encode("utf-8")
+    if not secret: raise ValueError("SECRET_KEY is not set")
     return hmac.new(secret, (token or "").encode("utf-8"), hashlib.sha256).hexdigest()
 
 

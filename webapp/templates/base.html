@@ -86,6 +86,9 @@
     {% if can('tab.contracts') %}
     <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">{{ tr('nav_contracts') }}</a>
     {% endif %}
+    {% if can('reports.view') %}
+    <a class="tab{% if p.startswith('/reports') %} active{% endif %}" href="{{ url_for('reports_home') }}">{{ _('التقارير') }}</a>
+    {% endif %}
 
     {% if can('tab.users') %}
     <a class="tab{% if p.startswith('/users') %} active{% endif %}" href="{{ url_for('users_home') }}">{{ tr('nav_users') }}</a>

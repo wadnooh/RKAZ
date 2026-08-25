@@ -148,7 +148,7 @@
         </select>
         <div class="meta" style="margin-top:4px;">
           {{ _('اختر قسماً من القائمة أو أضف قسماً جديداً من أقسام التعزيز') }}
-          — <a href="{{ url_for('module_new', name='reinforcement_departments') }}">{{ _('+ قسم جديد') }}</a>
+          {% if false %}— <a href="{{ url_for('module_new', name='reinforcement_departments') }}">{{ _('+ قسم جديد') }}</a>{% endif %}
         </div>
       {% elif ftype == 'image' %}
         <div class="photo-slot">
@@ -256,7 +256,8 @@
         <input type="text" name="{{ key }}" value="{{ row[key] or '' }}"
           {% if name == 'warehouse_tx' and key == 'voucher_no' and mode == 'new' %}readonly dir="ltr" style="text-align:left"{% endif %}
           {% if name == 'warehouse_tx' and key == 'rekaz_code' %}id="warehouseRekazCode" dir="ltr" style="text-align:left"{% endif %}
-          {% if name == 'warehouse_tx' and key == 'work_order' and mode == 'new' and row.get('work_order') %}readonly{% endif %}>
+          {% if name == 'warehouse_tx' and key == 'work_order' and mode == 'new' and row.get('work_order') %}readonly{% endif %}
+          {% if name == 'custody' and key in ['issued_voucher_no','return_voucher_no'] %}readonly dir="ltr" style="text-align:left"{% endif %}>
         {% endif %}
       {% endif %}
     </div>
@@ -294,11 +295,14 @@
 {% if name == 'external_purchases' %}
 {% include "_purchase_lines.html" %}
 {% endif %}
+{% if name == 'custody' %}
+{% include "_custody_warehouse.html" %}
+{% endif %}
 {% if name == 'contractor_supplies' %}
 {% include "_contractor_supply_lines.html" %}
 {% endif %}
 
-{% if name == 'warehouse_tx' %}
+{% if name in ['warehouse_tx', 'custody'] %}
 <script>
 (function () {
   var sel = document.getElementById("warehouseItemSelect");

@@ -1,0 +1,49 @@
+{# ربط العهد بالمستودع: صرف مستقل وإرجاع مستقل #}
+{% set issued = (row.issued_voucher_no or '')|trim %}
+{% set returned = (row.return_voucher_no or '')|trim %}
+
+<div class="card" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('ربط العهدة بالمستودع') }}</h3>
+      <div class="meta">{{ _('العهد تصرف من المستودع بسند صرف عهدة مستقل، وترجع بسند إرجاع عهدة مستقل.') }}</div>
+    </div>
+    <div class="actions">
+      {% if issued %}
+      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=issued) }}">{{ _('سند الصرف') }} {{ issued }}</a>
+      {% if returned %}
+      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=returned) }}">{{ _('سند الإرجاع') }} {{ returned }}</a>
+      <span class="badge ok">{{ _('مرتجعة للمستودع') }}</span>
+      {% elif mode == 'edit' and can('modules.write') %}
+      <form method="post" action="{{ url_for('custody_return_warehouse', row_id=row.id) }}" style="display:inline;">
+        <button class="btn primary" type="submit">{{ _('إرجاع للمستودع') }}</button>
+      </form>
+      {% endif %}
+      {% elif mode == 'edit' and can('modules.write') %}
+      <form method="post" action="{{ url_for('custody_issue_warehouse', row_id=row.id) }}" style="display:inline;">
+        <button class="btn primary" type="submit">{{ _('صرف من المستودع') }}</button>
+      </form>
+      {% else %}
+      <span class="badge">{{ _('احفظ العهدة أولاً') }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div>{{ _('المادة') }}</div>
+      <strong dir="ltr" style="text-align:left">{{ row.item_no or '—' }}</strong>
+      <div class="meta">{{ row.item_name or '—' }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('الكمية') }}</div>
+      <strong>{{ row.qty if row.qty is not none else '—' }}</strong>
+      <div class="meta">{{ row.unit or '—' }}</div>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('الحالة') }}</div>
+      <strong>{{ row.status or '—' }}</strong>
+      <div class="meta">{{ _('مصدر حركات المستودع: العهد') }}</div>
+    </div>
+  </div>
+</div>
