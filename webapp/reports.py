@@ -98,15 +98,6 @@ def _metering_date_where(date_from: str = "", date_to: str = "") -> tuple[str, l
     return " AND ".join(where), params
 
 
-def _sum_metering(conn, date_from: str = "", date_to: str = "") -> float:
-    where, params = _metering_date_where(date_from, date_to)
-    try:
-        row = conn.execute(f"SELECT COALESCE(SUM(COALESCE(approved_value,0)),0) FROM metering WHERE {where}", params).fetchone()
-        return _num(row[0] if row else 0)
-    except Exception:
-        return 0.0
-
-
 def _count_metering(conn, date_from: str = "", date_to: str = "") -> int:
     where, params = _metering_date_where(date_from, date_to)
     try:
@@ -226,7 +217,6 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         primary_team_value = _sum_table(conn, "primary_team_orders", "amount", "order_date", date_from, date_to)
         construction_value = _sum_table(conn, "construction_works", "value", "work_date", date_from, date_to)
         reinforcement_value = _sum_table(conn, "reinforcement_works", "value", "work_date", date_from, date_to)
-        metering_value = _sum_metering(conn, date_from, date_to)
         metering_count = _count_metering(conn, date_from, date_to)
         station_value = _sum_reinforcement_department(conn, "محطات", date_from, date_to)
         project_value = _sum_table(conn, "projects", "value", "start_date", date_from, date_to)
@@ -236,7 +226,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         purchase_value = _purchase_total(conn, date_from, date_to)
         warehouse = db.warehouse_movements_totals(conn=conn)
 
-        operations_value = ticket_value + metering_value + reinforcement_value + primary_team_value
+        operations_value = ticket_value + reinforcement_value + primary_team_value
         total_work_value = operations_value + construction_value + project_value + contractor_value
         rekaz_pct = _setting_ratio(settings, "rekaz_ratio")
         contractor_pct = _setting_ratio(settings, "main_contractor_ratio")
@@ -268,7 +258,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
                     ("الأعطال المنفذة/المغلقة", sum(1 for t in tickets if db.normalize_ticket_status(t.get("status")) in ("منفذ", "مغلق"))),
                     ("قيمة الأعطال", money(ticket_value)),
                     ("العدادات / التمتير", metering_count),
-                    ("قيمة العدادات / التمتير", money(metering_value)),
+                    ("ملاحظة التمتير", "لا يدخل كمبلغ مستقل إلا إذا انعكس ضمن المبالغ المدخلة"),
                     ("التعزيز - اسكيمات", _count_table(conn, "reinforcement_works", "work_date", date_from, date_to)),
                     ("قيمة التعزيز - اسكيمات", money(reinforcement_value)),
                     ("المحطات ضمن التعزيز", _count_reinforcement_department(conn, "محطات", date_from, date_to)),
@@ -373,7 +363,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
             "metrics": {
                 "operations": operations_value,
                 "tickets": ticket_value,
-                "metering": metering_value,
+                "metering": 0,
                 "primary_teams": primary_team_value,
                 "construction": construction_value,
                 "reinforcement": reinforcement_value,
@@ -802,7 +792,7 @@ def build_general_report_pdf(report: dict) -> bytes:
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
         [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("إجمالي العمليات والصيانة", styles["body"]), _p(money(metrics["operations"]), styles["body"])],
         [_p("نسبة ركاز", styles["body"]), _p(_ratio_with_money(metrics["rekaz_pct"], metrics["rekaz"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(_ratio_with_money(metrics["contractor_pct"], metrics["contractor_ratio"]), styles["body"])],
-        [_p("الأعطال", styles["body"]), _p(money(metrics["tickets"]), styles["body"]), _p("العدادات / التمتير", styles["body"]), _p(money(metrics["metering"]), styles["body"])],
+        [_p("الأعطال", styles["body"]), _p(money(metrics["tickets"]), styles["body"]), _p("العدادات / التمتير", styles["body"]), _p(f"{cards['metering_count']} سجل متابعة", styles["body"])],
         [_p("التعزيز - اسكيمات", styles["body"]), _p(money(metrics["reinforcement"]), styles["body"]), _p("الفرق الأولية", styles["body"]), _p(money(metrics["primary_teams"]), styles["body"])],
         [_p("المحطات ضمن التعزيز", styles["body"]), _p(money(metrics["stations"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
         [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
@@ -816,7 +806,7 @@ def build_general_report_pdf(report: dict) -> bytes:
     overview_rows = [
         ("العمليات والصيانة", money(metrics["operations"])),
         ("تابع العمليات - الأعطال", money(metrics["tickets"])),
-        ("تابع العمليات - العدادات / التمتير", money(metrics["metering"])),
+        ("تابع العمليات - العدادات / التمتير", f"{cards['metering_count']} سجل متابعة - لا يضاف كمبلغ مستقل"),
         ("تابع العمليات - التعزيز / اسكيمات", money(metrics["reinforcement"])),
         ("تابع العمليات - المحطات ضمن التعزيز", money(metrics["stations"])),
         ("تابع العمليات - الفرق الأولية", money(metrics["primary_teams"])),
