@@ -1364,10 +1364,10 @@ def required_perm_for_request() -> str | None:
     if ep in {"audit_log_home", "audit_log_page"}:
         return None if has_perm("audit.read") else "audit.read"
 
-    if ep == "export_tickets_excel":
+    if ep in {"export_tickets_excel", "tickets.export_pdf"}:
         return None if has_perm("export") else "export"
 
-    if ep in {"module_export_excel", "export_primary_teams_excel"}:
+    if ep in {"module_export_excel", "module_export_pdf", "export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf"}:
         return None if has_perm("export") else "export"
 
     if ep == "global_search":
@@ -1402,8 +1402,12 @@ def required_perm_for_request() -> str | None:
         "ticket_boq_delete": "tickets.write",
         # Exports & Search
         "export_tickets_excel": "export",
+        "tickets.export_pdf": "export",
         "module_export_excel": "export",
+        "module_export_pdf": "export",
         "export_primary_teams_excel": "export",
+        "export_primary_teams_pdf": "export",
+        "warehouse_specialty_pdf": "export",
         "global_search": "search",
     }
 

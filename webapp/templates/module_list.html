@@ -65,6 +65,9 @@
       {% if export_href and can('button.module.' ~ name ~ '.export') %}
       <a class="btn ghost" href="{{ export_href }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>
       {% endif %}
+      {% if export_pdf_href and can('button.module.' ~ name ~ '.export') %}
+      <a class="btn ghost" href="{{ export_pdf_href }}">{{ _('تصدير PDF') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>
+      {% endif %}
       {% if name in ['coordination','quality_clearances'] %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name, excavation=1) }}">{{ _('حفر فقط') }}</a>
       {% if excavation_filter %}<a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('عرض الكل') }}</a>{% endif %}

@@ -142,6 +142,7 @@ def list_all():
         rows=rows, q=q, status=status, date_from=date_from, date_to=date_to, classification=classification,
         missing_amount=missing_amount,
         export_href=helpers.url_with_filters(".export_excel"),
+        export_pdf_href=helpers.url_with_filters(".export_pdf"),
         summary_cards=summary_cards,
     )
 
@@ -527,9 +528,10 @@ def export_excel():
     status = (request.args.get("status") or "").strip()
     date_from = (request.args.get("date_from") or "").strip()
     date_to = (request.args.get("date_to") or "").strip()
+    classification = (request.args.get("classification") or "").strip()
     missing_amount = helpers.missing_amount_flag()
     rows, _missing = _load_filtered_tickets(
-        q=q, status=status, date_from=date_from, date_to=date_to, missing_amount=missing_amount,
+        q=q, status=status, date_from=date_from, date_to=date_to, missing_amount=missing_amount, classification=classification,
     )
     data = tickets_excel.export_tickets(rows)
     stamp = datetime.now().strftime("%Y%m%d")
@@ -537,4 +539,62 @@ def export_excel():
     return send_file(
         io.BytesIO(data), as_attachment=True, download_name=f"الأعطال{suffix}-{stamp}.xlsx",
         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@tickets_bp.route("/export.pdf")
+@permissions.require_perm("export")
+def export_pdf():
+    from webapp import reports as reports_svc
+
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    classification = (request.args.get("classification") or "").strip()
+    missing_amount = helpers.missing_amount_flag()
+    rows, _missing = _load_filtered_tickets(
+        q=q,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        missing_amount=missing_amount,
+        classification=classification,
+    )
+    headers = [
+        helpers.t("رقم العطل"),
+        helpers.t("كود ER"),
+        helpers.t("أمر العمل"),
+        helpers.t("التاريخ"),
+        helpers.t("المحطة"),
+        helpers.t("الفرقة"),
+        helpers.t("الحالة"),
+        helpers.t("القيمة النهائية"),
+    ]
+    fields = ["ticket_no", "rekaz_code", "work_order", "receive_date", "station_no", "team", "status", "final_value"]
+    filters = []
+    if q:
+        filters.append(f"{helpers.t('بحث')}: {q}")
+    if status:
+        filters.append(f"{helpers.t('الحالة')}: {status}")
+    if classification:
+        filters.append(f"{helpers.t('التصنيف')}: {classification}")
+    if date_from or date_to:
+        filters.append(f"{helpers.t('من')}: {date_from or '—'} | {helpers.t('إلى')}: {date_to or '—'}")
+    if missing_amount:
+        filters.append(helpers.t("بدون مبلغ"))
+    data = reports_svc.build_table_pdf(
+        title_text=helpers.t("الأعطال"),
+        headers=headers,
+        rows=rows,
+        field_keys=fields,
+        filters=filters,
+    )
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-مفلتر" if filters else ""
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"الأعطال{suffix}-{stamp}.pdf",
+        mimetype="application/pdf",
     )

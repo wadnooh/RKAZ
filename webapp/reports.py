@@ -216,6 +216,112 @@ def _p(text, style):
     return Paragraph(_rtl(text), style)
 
 
+def build_table_pdf(
+    *,
+    title_text: str,
+    headers: list[str],
+    rows: list[dict],
+    field_keys: list[str],
+    filters: list[str] | None = None,
+    generated_at: str | None = None,
+) -> bytes:
+    font_name = "Helvetica"
+    font_file = _font_path()
+    if font_file:
+        font_name = "RakazArabic"
+        if font_name not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont(font_name, font_file))
+
+    styles = getSampleStyleSheet()
+    title = ParagraphStyle(
+        "RakazTableTitle",
+        parent=styles["Title"],
+        fontName=font_name,
+        fontSize=16,
+        leading=22,
+        alignment=TA_CENTER,
+        textColor=colors.HexColor("#214E34"),
+    )
+    meta = ParagraphStyle(
+        "RakazTableMeta",
+        parent=styles["BodyText"],
+        fontName=font_name,
+        fontSize=8,
+        leading=11,
+        alignment=TA_RIGHT,
+        textColor=colors.HexColor("#667085"),
+    )
+    cell = ParagraphStyle(
+        "RakazTableCell",
+        parent=styles["BodyText"],
+        fontName=font_name,
+        fontSize=7,
+        leading=9,
+        alignment=TA_RIGHT,
+    )
+    head = ParagraphStyle(
+        "RakazTableHead",
+        parent=cell,
+        fontSize=7.5,
+        leading=10,
+        textColor=colors.HexColor("#214E34"),
+    )
+
+    def _val(row: dict, key: str):
+        value = row.get(key) if isinstance(row, dict) else ""
+        if value is None or value == "":
+            return "—"
+        return str(value)
+
+    safe_headers = headers or field_keys or ["البيان"]
+    safe_keys = field_keys or headers or ["value"]
+    width = 270 * mm
+    col_count = max(len(safe_headers), 1)
+    col_widths = [width / col_count for _ in range(col_count)]
+    table_data = [[_p(h, head) for h in safe_headers]]
+    for row in rows or []:
+        table_data.append([_p(_val(row, key), cell) for key in safe_keys])
+    if not rows:
+        table_data.append([_p("لا توجد بيانات حسب الفلترة الحالية", cell)] + [_p("", cell) for _ in safe_keys[1:]])
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=landscape(A4),
+        rightMargin=10 * mm,
+        leftMargin=10 * mm,
+        topMargin=10 * mm,
+        bottomMargin=10 * mm,
+    )
+    story = [
+        _p(title_text, title),
+        _p(f"عدد السجلات: {len(rows or [])}", meta),
+    ]
+    filter_text = " | ".join([f for f in (filters or []) if f])
+    if filter_text:
+        story.append(_p(f"الفلاتر: {filter_text}", meta))
+    story.append(_p(f"تاريخ التصدير: {generated_at or datetime.now().strftime('%Y-%m-%d %H:%M')}", meta))
+    story.append(Spacer(1, 7))
+
+    table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#EAF3EE")),
+                ("GRID", (0, 0), (-1, -1), 0.3, colors.HexColor("#D0D5DD")),
+                ("VALIGN", (0, 0), (-1, -1), "TOP"),
+                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#FAFAF7")]),
+                ("TOPPADDING", (0, 0), (-1, -1), 4),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ]
+        )
+    )
+    story.append(table)
+    doc.build(story)
+    return buffer.getvalue()
+
+
 def build_general_report_pdf(report: dict) -> bytes:
     font_name = "Helvetica"
     font_file = _font_path()

@@ -32,6 +32,7 @@
     <div></div>
     <div class="actions">
       {% if can('export') %}<a class="btn ghost" href="{{ export_href or url_for('export_primary_teams_excel') }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>{% endif %}
+      {% if can('export') %}<a class="btn ghost" href="{{ export_pdf_href or url_for('export_primary_teams_pdf') }}">{{ _('تصدير PDF') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>{% endif %}
     </div>
   </div>
   <form method="get" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">

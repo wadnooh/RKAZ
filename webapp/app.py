@@ -1849,6 +1849,175 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
     )
 
 
+def _warehouse_specialty_pdf_payload(source: str):
+    db.backfill_warehouse_tx_sources()
+    db.ensure_schema()
+    source = (source or "").strip().lower()
+    view = (request.args.get("view") or "").strip().lower()
+    if view == "work_orders":
+        view = "teams"
+    if source == "ops" and view not in ("tickets", "teams", "reinforcement", "movements"):
+        view = "tickets"
+    if source == "constructions" and view not in ("works", "movements"):
+        view = "works"
+    if source == "projects" and view not in ("projects", "movements"):
+        view = "projects"
+    if source not in ("ops", "constructions", "projects"):
+        abort(404)
+
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    department_filter = (request.args.get("department") or "").strip()
+    conn = db.connect()
+    try:
+        rows = []
+        if view == "movements":
+            rows = db.rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT * FROM warehouse_tx
+                    WHERE lower(coalesce(source_section,''))=?
+                    ORDER BY id DESC
+                    """,
+                    (source,),
+                ).fetchall()
+            )
+            db.enrich_warehouse_txs_work_order(rows, conn)
+            if q:
+                ql = q.lower()
+                rows = [
+                    r
+                    for r in rows
+                    if ql in (r.get("voucher_no") or "").lower()
+                    or ql in (r.get("item_no") or "").lower()
+                    or ql in (r.get("item_name") or "").lower()
+                    or ql in (r.get("source_ref") or "").lower()
+                    or ql in (r.get("ticket_no") or "").lower()
+                    or ql in (r.get("work_order") or "").lower()
+                ]
+            headers = [_t("السند"), _t("التاريخ"), _t("النوع"), _t("رقم أمر العمل"), _t("المادة"), _t("الكمية"), _t("رقم العطل"), _t("المستلم"), _t("المسلم")]
+            fields = ["voucher_no", "tx_date", "tx_type", "work_order", "item_name", "qty", "ticket_no", "recipient", "sender"]
+            title = _t("حركات المواد")
+        elif view == "teams":
+            rows = db.rows_to_dicts(conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall())
+            if q:
+                ql = q.lower()
+                rows = [
+                    r
+                    for r in rows
+                    if ql in (r.get("work_order") or "").lower()
+                    or ql in (r.get("extract_no") or "").lower()
+                    or ql in (str(r.get("amount") or "")).lower()
+                    or ql in (r.get("notes") or "").lower()
+                ]
+            headers = [_t("أمر العمل"), _t("رقم المستخلص"), _t("المبلغ"), _t("التاريخ"), _t("ملاحظات")]
+            fields = ["work_order", "extract_no", "amount", "order_date", "notes"]
+            title = _t("الفرق الأولية")
+        elif view == "tickets":
+            sql = "SELECT * FROM tickets WHERE 1=1"
+            params = []
+            if q:
+                sql += " AND (ticket_no LIKE ? OR rekaz_code LIKE ? OR work_order LIKE ? OR district LIKE ? OR fault_type LIKE ? OR team LIKE ?)"
+                like = f"%{q}%"
+                params.extend([like, like, like, like, like, like])
+            if status:
+                status = db.normalize_ticket_status(status)
+                if status == "تم الإسناد":
+                    sql += " AND status IN (?, ?)"
+                    params.extend(["تم الإسناد", "جديد"])
+                else:
+                    sql += " AND status=?"
+                    params.append(status)
+            sql += " ORDER BY id DESC"
+            rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
+            for r in rows:
+                r["status"] = db.normalize_ticket_status(r.get("status"))
+            headers = [_t("رقم العطل"), _t("كود ER"), _t("رقم أمر العمل"), _t("التاريخ"), _t("الحي"), _t("العطل"), _t("الفرقة"), _t("الحالة")]
+            fields = ["ticket_no", "rekaz_code", "work_order", "receive_date", "district", "fault_type", "team", "status"]
+            title = _t("الأعطال")
+        elif view == "reinforcement":
+            sql = "SELECT * FROM reinforcement_works WHERE 1=1"
+            params = []
+            if department_filter:
+                sql += " AND department=?"
+                params.append(department_filter)
+            if q:
+                sql += " AND (work_no LIKE ? OR department LIKE ? OR location LIKE ? OR work_type LIKE ? OR ticket_no LIKE ? OR status LIKE ?)"
+                like = f"%{q}%"
+                params.extend([like, like, like, like, like, like])
+            sql += " ORDER BY id DESC"
+            rows = db.rows_to_dicts(conn.execute(sql, params).fetchall())
+            headers = [_t("رقم أمر العمل"), _t("التاريخ"), _t("القسم"), _t("نوع العمل"), _t("الموقع"), _t("رقم العطل"), _t("الحالة"), _t("القيمة")]
+            fields = ["work_no", "work_date", "department", "work_type", "location", "ticket_no", "status", "value"]
+            title = _t("التعزيز - اسكيمات")
+        elif view == "works":
+            rows = db.rows_to_dicts(conn.execute("SELECT * FROM construction_works ORDER BY id DESC").fetchall())
+            if q:
+                ql = q.lower()
+                rows = [
+                    r
+                    for r in rows
+                    if ql in (r.get("work_no") or "").lower()
+                    or ql in (r.get("site") or "").lower()
+                    or ql in (r.get("work_type") or "").lower()
+                ]
+            headers = [_t("رقم أمر العمل"), _t("التاريخ"), _t("الموقع"), _t("نوع العمل"), _t("الحالة"), _t("القيمة")]
+            fields = ["work_no", "work_date", "site", "work_type", "status", "value"]
+            title = _t("الإنشاءات")
+        else:
+            rows = db.rows_to_dicts(conn.execute("SELECT * FROM projects ORDER BY id DESC").fetchall())
+            if q:
+                ql = q.lower()
+                rows = [
+                    r
+                    for r in rows
+                    if ql in (r.get("project_code") or "").lower()
+                    or ql in (r.get("project_name") or "").lower()
+                    or ql in (r.get("ticket_no") or "").lower()
+                ]
+            headers = [_t("كود المشروع"), _t("اسم المشروع"), _t("النوع"), _t("الحالة"), _t("رقم العطل")]
+            fields = ["project_code", "project_name", "project_type", "status", "ticket_no"]
+            title = _t("المشاريع")
+    finally:
+        conn.close()
+    filters = []
+    if q:
+        filters.append(f"{_t('بحث')}: {q}")
+    if status:
+        filters.append(f"{_t('الحالة')}: {status}")
+    if department_filter:
+        filters.append(f"{_t('القسم')}: {department_filter}")
+    return {
+        "title": f"{_t('المستودعات')} - {title}",
+        "headers": headers,
+        "fields": fields,
+        "rows": rows,
+        "filters": filters,
+        "view": view,
+    }
+
+
+@app.route("/warehouses/<source>/export.pdf")
+@login_required
+def warehouse_specialty_pdf(source):
+    payload = _warehouse_specialty_pdf_payload(source)
+    data = reports_svc.build_table_pdf(
+        title_text=payload["title"],
+        headers=payload["headers"],
+        rows=payload["rows"],
+        field_keys=payload["fields"],
+        filters=payload["filters"],
+    )
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-مفلتر" if payload["filters"] else ""
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"warehouses-{source}-{payload['view']}{suffix}-{stamp}.pdf",
+        mimetype="application/pdf",
+    )
+
+
 @app.route("/warehouses/constructions")
 @login_required
 def warehouse_constructions():
@@ -3605,6 +3774,7 @@ def module_list(name):
         reinforcement_departments=db.list_reinforcement_departments(active_only=False) if name == "reinforcement_works" else [],
         missing_amount=missing_amount,
         export_href=_url_with_filters("module_export_excel", name=name) if money_keys else None,
+        export_pdf_href=_url_with_filters("module_export_pdf", name=name),
         summary_cards=summary_cards,
     )
 
@@ -3736,6 +3906,52 @@ def module_export_excel(name):
         rows,
         list_cols,
         f"{name}{suffix}-{stamp}.xlsx",
+    )
+
+
+@app.route("/module/<name>/export.pdf")
+@login_required
+def module_export_pdf(name):
+    module = MODULES.get(name)
+    if not module:
+        flash(_t("القسم غير موجود"), "danger")
+        return redirect(url_for("ops_home"))
+    if name in ("warehouse_items", "primary_team_orders"):
+        return redirect(url_for("module_list", name=name))
+    packed = _load_module_list_rows(name, module)
+    rows = packed["rows"]
+    list_cols = list(module.get("list_cols") or [f[0] for f in module.get("fields") or []])
+    label_map = {f[0]: f[1] for f in module.get("fields") or []}
+    headers = [_t(label_map.get(k, k)) for k in list_cols]
+    filters = []
+    if packed["ticket_filter"]:
+        filters.append(f"{_t('رقم العطل')}: {packed['ticket_filter']}")
+    if packed["item_filter"]:
+        filters.append(f"{_t('المادة')}: {packed['item_filter']}")
+    if packed["source_filter"]:
+        filters.append(f"{_t('التخصص')}: {packed['source_filter']}")
+    if packed["dept_filter"]:
+        filters.append(f"{_t('القسم')}: {packed['dept_filter']}")
+    if packed["excavation_filter"]:
+        filters.append(_t("حفر فقط"))
+    if packed["linked_section_filter"]:
+        filters.append(f"{_t('مرتبط بتبويب')}: {_linked_section_label(packed['linked_section_filter'])}")
+    if packed["missing_amount"]:
+        filters.append(_t("بدون مبلغ"))
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-مفلتر" if filters else ""
+    data = reports_svc.build_table_pdf(
+        title_text=_t(module.get("title") or name),
+        headers=headers,
+        rows=rows,
+        field_keys=list_cols,
+        filters=filters,
+    )
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"{name}{suffix}-{stamp}.pdf",
+        mimetype="application/pdf",
     )
 
 
@@ -4586,6 +4802,7 @@ def ops_primary_teams():
         today=datetime.now().strftime("%Y-%m-%d"),
         missing_amount=missing_amount,
         export_href=_url_with_filters("export_primary_teams_excel"),
+        export_pdf_href=_url_with_filters("export_primary_teams_pdf"),
         summary_cards=summary_cards,
     )
 
@@ -4631,6 +4848,63 @@ def export_primary_teams_excel():
         rows,
         fields,
         f"الفرق-الأولية{suffix}-{stamp}.xlsx",
+    )
+
+
+@app.route("/ops/primary-teams/export.pdf")
+@login_required
+def export_primary_teams_pdf():
+    q = (request.args.get("q") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    missing_amount = _missing_amount_flag()
+    conn = db.connect()
+    rows = db.rows_to_dicts(
+        conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall()
+    )
+    conn.close()
+    if q:
+        ql = q.lower()
+        rows = [
+            r
+            for r in rows
+            if ql in (r.get("work_order") or "").lower()
+            or ql in (r.get("extract_no") or "").lower()
+            or ql in (str(r.get("amount") or "")).lower()
+            or ql in (r.get("notes") or "").lower()
+        ]
+    rows = _filter_rows_by_date_range(rows, date_from, date_to, "order_date")
+    if missing_amount:
+        rows = _filter_missing_amount_rows(rows, "amount")
+    headers = [
+        _t("أمر العمل"),
+        _t("رقم المستخلص"),
+        _t("المبلغ"),
+        _t("التاريخ"),
+        _t("ملاحظات"),
+    ]
+    fields = ["work_order", "extract_no", "amount", "order_date", "notes"]
+    filters = []
+    if q:
+        filters.append(f"{_t('بحث')}: {q}")
+    if date_from or date_to:
+        filters.append(f"{_t('من')}: {date_from or '—'} | {_t('إلى')}: {date_to or '—'}")
+    if missing_amount:
+        filters.append(_t("بدون مبلغ"))
+    data = reports_svc.build_table_pdf(
+        title_text=_t("الفرق الأولية"),
+        headers=headers,
+        rows=rows,
+        field_keys=fields,
+        filters=filters,
+    )
+    stamp = datetime.now().strftime("%Y%m%d")
+    suffix = "-مفلتر" if filters else ""
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"الفرق-الأولية{suffix}-{stamp}.pdf",
+        mimetype="application/pdf",
     )
 
 

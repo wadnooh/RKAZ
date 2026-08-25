@@ -14,6 +14,7 @@
       <a class="btn primary" href="{{ url_for('ticket_new') }}">{{ _('+ عطل جديد') }}</a>
       {% endif %}
       {% if can('export') %}<a class="btn ghost" href="{{ export_href or url_for('export_tickets_excel') }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>{% endif %}
+      {% if can('export') %}<a class="btn ghost" href="{{ export_pdf_href or url_for('tickets.export_pdf') }}">{{ _('تصدير PDF') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>{% endif %}
     </div>
   </div>
 

@@ -10,6 +10,9 @@
       <div class="meta">{{ subtitle }}</div>
     </div>
     <div class="actions" data-tab-strip="1">
+      {% if can('export') %}
+      <a class="btn ghost" href="{{ url_for('warehouse_specialty_pdf', source=source, view=view, q=q or none, status=status or none, department=department_filter or none) }}">{{ _('تصدير PDF') }}</a>
+      {% endif %}
       {% if source == 'ops' %}
       <a class="btn ghost{% if view == 'tickets' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='tickets') }}">{{ _('الأعطال') }}</a>
       <a class="btn ghost{% if view == 'teams' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='teams') }}">{{ _('الفرق الأولية') }}</a>
