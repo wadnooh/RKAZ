@@ -681,6 +681,78 @@ def _cards_block(styles, cards: list[dict] | None, *, width_mm: float):
     return [table, Spacer(1, 10)]
 
 
+def _pdf_card_cell(styles, title: str, value, subtitle: str = "", *, money_value: bool = False):
+    if not title and (value is None or value == "") and not subtitle:
+        return [_p("", styles["signNote"]), _p("", styles["h2"])]
+    if money_value:
+        value = money(value)
+    elif value is None or value == "":
+        value = "—"
+    cell = [_p(title, styles["signNote"]), _p(value, styles["h2"])]
+    if subtitle:
+        cell.append(_p(subtitle, styles["signNote"]))
+    return cell
+
+
+def _wide_card_block(styles, title: str, value, subtitle: str, *, width_mm: float, money_value: bool = True):
+    data = [[_pdf_card_cell(styles, title, value, subtitle, money_value=money_value)]]
+    table = Table(data, colWidths=[width_mm * mm], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), SOFT_PAPER),
+                ("BOX", (0, 0), (-1, -1), 0.55, GOLD),
+                ("LINEABOVE", (0, 0), (-1, 0), 1.0, GOLD),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 12),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+                ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+            ]
+        )
+    )
+    return [table, Spacer(1, 7)]
+
+
+def _child_cards_block(styles, cards: list[dict], *, width_mm: float):
+    cards = [c for c in (cards or []) if c]
+    if not cards:
+        return []
+    card_w = width_mm / 3.0 * mm
+    cells = []
+    for c in cards:
+        cells.append(
+            _pdf_card_cell(
+                styles,
+                c.get("title") or "—",
+                c.get("value"),
+                c.get("subtitle") or "",
+                money_value=bool(c.get("money")),
+            )
+        )
+    while len(cells) % 3:
+        cells.append(_pdf_card_cell(styles, "", "", ""))
+    rows = [cells[i : i + 3] for i in range(0, len(cells), 3)]
+    table = Table(rows, colWidths=[card_w, card_w, card_w], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), IVORY),
+                ("BOX", (0, 0), (-1, -1), 0.35, LINE),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    return [table, Spacer(1, 9)]
+
+
 def _draw_page(canvas, doc, *, subtitle: str = ""):
     font_name = _font_name()
     page_w, page_h = canvas._pagesize
@@ -793,13 +865,55 @@ def build_general_report_pdf(report: dict) -> bytes:
         _p(f"{company} — {period} — {report['generated_at']}", styles["meta"]),
         Spacer(1, 10),
     ]
+    story.extend(_wide_card_block(styles, "إجمالي الأعمال", metrics["total_work"], "كل الأقسام المالية", width_mm=200))
     story.extend(
-        _cards_block(
+        _child_cards_block(
             styles,
             [
-                {"title": "إجمالي الأعمال", "value": metrics["total_work"], "money": True, "subtitle": "حسب الفلترة"},
-                {"title": "نسبة ركاز", "value": metrics["rekaz"], "money": True, "subtitle": pct(metrics["rekaz_pct"])},
-                {"title": "نسبة المقاول الرئيسي", "value": metrics["contractor_ratio"], "money": True, "subtitle": pct(metrics["contractor_pct"])},
+                {"title": "نسبة ركاز", "value": metrics["rekaz"], "money": True, "subtitle": f"{pct(metrics['rekaz_pct'])} من المبالغ المدخلة"},
+                {"title": "نسبة المقاول الرئيسي", "value": metrics["contractor_ratio"], "money": True, "subtitle": f"{pct(metrics['contractor_pct'])} من المبالغ المدخلة"},
+                {"title": "عدد الأعطال", "value": cards["tickets"], "subtitle": f"منفذ/مغلق: {cards['done_tickets']}"},
+            ],
+            width_mm=200,
+        )
+    )
+    story.extend(
+        _wide_card_block(
+            styles,
+            "إجمالي العمليات والصيانة",
+            metrics["operations"],
+            "الأعطال والعدادات والتعزيز والفرق الأولية",
+            width_mm=200,
+        )
+    )
+    story.extend(
+        _child_cards_block(
+            styles,
+            [
+                {"title": "الأعطال", "value": metrics["tickets"], "money": True, "subtitle": f"{cards['done_tickets']} منفذ / مغلق"},
+                {"title": "العدادات / التمتير", "value": metrics["metering"], "money": True, "subtitle": f"{cards['metering_count']} سجل"},
+                {"title": "قيمة الفرق الأولية", "value": metrics["primary_teams"], "money": True, "subtitle": f"{cards['primary_team_count']} أمر عمل"},
+                {"title": "التعزيز - اسكيمات", "value": metrics["reinforcement"], "money": True, "subtitle": f"{cards['reinforcement_count']} معاملة"},
+                {"title": "المحطات ضمن التعزيز", "value": metrics["stations"], "money": True, "subtitle": f"{cards['station_count']} معاملة"},
+            ],
+            width_mm=200,
+        )
+    )
+    story.extend(_wide_card_block(styles, "إجمالي الإنشاءات", metrics["construction"], "كل تبويبات ومعاملات الإنشاءات", width_mm=200))
+    story.extend(
+        _child_cards_block(
+            styles,
+            [{"title": "معاملات الإنشاءات", "value": cards["construction_count"], "subtitle": "معاملة"}],
+            width_mm=200,
+        )
+    )
+    story.extend(_wide_card_block(styles, "إجمالي المشاريع", metrics["projects"], "كل تبويبات وبيانات المشاريع", width_mm=200))
+    story.extend(
+        _child_cards_block(
+            styles,
+            [
+                {"title": "المشاريع المسجلة", "value": cards["project_count"], "subtitle": "مشروع"},
+                {"title": "قيمة المقاول الرئيسي", "value": metrics["contractor"], "money": True, "subtitle": f"{cards['contractor_count']} معاملة"},
             ],
             width_mm=200,
         )
