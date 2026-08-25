@@ -42,7 +42,7 @@
     <div class="stat-card report-group-card">
       <div>{{ _('إجمالي العمليات والصيانة') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.operations|money }}</strong>
-      <div class="meta">{{ _('الأعطال والعدادات والتعزيز والفرق الأولية') }}</div>
+      <div class="meta">{{ _('الأعطال وصيانة العدادات والتعزيز وصيانة المحطات والفرق الأولية') }}</div>
     </div>
     <div class="stat-card report-child-card">
       <div>{{ _('الأعطال') }}</div>
@@ -50,7 +50,7 @@
       <div class="meta">{{ report.cards.done_tickets }} {{ _('منفذ / مغلق') }}</div>
     </div>
     <div class="stat-card report-child-card">
-      <div>{{ _('العدادات / التمتير') }}</div>
+      <div>{{ _('صيانة العدادات') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.metering|money }}</strong>
       <div class="meta">{{ report.cards.metering_count }} {{ _('سجل') }}</div>
     </div>
@@ -65,7 +65,7 @@
       <div class="meta">{{ report.cards.reinforcement_count }} {{ _('معاملة') }}</div>
     </div>
     <div class="stat-card report-child-card">
-      <div>{{ _('المحطات ضمن التعزيز') }}</div>
+      <div>{{ _('صيانة المحطات') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.stations|money }}</strong>
       <div class="meta">{{ report.cards.station_count }} {{ _('معاملة') }}</div>
     </div>

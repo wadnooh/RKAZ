@@ -85,50 +85,48 @@ def _sum_reinforcement_department(conn, pattern: str, date_from: str = "", date_
         return 0.0
 
 
-def _metering_date_where(date_from: str = "", date_to: str = "") -> tuple[str, list]:
-    date_expr = "COALESCE(NULLIF(approve_date,''), NULLIF(submit_date,''), NULLIF(start_date,''))"
-    where = ["1=1"]
-    params: list = []
-    if date_from:
-        where.append(f"date({date_expr}) >= date(?)")
-        params.append(date_from)
-    if date_to:
-        where.append(f"date({date_expr}) <= date(?)")
-        params.append(date_to)
-    return " AND ".join(where), params
-
-
-def _count_metering(conn, date_from: str = "", date_to: str = "") -> int:
-    where, params = _metering_date_where(date_from, date_to)
-    try:
-        row = conn.execute(f"SELECT COUNT(*) FROM metering WHERE {where}", params).fetchone()
-        return int(row[0] if row else 0)
-    except Exception:
-        return 0
-
-
-def _sum_metering(conn, date_from: str = "", date_to: str = "") -> float:
-    where, params = _metering_date_where(date_from, date_to)
-    try:
-        row = conn.execute(
-            f"""
-            SELECT COALESCE(SUM(COALESCE(approved_value,0)),0)
-            FROM metering
-            WHERE {where}
-            """,
-            params,
-        ).fetchone()
-        return _num(row[0] if row else 0)
-    except Exception:
-        return 0.0
-
-
 def _count_reinforcement_department(conn, pattern: str, date_from: str = "", date_to: str = "") -> int:
     where, params = _date_where("work_date", date_from, date_to)
     try:
         row = conn.execute(
             f"SELECT COUNT(*) FROM reinforcement_works WHERE {where} AND department LIKE ?",
             [*params, f"%{pattern}%"],
+        ).fetchone()
+        return int(row[0] if row else 0)
+    except Exception:
+        return 0
+
+
+def _sum_reinforcement_other(conn, date_from: str = "", date_to: str = "") -> float:
+    where, params = _date_where("work_date", date_from, date_to)
+    try:
+        row = conn.execute(
+            f"""
+            SELECT COALESCE(SUM(COALESCE(value,0)),0)
+            FROM reinforcement_works
+            WHERE {where}
+              AND COALESCE(department,'') NOT LIKE ?
+              AND COALESCE(department,'') NOT LIKE ?
+            """,
+            [*params, "%عدادات%", "%محطات%"],
+        ).fetchone()
+        return _num(row[0] if row else 0)
+    except Exception:
+        return 0.0
+
+
+def _count_reinforcement_other(conn, date_from: str = "", date_to: str = "") -> int:
+    where, params = _date_where("work_date", date_from, date_to)
+    try:
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*)
+            FROM reinforcement_works
+            WHERE {where}
+              AND COALESCE(department,'') NOT LIKE ?
+              AND COALESCE(department,'') NOT LIKE ?
+            """,
+            [*params, "%عدادات%", "%محطات%"],
         ).fetchone()
         return int(row[0] if row else 0)
     except Exception:
@@ -232,9 +230,11 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         ticket_value = _tickets_value(conn, tickets, settings)
         primary_team_value = _sum_table(conn, "primary_team_orders", "amount", "order_date", date_from, date_to)
         construction_value = _sum_table(conn, "construction_works", "value", "work_date", date_from, date_to)
-        reinforcement_value = _sum_table(conn, "reinforcement_works", "value", "work_date", date_from, date_to)
-        metering_count = _count_metering(conn, date_from, date_to)
-        metering_value = _sum_metering(conn, date_from, date_to)
+        reinforcement_value = _sum_reinforcement_other(conn, date_from, date_to)
+        reinforcement_count = _count_reinforcement_other(conn, date_from, date_to)
+        metering_count = _count_reinforcement_department(conn, "عدادات", date_from, date_to)
+        metering_value = _sum_reinforcement_department(conn, "عدادات", date_from, date_to)
+        station_count = _count_reinforcement_department(conn, "محطات", date_from, date_to)
         station_value = _sum_reinforcement_department(conn, "محطات", date_from, date_to)
         project_value = _sum_table(conn, "projects", "value", "start_date", date_from, date_to)
         contractor_value = _sum_table(conn, "contractor_works", "value", "work_date", date_from, date_to)
@@ -243,7 +243,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         purchase_value = _purchase_total(conn, date_from, date_to)
         warehouse = db.warehouse_movements_totals(conn=conn)
 
-        operations_value = ticket_value + metering_value + reinforcement_value + primary_team_value
+        operations_value = ticket_value + metering_value + reinforcement_value + station_value + primary_team_value
         total_work_value = operations_value + construction_value + project_value + contractor_value
         rekaz_pct = _setting_ratio(settings, "rekaz_ratio")
         contractor_pct = _setting_ratio(settings, "main_contractor_ratio")
@@ -274,12 +274,12 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
                     ("الأعطال", len(tickets)),
                     ("الأعطال المنفذة/المغلقة", sum(1 for t in tickets if db.normalize_ticket_status(t.get("status")) in ("منفذ", "مغلق"))),
                     ("قيمة الأعطال", money(ticket_value)),
-                    ("العدادات / التمتير", metering_count),
-                    ("قيمة العدادات / التمتير", money(metering_value)),
-                    ("التعزيز - اسكيمات", _count_table(conn, "reinforcement_works", "work_date", date_from, date_to)),
+                    ("صيانة العدادات", metering_count),
+                    ("قيمة صيانة العدادات", money(metering_value)),
+                    ("التعزيز - اسكيمات", reinforcement_count),
                     ("قيمة التعزيز - اسكيمات", money(reinforcement_value)),
-                    ("المحطات ضمن التعزيز", _count_reinforcement_department(conn, "محطات", date_from, date_to)),
-                    ("قيمة المحطات ضمن التعزيز", money(station_value)),
+                    ("صيانة المحطات", station_count),
+                    ("قيمة صيانة المحطات", money(station_value)),
                     ("الفرق الأولية", _count_table(conn, "primary_team_orders", "order_date", date_from, date_to)),
                     ("قيمة الفرق الأولية", money(primary_team_value)),
                     ("آخر عطل", _latest_ref(conn, "tickets", "receive_date", "ticket_no")),
@@ -371,8 +371,8 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
                 "primary_team_count": _count_table(conn, "primary_team_orders", "order_date", date_from, date_to),
                 "metering_count": metering_count,
                 "construction_count": _count_table(conn, "construction_works", "work_date", date_from, date_to),
-                "reinforcement_count": _count_table(conn, "reinforcement_works", "work_date", date_from, date_to),
-                "station_count": _count_reinforcement_department(conn, "محطات", date_from, date_to),
+                "reinforcement_count": reinforcement_count,
+                "station_count": station_count,
                 "project_count": _count_table(conn, "projects", "start_date", date_from, date_to),
                 "contractor_count": _count_table(conn, "contractor_works", "work_date", date_from, date_to),
                 "warehouse_count": warehouse.get("tx_count") or 0,
@@ -882,7 +882,7 @@ def build_general_report_pdf(report: dict) -> bytes:
             styles,
             "إجمالي العمليات والصيانة",
             metrics["operations"],
-            "الأعطال والعدادات والتعزيز والفرق الأولية",
+            "الأعطال وصيانة العدادات والتعزيز وصيانة المحطات والفرق الأولية",
             width_mm=200,
         )
     )
@@ -891,10 +891,10 @@ def build_general_report_pdf(report: dict) -> bytes:
             styles,
             [
                 {"title": "الأعطال", "value": metrics["tickets"], "money": True, "subtitle": f"{cards['done_tickets']} منفذ / مغلق"},
-                {"title": "العدادات / التمتير", "value": metrics["metering"], "money": True, "subtitle": f"{cards['metering_count']} سجل"},
+                {"title": "صيانة العدادات", "value": metrics["metering"], "money": True, "subtitle": f"{cards['metering_count']} معاملة"},
                 {"title": "قيمة الفرق الأولية", "value": metrics["primary_teams"], "money": True, "subtitle": f"{cards['primary_team_count']} أمر عمل"},
                 {"title": "التعزيز - اسكيمات", "value": metrics["reinforcement"], "money": True, "subtitle": f"{cards['reinforcement_count']} معاملة"},
-                {"title": "المحطات ضمن التعزيز", "value": metrics["stations"], "money": True, "subtitle": f"{cards['station_count']} معاملة"},
+                {"title": "صيانة المحطات", "value": metrics["stations"], "money": True, "subtitle": f"{cards['station_count']} معاملة"},
             ],
             width_mm=200,
         )
@@ -923,9 +923,9 @@ def build_general_report_pdf(report: dict) -> bytes:
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
         [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("إجمالي العمليات والصيانة", styles["body"]), _p(money(metrics["operations"]), styles["body"])],
         [_p("نسبة ركاز", styles["body"]), _p(_ratio_with_money(metrics["rekaz_pct"], metrics["rekaz"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(_ratio_with_money(metrics["contractor_pct"], metrics["contractor_ratio"]), styles["body"])],
-        [_p("الأعطال", styles["body"]), _p(money(metrics["tickets"]), styles["body"]), _p("العدادات / التمتير", styles["body"]), _p(money(metrics["metering"]), styles["body"])],
+        [_p("الأعطال", styles["body"]), _p(money(metrics["tickets"]), styles["body"]), _p("صيانة العدادات", styles["body"]), _p(money(metrics["metering"]), styles["body"])],
         [_p("التعزيز - اسكيمات", styles["body"]), _p(money(metrics["reinforcement"]), styles["body"]), _p("الفرق الأولية", styles["body"]), _p(money(metrics["primary_teams"]), styles["body"])],
-        [_p("المحطات ضمن التعزيز", styles["body"]), _p(money(metrics["stations"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
+        [_p("صيانة المحطات", styles["body"]), _p(money(metrics["stations"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
         [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
         [_p("الوارد مستودع", styles["body"]), _p(f"{metrics['warehouse_inbound']:.2f}", styles["body"]), _p("المنصرف مستودع", styles["body"]), _p(f"{metrics['warehouse_outbound']:.2f}", styles["body"])],
     ]
@@ -937,9 +937,9 @@ def build_general_report_pdf(report: dict) -> bytes:
     overview_rows = [
         ("العمليات والصيانة", money(metrics["operations"])),
         ("تابع العمليات - الأعطال", money(metrics["tickets"])),
-        ("تابع العمليات - العدادات / التمتير", money(metrics["metering"])),
+        ("تابع العمليات - صيانة العدادات", money(metrics["metering"])),
         ("تابع العمليات - التعزيز / اسكيمات", money(metrics["reinforcement"])),
-        ("تابع العمليات - المحطات ضمن التعزيز", money(metrics["stations"])),
+        ("تابع العمليات - صيانة المحطات", money(metrics["stations"])),
         ("تابع العمليات - الفرق الأولية", money(metrics["primary_teams"])),
         ("الإنشاءات", money(metrics["construction"])),
         ("المشاريع", money(metrics["projects"])),
