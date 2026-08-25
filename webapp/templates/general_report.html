@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block content %}
-<div class="card">
+<div class="report-page">
+<div class="card report-panel report-cover">
   <div class="toolbar">
     <div>
       <h2 class="section-title">{{ _('التقرير العام') }}</h2>
@@ -15,7 +16,7 @@
     </div>
   </div>
 
-  <form method="get" class="form-grid" style="margin-bottom:14px;align-items:end;">
+  <form method="get" class="form-grid report-filter" style="margin-bottom:14px;align-items:end;">
     <div class="field">
       <label>{{ _('من تاريخ') }}</label>
       <input type="date" name="date_from" value="{{ date_from or '' }}">
@@ -34,9 +35,10 @@
   </form>
 
   {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% set summary_cards_class = 'report-money-cards' %}
   {% include "_summary_cards.html" %}
 
-  <div class="stats-grid">
+  <div class="stats-grid report-metric-grid">
     <div class="stat-card">
       <div>{{ _('قيمة العمليات والصيانة') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.tickets|money }}</strong>
@@ -70,20 +72,20 @@
   </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card report-panel" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('تفصيل التقرير حسب التبويبات') }}</h3>
       <div class="meta">{{ _('كل تبويب مستقل حتى يكون التقرير واضحاً ومفصلاً.') }}</div>
     </div>
   </div>
-  <div class="stats-grid">
+  <div class="stats-grid report-section-grid">
     {% for sec in report.sections %}
-    <div class="stat-card">
+    <div class="stat-card report-section-card">
       <div>{{ sec.title }}</div>
       <strong style="font-size:1.02rem">{{ sec.rows[0][1] if sec.rows else '—' }}</strong>
       <div class="meta">{{ sec.rows[0][0] if sec.rows else _('لا توجد بيانات') }}</div>
-      <div class="table-wrap" style="margin-top:10px;">
+      <div class="table-wrap report-mini-table" style="margin-top:10px;">
         <table class="table" style="min-width:0;font-size:.88rem">
           <tbody>
             {% for label, value in sec.rows %}
@@ -97,14 +99,14 @@
   </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card report-panel" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('تفاصيل مالية وتشغيلية') }}</h3>
       <div class="meta">{{ _('الأرقام المالية تظهر حسب صلاحية عرض المبالغ') }}</div>
     </div>
   </div>
-  <div class="table-wrap">
+  <div class="table-wrap report-mini-table">
     <table class="table" style="min-width:0">
       <thead>
         <tr>
@@ -124,14 +126,14 @@
   </div>
 </div>
 
-<div class="card" style="margin-top:14px;">
+<div class="card report-panel" style="margin-top:14px;">
   <div class="toolbar">
     <div>
       <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('حالات الأعطال') }}</h3>
       <div class="meta">{{ _('توزيع إجمالي الأعطال في فترة التقرير') }}</div>
     </div>
   </div>
-  <div class="table-wrap">
+  <div class="table-wrap report-mini-table">
     <table class="table" style="min-width:0">
       <thead><tr><th>{{ _('الحالة') }}</th><th>{{ _('العدد') }}</th></tr></thead>
       <tbody>
@@ -143,5 +145,6 @@
       </tbody>
     </table>
   </div>
+</div>
 </div>
 {% endblock %}

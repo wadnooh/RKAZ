@@ -353,12 +353,15 @@ def whatsapp_url(report: dict, page_url: str, pdf_url: str, phone: str = "") -> 
     return f"https://wa.me/?text={quote(msg)}"
 
 
-INK = colors.HexColor("#1A1814")
-GOLD = colors.HexColor("#8A7349")
-GOLD_DARK = colors.HexColor("#6E5A38")
-CREAM = colors.HexColor("#F7F4EF")
-IVORY = colors.HexColor("#FBFAF7")
-LINE = colors.HexColor("#DDD2C0")
+INK = colors.HexColor("#2C302A")
+GOLD = colors.HexColor("#B79C62")
+GOLD_DARK = colors.HexColor("#6F6448")
+CREAM = colors.HexColor("#FCFAF6")
+IVORY = colors.HexColor("#FFFFFF")
+LINE = colors.HexColor("#E6DED0")
+PALE_GOLD = colors.HexColor("#F3EADB")
+SOFT_PAPER = colors.HexColor("#FBFAF7")
+MUTED_INK = colors.HexColor("#6D6A62")
 WHITE = colors.white
 COMPANY_FALLBACK = "شركة ركاز الإنجاز للمقاولات"
 OFFICE_FALLBACK = "مكتب خدمات خريص"
@@ -407,8 +410,8 @@ def _styles(font_name: str) -> dict:
             "RakazLuxTitle",
             parent=base["Title"],
             fontName=font_name,
-            fontSize=18,
-            leading=24,
+            fontSize=17,
+            leading=23,
             alignment=TA_CENTER,
             textColor=INK,
             spaceAfter=2,
@@ -429,7 +432,7 @@ def _styles(font_name: str) -> dict:
             fontSize=8,
             leading=11,
             alignment=TA_CENTER,
-            textColor=colors.HexColor("#6B655C"),
+            textColor=MUTED_INK,
         ),
         "h2": ParagraphStyle(
             "RakazLuxH2",
@@ -458,7 +461,7 @@ def _styles(font_name: str) -> dict:
             fontSize=8,
             leading=11,
             alignment=TA_CENTER,
-            textColor=WHITE,
+            textColor=INK,
         ),
         "cell": ParagraphStyle(
             "RakazLuxCell",
@@ -485,7 +488,7 @@ def _styles(font_name: str) -> dict:
             fontSize=7.5,
             leading=10,
             alignment=TA_CENTER,
-            textColor=colors.HexColor("#6B655C"),
+            textColor=MUTED_INK,
         ),
     }
 
@@ -503,8 +506,9 @@ def _luxury_table_style(*, header=True) -> TableStyle:
     if header:
         cmds.extend(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), GOLD),
-                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("BACKGROUND", (0, 0), (-1, 0), PALE_GOLD),
+                ("TEXTCOLOR", (0, 0), (-1, 0), INK),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.7, GOLD),
                 ("ROWBACKGROUNDS", (0, 1), (-1, -1), [WHITE, CREAM]),
             ]
         )
@@ -536,10 +540,11 @@ def _archive_block(styles, *, width_mm: float):
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, 0), GOLD),
-                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("BACKGROUND", (0, 0), (-1, 0), PALE_GOLD),
+                ("TEXTCOLOR", (0, 0), (-1, 0), INK),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.7, GOLD),
                 ("BACKGROUND", (0, 1), (-1, 1), IVORY),
-                ("GRID", (0, 0), (-1, -1), 0.45, GOLD_DARK),
+                ("GRID", (0, 0), (-1, -1), 0.35, LINE),
                 ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
                 ("VALIGN", (0, 1), (-1, 1), "TOP"),
                 ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
@@ -589,8 +594,8 @@ def _cards_block(styles, cards: list[dict] | None, *, width_mm: float):
     table.setStyle(
         TableStyle(
             [
-                ("BACKGROUND", (0, 0), (-1, -1), IVORY),
-                ("BOX", (0, 0), (-1, -1), 0.45, GOLD_DARK),
+                ("BACKGROUND", (0, 0), (-1, -1), SOFT_PAPER),
+                ("BOX", (0, 0), (-1, -1), 0.45, LINE),
                 ("INNERGRID", (0, 0), (-1, -1), 0.25, LINE),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("ALIGN", (0, 0), (-1, -1), "CENTER"),
@@ -608,19 +613,26 @@ def _draw_page(canvas, doc, *, subtitle: str = ""):
     font_name = _font_name()
     page_w, page_h = canvas._pagesize
     canvas.saveState()
-    canvas.setFillColor(INK)
-    canvas.rect(0, page_h - 16 * mm, page_w, 16 * mm, fill=1, stroke=0)
-    canvas.setFillColor(GOLD)
-    canvas.rect(0, page_h - 18.2 * mm, page_w, 2.2 * mm, fill=1, stroke=0)
     canvas.setFillColor(WHITE)
+    canvas.rect(0, page_h - 18 * mm, page_w, 18 * mm, fill=1, stroke=0)
+    canvas.setFillColor(SOFT_PAPER)
+    canvas.rect(0, page_h - 18 * mm, page_w, 18 * mm, fill=1, stroke=0)
+    canvas.setFillColor(GOLD)
+    canvas.rect(0, page_h - 18.2 * mm, page_w, 0.9 * mm, fill=1, stroke=0)
+    canvas.setStrokeColor(LINE)
+    canvas.setLineWidth(0.4)
+    canvas.line(12 * mm, page_h - 20 * mm, page_w - 12 * mm, page_h - 20 * mm)
+    canvas.setFillColor(INK)
     canvas.setFont(font_name, 9)
     canvas.drawRightString(page_w - 12 * mm, page_h - 8 * mm, _rtl(COMPANY_FALLBACK))
+    canvas.setFillColor(GOLD_DARK)
     canvas.setFont(font_name, 8)
     canvas.drawString(12 * mm, page_h - 8 * mm, _rtl(subtitle or "نظام ركاز — تصدير رسمي"))
 
-    canvas.setFillColor(GOLD)
-    canvas.rect(0, 0, page_w, 11 * mm, fill=1, stroke=0)
-    canvas.setFillColor(WHITE)
+    canvas.setStrokeColor(LINE)
+    canvas.setLineWidth(0.4)
+    canvas.line(12 * mm, 12 * mm, page_w - 12 * mm, 12 * mm)
+    canvas.setFillColor(MUTED_INK)
     canvas.setFont(font_name, 8)
     canvas.drawCentredString(page_w / 2, 4.4 * mm, _rtl(f"{OFFICE_FALLBACK}  ·  صفحة {doc.page}"))
     canvas.restoreState()
