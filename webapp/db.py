@@ -27,6 +27,8 @@ DEFAULT_SETTINGS = {
     "monthly_expenses": 334000,
     "cash_delay_months": 4,
     "emergency_ratio": 0.45,
+    "rekaz_ratio": 0,
+    "main_contractor_ratio": 0,
     "target_avg": 5000,
     "reject_limit": 0.05,
     "response_target": 30,

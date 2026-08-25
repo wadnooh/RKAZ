@@ -3348,6 +3348,55 @@ def programmer_magic(token):
     return redirect(url_for("programmer_verify"))
 
 
+def _parse_percent_setting(raw, label: str) -> float:
+    text = str(raw or "").strip().replace("%", "").replace(",", ".")
+    try:
+        value = float(text)
+    except (TypeError, ValueError):
+        raise ValueError(_t("{label} يجب أن تكون رقماً بين 0 و 100", label=label))
+    if value < 0 or value > 100:
+        raise ValueError(_t("{label} يجب أن تكون بين 0 و 100", label=label))
+    return round(value, 2)
+
+
+@app.route("/admin/programmer/work-ratios", methods=["GET", "POST"])
+@login_required
+def programmer_work_ratios():
+    if not prog_guard.can_access_programmer_device_ui():
+        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
+    if request.method == "POST":
+        if not prog_guard.can_mutate_control_plane():
+            if not prog_guard.main_device_registered():
+                return redirect(url_for("programmer_device_setup", next=request.path))
+            return redirect(url_for("programmer_verify", next=request.path))
+        try:
+            rekaz_ratio = _parse_percent_setting(request.form.get("rekaz_ratio"), _t("نسبة ركاز"))
+            contractor_ratio = _parse_percent_setting(request.form.get("main_contractor_ratio"), _t("نسبة المقاول الرئيسي"))
+        except ValueError as exc:
+            flash(str(exc), "danger")
+            return redirect(url_for("programmer_work_ratios"))
+        db.save_settings(
+            {
+                "rekaz_ratio": rekaz_ratio,
+                "main_contractor_ratio": contractor_ratio,
+            }
+        )
+        db.log_audit(
+            current_user_name(),
+            "تعديل",
+            "نسب ركاز والمقاول",
+            details=f"rekaz={rekaz_ratio}, contractor={contractor_ratio}",
+        )
+        flash(_t("تم حفظ نسب ركاز والمقاول الرئيسي."), "ok")
+        _after_data_change()
+        return redirect(url_for("programmer_work_ratios"))
+    return render_template(
+        "programmer_work_ratios.html",
+        settings=db.get_settings(),
+        can_save_ratios=prog_guard.can_mutate_control_plane(),
+    )
+
+
 @app.route("/admin/audit-log")
 @login_required
 def audit_log_home():
@@ -3755,6 +3804,8 @@ def module_list(name):
             missing_amount_endpoint="module_list" if money_keys else None,
             missing_amount_endpoint_kwargs={"name": name} if money_keys else None,
         )
+        if section in ("constructions", "projects", "maintenance"):
+            summary_cards.extend(helpers.work_ratio_cards())
     return render_template(
         "module_list.html",
         name=name,
@@ -4793,6 +4844,7 @@ def ops_primary_teams():
         missing_amount_active=missing_amount,
         missing_amount_endpoint="ops_primary_teams",
     )
+    summary_cards.extend(helpers.work_ratio_cards())
     return render_template(
         "primary_teams.html",
         rows=rows,

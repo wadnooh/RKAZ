@@ -137,6 +137,7 @@ def list_all():
             helpers.t("أحدث تاريخ استلام"),
         )
     )
+    summary_cards.extend(helpers.work_ratio_cards())
     return render_template(
         "tickets_list.html",
         rows=rows, q=q, status=status, date_from=date_from, date_to=date_to, classification=classification,

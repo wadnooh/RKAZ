@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card programmer-page">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('نسب ركاز والمقاول الرئيسي') }}</h2>
+      <div class="meta">{{ _('هذه القيم تظهر كبطاقات في العمليات والصيانة والإنشاءات والمشاريع والورشة، وتعديلها للمبرمج فقط.') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('programmer_device_setup', next=request.path) }}">{{ _('جهاز المبرمج') }}</a>
+      {% if not can_save_ratios %}
+      <a class="btn primary" href="{{ url_for('programmer_verify', next=request.path) }}">{{ _('تحقق المبرمج') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% set cards = [
+    {'title': _('نسبة ركاز'), 'value': '%.1f%%'|format((settings.rekaz_ratio or 0)|float), 'subtitle': _('مدخلة من المبرمج فقط')},
+    {'title': _('نسبة المقاول الرئيسي'), 'value': '%.1f%%'|format((settings.main_contractor_ratio or 0)|float), 'subtitle': _('مدخلة من المبرمج فقط')}
+  ] %}
+  {% set summary_cards = cards %}
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
+
+  <form method="post" class="form-grid" style="max-width:720px;">
+    <div class="field">
+      <label>{{ _('نسبة ركاز') }}</label>
+      <input type="number" name="rekaz_ratio" min="0" max="100" step="0.01" value="{{ settings.rekaz_ratio or 0 }}" {% if not can_save_ratios %}disabled{% endif %}>
+    </div>
+    <div class="field">
+      <label>{{ _('نسبة المقاول الرئيسي') }}</label>
+      <input type="number" name="main_contractor_ratio" min="0" max="100" step="0.01" value="{{ settings.main_contractor_ratio or 0 }}" {% if not can_save_ratios %}disabled{% endif %}>
+    </div>
+    <div class="actions" style="grid-column:1/-1">
+      <button class="btn primary" type="submit" {% if not can_save_ratios %}disabled{% endif %}>{{ _('حفظ النسب') }}</button>
+    </div>
+  </form>
+
+  {% if not can_save_ratios %}
+  <p class="meta" style="margin-top:12px;">{{ _('الحفظ يتطلب جهاز المبرمج الرئيسي أو تحقق المبرمج المؤقت.') }}</p>
+  {% endif %}
+</div>
+{% endblock %}

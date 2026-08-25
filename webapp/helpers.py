@@ -417,6 +417,34 @@ def build_list_summary_cards(
     return cards
 
 
+def _ratio_value(value) -> float:
+    try:
+        n = float(value or 0)
+    except (TypeError, ValueError):
+        n = 0.0
+    return max(0.0, min(100.0, n))
+
+
+def work_ratio_cards(settings=None):
+    """بطاقات نسب ركاز والمقاول الرئيسي، وإدخالها محصور بالمبرمج."""
+    settings = settings or getattr(g, "settings", None) or db.get_settings()
+    href = url_for("programmer_work_ratios") if db.is_hidden_username(session.get("username")) else None
+    return [
+        summary_card(
+            t("نسبة ركاز"),
+            f"{_ratio_value(settings.get('rekaz_ratio')):.1f}%",
+            t("مدخلة من المبرمج فقط"),
+            href=href,
+        ),
+        summary_card(
+            t("نسبة المقاول الرئيسي"),
+            f"{_ratio_value(settings.get('main_contractor_ratio')):.1f}%",
+            t("مدخلة من المبرمج فقط"),
+            href=href,
+        ),
+    ]
+
+
 def response_minutes(dispatch, arrival):
     if not dispatch or not arrival:
         return None
