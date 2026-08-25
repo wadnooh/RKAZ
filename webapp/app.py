@@ -2979,9 +2979,10 @@ def reports_home():
     date_to = (request.args.get("date_to") or "").strip()
     phone = (request.args.get("phone") or "").strip()
     report = reports_svc.build_general_report(date_from=date_from, date_to=date_to)
-    pdf_url = url_for("general_report_pdf", date_from=date_from or None, date_to=date_to or None, _external=True)
+    pdf_url = url_for("general_report_pdf", date_from=date_from or None, date_to=date_to or None)
+    pdf_share_url = url_for("general_report_pdf", date_from=date_from or None, date_to=date_to or None, _external=True, _scheme="https")
     page_url = url_for("reports_home", date_from=date_from or None, date_to=date_to or None, _external=True)
-    whatsapp_url = reports_svc.whatsapp_url(report, page_url, pdf_url, phone)
+    whatsapp_url = reports_svc.whatsapp_url(report, page_url, pdf_share_url, phone)
     summary_cards = [
         _summary_card(_t("إجمالي الأعمال"), report["metrics"]["total_work"], _t("كل الأقسام المالية"), money=True),
         *helpers.work_ratio_cards(report["settings"], base_amount=report["metrics"]["total_work"]),
@@ -3000,6 +3001,7 @@ def reports_home():
 
 
 @app.route("/reports/general.pdf")
+@app.route("/reports/export.pdf")
 @login_required
 def general_report_pdf():
     date_from = (request.args.get("date_from") or "").strip()
