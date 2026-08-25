@@ -81,6 +81,47 @@ def _count_table(conn, table: str, date_col: str | None = None, date_from: str =
         return 0
 
 
+def _group_count(conn, table: str, field: str, date_col: str | None = None, date_from: str = "", date_to: str = "", *, limit: int = 8) -> list[tuple[str, int]]:
+    if date_col:
+        where, params = _date_where(date_col, date_from, date_to)
+    else:
+        where, params = "1=1", []
+    try:
+        rows = conn.execute(
+            f"""
+            SELECT COALESCE(NULLIF(TRIM({field}), ''), 'غير محدد') AS label, COUNT(*) AS n
+            FROM {table}
+            WHERE {where}
+            GROUP BY label
+            ORDER BY n DESC, label
+            LIMIT ?
+            """,
+            [*params, limit],
+        ).fetchall()
+        return [(r["label"], int(r["n"] or 0)) for r in rows]
+    except Exception:
+        return []
+
+
+def _latest_ref(conn, table: str, date_col: str, ref_col: str) -> str:
+    try:
+        row = conn.execute(
+            f"""
+            SELECT {ref_col}, {date_col}
+            FROM {table}
+            ORDER BY COALESCE({date_col}, '') DESC, id DESC
+            LIMIT 1
+            """
+        ).fetchone()
+        if not row:
+            return "—"
+        ref = row[ref_col] or "—"
+        date = row[date_col] or "—"
+        return f"{ref} — {date}"
+    except Exception:
+        return "—"
+
+
 def _ticket_rows(conn, date_from: str = "", date_to: str = "") -> list[dict]:
     where, params = _date_where("receive_date", date_from, date_to)
     return db.rows_to_dicts(conn.execute(f"SELECT * FROM tickets WHERE {where}", params).fetchall())
@@ -123,7 +164,9 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         settings = db.get_settings(conn)
         tickets = _ticket_rows(conn, date_from, date_to)
         ticket_value = _tickets_value(conn, tickets, settings)
+        primary_team_value = _sum_table(conn, "primary_team_orders", "amount", "order_date", date_from, date_to)
         construction_value = _sum_table(conn, "construction_works", "value", "work_date", date_from, date_to)
+        reinforcement_value = _sum_table(conn, "reinforcement_works", "value", "work_date", date_from, date_to)
         project_value = _sum_table(conn, "projects", "value", "start_date", date_from, date_to)
         contractor_value = _sum_table(conn, "contractor_works", "value", "work_date", date_from, date_to)
         invoice_value = _sum_table(conn, "invoices", "value", "invoice_date", date_from, date_to)
@@ -131,7 +174,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         purchase_value = _purchase_total(conn, date_from, date_to)
         warehouse = db.warehouse_movements_totals(conn=conn)
 
-        total_work_value = ticket_value + construction_value + project_value + contractor_value
+        total_work_value = ticket_value + primary_team_value + construction_value + reinforcement_value + project_value + contractor_value
         rekaz_pct = _setting_ratio(settings, "rekaz_ratio")
         contractor_pct = _setting_ratio(settings, "main_contractor_ratio")
         rekaz_value = round(total_work_value * rekaz_pct / 100, 2)
@@ -141,6 +184,114 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
         for row in tickets:
             st = db.normalize_ticket_status(row.get("status")) or "غير محدد"
             by_status[st] = by_status.get(st, 0) + 1
+        warehouse_sources = db.warehouse_movements_totals_by_source(conn=conn)
+        quality_total = (
+            _count_table(conn, "new_coordinations", "request_date", date_from, date_to)
+            + _count_table(conn, "quality_clearances", "request_date", date_from, date_to)
+            + _count_table(conn, "quality_inspections", "inspect_date", date_from, date_to)
+            + _count_table(conn, "issued_licenses", "issue_date", date_from, date_to)
+        )
+        safety_total = (
+            _count_table(conn, "safety_permits", "permit_date", date_from, date_to)
+            + _count_table(conn, "safety_incidents", "incident_date", date_from, date_to)
+        )
+
+        sections = [
+            {
+                "title": "العمليات والصيانة",
+                "rows": [
+                    ("الأعطال", len(tickets)),
+                    ("الأعطال المنفذة/المغلقة", sum(1 for t in tickets if db.normalize_ticket_status(t.get("status")) in ("منفذ", "مغلق"))),
+                    ("قيمة الأعطال", money(ticket_value)),
+                    ("الفرق الأولية", _count_table(conn, "primary_team_orders", "order_date", date_from, date_to)),
+                    ("قيمة الفرق الأولية", money(primary_team_value)),
+                    ("آخر عطل", _latest_ref(conn, "tickets", "receive_date", "ticket_no")),
+                ],
+            },
+            {
+                "title": "التعزيز - اسكيمات",
+                "rows": [
+                    ("عدد المعاملات", _count_table(conn, "reinforcement_works", "work_date", date_from, date_to)),
+                    ("إجمالي القيمة", money(reinforcement_value)),
+                    ("عدد الأقسام", _count_table(conn, "reinforcement_departments")),
+                    ("أكثر الأقسام حركة", "، ".join(f"{k}: {v}" for k, v in _group_count(conn, "reinforcement_works", "department", "work_date", date_from, date_to, limit=4)) or "—"),
+                    ("آخر معاملة", _latest_ref(conn, "reinforcement_works", "work_date", "work_no")),
+                ],
+            },
+            {
+                "title": "الإنشاءات",
+                "rows": [
+                    ("عدد المعاملات", _count_table(conn, "construction_works", "work_date", date_from, date_to)),
+                    ("إجمالي القيمة", money(construction_value)),
+                    ("الحالات", "، ".join(f"{k}: {v}" for k, v in _group_count(conn, "construction_works", "status", "work_date", date_from, date_to, limit=5)) or "—"),
+                    ("آخر معاملة", _latest_ref(conn, "construction_works", "work_date", "work_no")),
+                ],
+            },
+            {
+                "title": "المشاريع",
+                "rows": [
+                    ("عدد المشاريع", _count_table(conn, "projects", "start_date", date_from, date_to)),
+                    ("القيمة المسجلة", money(project_value)),
+                    ("الحالات", "، ".join(f"{k}: {v}" for k, v in _group_count(conn, "projects", "status", "start_date", date_from, date_to, limit=5)) or "—"),
+                    ("آخر مشروع", _latest_ref(conn, "projects", "start_date", "project_code")),
+                ],
+            },
+            {
+                "title": "المقاولين",
+                "rows": [
+                    ("أعمال المقاولين", _count_table(conn, "contractor_works", "work_date", date_from, date_to)),
+                    ("قيمة أعمال المقاولين", money(contractor_value)),
+                    ("مواد موردة من مقاول", _count_table(conn, "contractor_supplies", "supply_date", date_from, date_to)),
+                    ("آخر أمر مقاول", _latest_ref(conn, "contractor_works", "work_date", "work_no")),
+                ],
+            },
+            {
+                "title": "التنسيقات والجودة",
+                "rows": [
+                    ("إجمالي سجلات الجودة", quality_total),
+                    ("التنسيقات الجديدة", _count_table(conn, "new_coordinations", "request_date", date_from, date_to)),
+                    ("الإخلاءات", _count_table(conn, "quality_clearances", "request_date", date_from, date_to)),
+                    ("الفحوصات", _count_table(conn, "quality_inspections", "inspect_date", date_from, date_to)),
+                    ("الرخص المصدرة", _count_table(conn, "issued_licenses", "issue_date", date_from, date_to)),
+                ],
+            },
+            {
+                "title": "السلامة",
+                "rows": [
+                    ("إجمالي سجلات السلامة", safety_total),
+                    ("تصاريح العمل", _count_table(conn, "safety_permits", "permit_date", date_from, date_to)),
+                    ("بلاغات السلامة", _count_table(conn, "safety_incidents", "incident_date", date_from, date_to)),
+                ],
+            },
+            {
+                "title": "المشتريات الخارجية والعهد",
+                "rows": [
+                    ("طلبات الشراء", _count_table(conn, "external_purchases", "purchase_date", date_from, date_to)),
+                    ("قيمة المشتريات", money(purchase_value)),
+                    ("العهد", _count_table(conn, "custody", "custody_date", date_from, date_to)),
+                    ("العهد حسب الحالة", "، ".join(f"{k}: {v}" for k, v in _group_count(conn, "custody", "status", "custody_date", date_from, date_to, limit=5)) or "—"),
+                ],
+            },
+            {
+                "title": "المستودعات",
+                "rows": [
+                    ("عدد الحركات", warehouse.get("tx_count") or 0),
+                    ("الوارد", f"{warehouse.get('inbound') or 0:.2f}"),
+                    ("المنصرف", f"{warehouse.get('outbound') or 0:.2f}"),
+                    ("الرصيد", f"{warehouse.get('balance') or 0:.2f}"),
+                    ("حسب التخصص", "، ".join(f"{r.get('label')}: {r.get('tx_count')}" for r in warehouse_sources[:6]) or "—"),
+                ],
+            },
+            {
+                "title": "المتابعات المالية",
+                "rows": [
+                    ("المستخلصات", _count_table(conn, "invoices", "invoice_date", date_from, date_to)),
+                    ("قيمة المستخلصات", money(invoice_value)),
+                    ("المحصل", money(collected)),
+                    ("المتبقي", money(invoice_value - collected)),
+                ],
+            },
+        ]
 
         return {
             "generated_at": datetime.now().strftime("%Y-%m-%d %H:%M"),
@@ -150,14 +301,18 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
             "cards": {
                 "tickets": len(tickets),
                 "done_tickets": sum(1 for t in tickets if db.normalize_ticket_status(t.get("status")) in ("منفذ", "مغلق")),
+                "primary_team_count": _count_table(conn, "primary_team_orders", "order_date", date_from, date_to),
                 "construction_count": _count_table(conn, "construction_works", "work_date", date_from, date_to),
+                "reinforcement_count": _count_table(conn, "reinforcement_works", "work_date", date_from, date_to),
                 "project_count": _count_table(conn, "projects", "start_date", date_from, date_to),
                 "contractor_count": _count_table(conn, "contractor_works", "work_date", date_from, date_to),
                 "warehouse_count": warehouse.get("tx_count") or 0,
             },
             "metrics": {
                 "tickets": ticket_value,
+                "primary_teams": primary_team_value,
                 "construction": construction_value,
+                "reinforcement": reinforcement_value,
                 "projects": project_value,
                 "contractor": contractor_value,
                 "total_work": total_work_value,
@@ -174,6 +329,7 @@ def build_general_report(date_from: str = "", date_to: str = "") -> dict:
                 "warehouse_balance": warehouse.get("balance") or 0,
             },
             "ticket_status": sorted(by_status.items(), key=lambda item: item[0]),
+            "sections": sections,
         }
     finally:
         conn.close()
@@ -569,7 +725,7 @@ def build_general_report_pdf(report: dict) -> bytes:
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
         [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
         [_p("نسبة ركاز", styles["body"]), _p(_ratio_with_money(metrics["rekaz_pct"], metrics["rekaz"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(_ratio_with_money(metrics["contractor_pct"], metrics["contractor_ratio"]), styles["body"])],
-        [_p("قيمة ركاز", styles["body"]), _p(money(metrics["rekaz"]), styles["body"]), _p("قيمة المقاول الرئيسي", styles["body"]), _p(money(metrics["contractor_ratio"]), styles["body"])],
+        [_p("التعزيز - اسكيمات", styles["body"]), _p(money(metrics["reinforcement"]), styles["body"]), _p("الفرق الأولية", styles["body"]), _p(money(metrics["primary_teams"]), styles["body"])],
         [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
         [_p("الوارد مستودع", styles["body"]), _p(f"{metrics['warehouse_inbound']:.2f}", styles["body"]), _p("المنصرف مستودع", styles["body"]), _p(f"{metrics['warehouse_outbound']:.2f}", styles["body"])],
     ]
@@ -578,17 +734,23 @@ def build_general_report_pdf(report: dict) -> bytes:
     story.append(table)
     story.append(Spacer(1, 12))
 
-    sections = [
-        ("الأعمال حسب القسم", [
-            ("العمليات والصيانة", money(metrics["tickets"])),
-            ("الإنشاءات", money(metrics["construction"])),
-            ("المشاريع", money(metrics["projects"])),
-            ("المقاول الرئيسي", money(metrics["contractor"])),
-            ("المشتريات الخارجية", money(metrics["purchases"])),
-        ]),
-        ("حالات الأعطال", [(k, v) for k, v in report["ticket_status"]] or [("لا توجد بيانات", 0)]),
+    overview_rows = [
+        ("العمليات والصيانة - الأعطال", money(metrics["tickets"])),
+        ("العمليات والصيانة - الفرق الأولية", money(metrics["primary_teams"])),
+        ("التعزيز - اسكيمات", money(metrics["reinforcement"])),
+        ("الإنشاءات", money(metrics["construction"])),
+        ("المشاريع", money(metrics["projects"])),
+        ("المقاولون", money(metrics["contractor"])),
+        ("المشتريات الخارجية", money(metrics["purchases"])),
     ]
-    for heading, rows in sections:
+    all_sections = [
+        {"title": "ملخص الأعمال حسب التبويب", "rows": overview_rows},
+        *report.get("sections", []),
+        {"title": "حالات الأعطال", "rows": [(k, v) for k, v in report["ticket_status"]] or [("لا توجد بيانات", 0)]},
+    ]
+    for section in all_sections:
+        heading = section.get("title") if isinstance(section, dict) else section[0]
+        rows = section.get("rows") if isinstance(section, dict) else section[1]
         story.append(_p(heading, styles["h2"]))
         data = [[_p("البند", styles["head"]), _p("القيمة", styles["head"])]]
         data.extend([[_p(a, styles["body"]), _p(b, styles["body"])] for a, b in rows])
