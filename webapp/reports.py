@@ -185,8 +185,8 @@ def whatsapp_url(report: dict, page_url: str, pdf_url: str, phone: str = "") -> 
         [
             "تقرير ركاز العام",
             f"إجمالي الأعمال: {money(values['total_work'])}",
-            f"نسبة ركاز: {pct(values['rekaz_pct'])}",
-            f"نسبة المقاول الرئيسي: {pct(values['contractor_pct'])}",
+            f"نسبة ركاز: {pct(values['rekaz_pct'])} — {money(values['rekaz'])}",
+            f"نسبة المقاول الرئيسي: {pct(values['contractor_pct'])} — {money(values['contractor_ratio'])}",
             f"رابط التقرير: {page_url}",
             f"PDF: {pdf_url}",
         ]
@@ -313,6 +313,24 @@ def _styles(font_name: str) -> dict:
             alignment=TA_RIGHT,
             textColor=INK,
         ),
+        "sign": ParagraphStyle(
+            "RakazLuxSign",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=8,
+            leading=13,
+            alignment=TA_RIGHT,
+            textColor=INK,
+        ),
+        "signNote": ParagraphStyle(
+            "RakazLuxSignNote",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=7.5,
+            leading=10,
+            alignment=TA_CENTER,
+            textColor=colors.HexColor("#6B655C"),
+        ),
     }
 
 
@@ -337,6 +355,54 @@ def _luxury_table_style(*, header=True) -> TableStyle:
     else:
         cmds.append(("ROWBACKGROUNDS", (0, 0), (-1, -1), [WHITE, CREAM]))
     return TableStyle(cmds)
+
+
+def _ratio_with_money(percent_value, amount) -> str:
+    return f"{pct(percent_value)}  —  {money(amount)}"
+
+
+def _archive_block(styles, *, width_mm: float):
+    col = width_mm / 3.0 * mm
+    lines = [
+        "الاسم: ................................",
+        "الصفة: ................................",
+        "التوقيع: ..............................",
+        "التاريخ: .... / .... / ........",
+    ]
+    def _sign_cell():
+        return Paragraph("<br/>".join(_rtl(line) for line in lines), styles["sign"])
+
+    data = [
+        [_p("الإعداد", styles["head"]), _p("المراجعة", styles["head"]), _p("الاعتماد", styles["head"])],
+        [_sign_cell(), _sign_cell(), _sign_cell()],
+    ]
+    table = Table(data, colWidths=[col, col, col], rowHeights=[10 * mm, 32 * mm], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, 0), GOLD),
+                ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+                ("BACKGROUND", (0, 1), (-1, 1), IVORY),
+                ("GRID", (0, 0), (-1, -1), 0.45, GOLD_DARK),
+                ("VALIGN", (0, 0), (-1, 0), "MIDDLE"),
+                ("VALIGN", (0, 1), (-1, 1), "TOP"),
+                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, 0), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 7),
+                ("TOPPADDING", (0, 1), (-1, 1), 10),
+                ("BOTTOMPADDING", (0, 1), (-1, 1), 12),
+            ]
+        )
+    )
+    return [
+        Spacer(1, 14),
+        _p("اعتماد ومراجعة للأرشفة الرسمية", styles["h2"]),
+        _p("تعبأ خانات الإعداد والمراجعة والاعتماد يدوياً بعد الطباعة، ثم تُحفظ النسخة في الأرشيف.", styles["signNote"]),
+        Spacer(1, 4),
+        table,
+    ]
 
 
 def _draw_page(canvas, doc, *, subtitle: str = ""):
@@ -369,7 +435,7 @@ def _build_pdf(story, *, pagesize, subtitle: str = "") -> bytes:
         rightMargin=12 * mm,
         leftMargin=12 * mm,
         topMargin=24 * mm,
-        bottomMargin=16 * mm,
+        bottomMargin=18 * mm,
     )
     doc.build(
         story,
@@ -422,6 +488,7 @@ def build_table_pdf(
     table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
     table.setStyle(_luxury_table_style())
     story.append(table)
+    story.extend(_archive_block(styles, width_mm=273))
     return _build_pdf(story, pagesize=landscape(A4), subtitle=title_text)
 
 
@@ -445,7 +512,7 @@ def build_general_report_pdf(report: dict) -> bytes:
     summary_data = [
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
         [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("عدد الأعطال", styles["body"]), _p(cards["tickets"], styles["body"])],
-        [_p("نسبة ركاز", styles["body"]), _p(pct(metrics["rekaz_pct"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(pct(metrics["contractor_pct"]), styles["body"])],
+        [_p("نسبة ركاز", styles["body"]), _p(_ratio_with_money(metrics["rekaz_pct"], metrics["rekaz"]), styles["body"]), _p("نسبة المقاول الرئيسي", styles["body"]), _p(_ratio_with_money(metrics["contractor_pct"], metrics["contractor_ratio"]), styles["body"])],
         [_p("قيمة ركاز", styles["body"]), _p(money(metrics["rekaz"]), styles["body"]), _p("قيمة المقاول الرئيسي", styles["body"]), _p(money(metrics["contractor_ratio"]), styles["body"])],
         [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
         [_p("الوارد مستودع", styles["body"]), _p(f"{metrics['warehouse_inbound']:.2f}", styles["body"]), _p("المنصرف مستودع", styles["body"]), _p(f"{metrics['warehouse_outbound']:.2f}", styles["body"])],
@@ -474,4 +541,5 @@ def build_general_report_pdf(report: dict) -> bytes:
         story.append(t)
         story.append(Spacer(1, 8))
 
+    story.extend(_archive_block(styles, width_mm=200))
     return _build_pdf(story, pagesize=landscape(A4), subtitle="التقرير العام")
