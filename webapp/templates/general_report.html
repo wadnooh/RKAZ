@@ -42,7 +42,7 @@
     <div class="stat-card report-group-card">
       <div>{{ _('إجمالي العمليات والصيانة') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.operations|money }}</strong>
-      <div class="meta">{{ _('الأعطال والتعزيز والفرق الأولية — التمتير للمتابعة فقط') }}</div>
+      <div class="meta">{{ _('الأعطال والعدادات والتعزيز والفرق الأولية') }}</div>
     </div>
     <div class="stat-card report-child-card">
       <div>{{ _('الأعطال') }}</div>
@@ -51,8 +51,8 @@
     </div>
     <div class="stat-card report-child-card">
       <div>{{ _('العدادات / التمتير') }}</div>
-      <strong style="font-size:1.05rem">{{ report.cards.metering_count }}</strong>
-      <div class="meta">{{ _('سجل متابعة — لا يضاف كمبلغ مستقل') }}</div>
+      <strong style="font-size:1.05rem">{{ report.metrics.metering|money }}</strong>
+      <div class="meta">{{ report.cards.metering_count }} {{ _('سجل') }}</div>
     </div>
     <div class="stat-card report-child-card">
       <div>{{ _('قيمة الفرق الأولية') }}</div>
