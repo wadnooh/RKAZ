@@ -592,6 +592,15 @@ def export_pdf():
         rows=rows,
         field_keys=fields,
         filters=filters,
+        amount_cards=[
+            {
+                "title": helpers.t("إجمالي المبالغ"),
+                "value": helpers.sum_money_field(rows, "final_value"),
+                "money": True,
+                "subtitle": helpers.t("حسب الفلترة الحالية"),
+            },
+            *helpers.work_ratio_cards(base_amount=helpers.sum_money_field(rows, "final_value")),
+        ],
     )
     stamp = datetime.now().strftime("%Y%m%d")
     suffix = "-مفلتر" if filters else ""

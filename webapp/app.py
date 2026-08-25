@@ -1994,6 +1994,7 @@ def _warehouse_specialty_pdf_payload(source: str):
         "rows": rows,
         "filters": filters,
         "view": view,
+        "amount_field": "amount" if view == "teams" else ("value" if view in ("reinforcement", "works") else ""),
     }
 
 
@@ -2007,6 +2008,18 @@ def warehouse_specialty_pdf(source):
         rows=payload["rows"],
         field_keys=payload["fields"],
         filters=payload["filters"],
+        amount_cards=(
+            [
+                {
+                    "title": _t("إجمالي المبالغ"),
+                    "value": _sum_money_field(payload["rows"], payload["amount_field"]),
+                    "money": True,
+                    "subtitle": _t("حسب الفلترة الحالية"),
+                },
+                *helpers.work_ratio_cards(base_amount=_sum_money_field(payload["rows"], payload["amount_field"])),
+            ]
+            if payload.get("amount_field") else None
+        ),
     )
     stamp = datetime.now().strftime("%Y%m%d")
     suffix = "-مفلتر" if payload["filters"] else ""
@@ -3982,12 +3995,27 @@ def module_export_pdf(name):
         filters.append(_t("بدون مبلغ"))
     stamp = datetime.now().strftime("%Y%m%d")
     suffix = "-مفلتر" if filters else ""
+    money_keys = _module_money_keys(name, module)
+    total_amount = _sum_money_field(rows, *money_keys) if money_keys else 0
+    amount_cards = []
+    if money_keys:
+        amount_cards.append(
+            {
+                "title": _t("إجمالي المبالغ"),
+                "value": total_amount,
+                "money": True,
+                "subtitle": _t("حسب الفلترة الحالية"),
+            }
+        )
+        if module.get("section") in ("ops", "constructions", "projects", "maintenance"):
+            amount_cards.extend(helpers.work_ratio_cards(base_amount=total_amount))
     data = reports_svc.build_table_pdf(
         title_text=_t(module.get("title") or name),
         headers=headers,
         rows=rows,
         field_keys=list_cols,
         filters=filters,
+        amount_cards=amount_cards,
     )
     return send_file(
         io.BytesIO(data),
@@ -4940,6 +4968,15 @@ def export_primary_teams_pdf():
         rows=rows,
         field_keys=fields,
         filters=filters,
+        amount_cards=[
+            {
+                "title": _t("إجمالي المبالغ"),
+                "value": _sum_money_field(rows, "amount"),
+                "money": True,
+                "subtitle": _t("حسب الفلترة الحالية"),
+            },
+            *helpers.work_ratio_cards(base_amount=_sum_money_field(rows, "amount")),
+        ],
     )
     stamp = datetime.now().strftime("%Y%m%d")
     suffix = "-مفلتر" if filters else ""

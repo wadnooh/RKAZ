@@ -405,6 +405,49 @@ def _archive_block(styles, *, width_mm: float):
     ]
 
 
+def _cards_block(styles, cards: list[dict] | None, *, width_mm: float):
+    cards = [c for c in (cards or []) if c]
+    if not cards:
+        return []
+    card_w = width_mm / 3.0 * mm
+    cells = []
+    for c in cards:
+        title = c.get("title") or "—"
+        value = c.get("value")
+        if c.get("money"):
+            value = money(value)
+        elif value is None or value == "":
+            value = "—"
+        subtitle = c.get("subtitle") or ""
+        cell = [
+            _p(title, styles["signNote"]),
+            _p(value, styles["h2"]),
+        ]
+        if subtitle:
+            cell.append(_p(subtitle, styles["signNote"]))
+        cells.append(cell)
+    while len(cells) % 3:
+        cells.append([_p("", styles["signNote"]), _p("", styles["h2"])])
+    rows = [cells[i : i + 3] for i in range(0, len(cells), 3)]
+    table = Table(rows, colWidths=[card_w, card_w, card_w], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), IVORY),
+                ("BOX", (0, 0), (-1, -1), 0.45, GOLD_DARK),
+                ("INNERGRID", (0, 0), (-1, -1), 0.25, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 8),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+                ("TOPPADDING", (0, 0), (-1, -1), 8),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+            ]
+        )
+    )
+    return [table, Spacer(1, 10)]
+
+
 def _draw_page(canvas, doc, *, subtitle: str = ""):
     font_name = _font_name()
     page_w, page_h = canvas._pagesize
@@ -452,6 +495,7 @@ def build_table_pdf(
     rows: list[dict],
     field_keys: list[str],
     filters: list[str] | None = None,
+    amount_cards: list[dict] | None = None,
     generated_at: str | None = None,
 ) -> bytes:
     font_name = _font_name()
@@ -485,6 +529,7 @@ def build_table_pdf(
     if filter_text:
         story.append(_p(f"الفلاتر: {filter_text}", styles["meta"]))
     story.append(Spacer(1, 8))
+    story.extend(_cards_block(styles, amount_cards, width_mm=273))
     table = Table(table_data, colWidths=col_widths, repeatRows=1, hAlign="CENTER")
     table.setStyle(_luxury_table_style())
     story.append(table)
@@ -508,6 +553,17 @@ def build_general_report_pdf(report: dict) -> bytes:
         _p(f"{company} — {period} — {report['generated_at']}", styles["meta"]),
         Spacer(1, 10),
     ]
+    story.extend(
+        _cards_block(
+            styles,
+            [
+                {"title": "إجمالي الأعمال", "value": metrics["total_work"], "money": True, "subtitle": "حسب الفلترة"},
+                {"title": "نسبة ركاز", "value": metrics["rekaz"], "money": True, "subtitle": pct(metrics["rekaz_pct"])},
+                {"title": "نسبة المقاول الرئيسي", "value": metrics["contractor_ratio"], "money": True, "subtitle": pct(metrics["contractor_pct"])},
+            ],
+            width_mm=200,
+        )
+    )
 
     summary_data = [
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
