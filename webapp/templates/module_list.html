@@ -246,7 +246,11 @@
             <a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.transferred_license_id) }}">{{ _('الرخصة') }}</a>
             {% endif %}
             {% if can_mod_write and can('button.warehouse.issue') and name == 'construction_works' and r.work_no and can('section.warehouses') %}
-            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no}) }}">{{ _('+ صرف مستودع') }}</a>
+            {% set warehouse_tx_options_enabled = true %}
+            {% set in_url = url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no, 'tx_type': 'وارد من موقع العمل'}) %}
+            {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no, 'tx_type': 'منصرف للمقاول'}) %}
+            {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': 'constructions', 'source_ref': r.work_no, 'tx_type': 'إرجاع للمجمعة'}) %}
+            {% include '_warehouse_tx_options.html' %}
             {% endif %}
             {% if can('button.quality.workflow') and name == 'construction_works' and r.work_no %}
             <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
@@ -256,7 +260,11 @@
             </span>
             {% endif %}
             {% if can_mod_write and can('button.warehouse.issue') and name == 'projects' and r.project_code and can('section.warehouses') %}
-            <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code}) }}">{{ _('+ صرف مستودع') }}</a>
+            {% set warehouse_tx_options_enabled = true %}
+            {% set in_url = url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code, 'tx_type': 'وارد من موقع العمل'}) %}
+            {% set out_url = url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code, 'tx_type': 'منصرف للمقاول'}) %}
+            {% set return_url = url_for('module_new', name='warehouse_tx', **{'from': 'projects', 'source_ref': r.project_code, 'tx_type': 'إرجاع للمجمعة'}) %}
+            {% include '_warehouse_tx_options.html' %}
             {% endif %}
             {% if can('button.quality.workflow') and name == 'projects' and r.project_code %}
             <span class="qflow-mini" title="{{ _('مسار الجودة') }}">

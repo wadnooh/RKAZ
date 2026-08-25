@@ -2220,7 +2220,7 @@ def warehouse_tx_multi():
     if form_ctx not in _warehouse_create_contexts():
         flash(
             _t(
-                "إدخال معاملات المستودع يتم من الإنشاءات أو العمليات والصيانة أو المشاريع (أو تبويباتها داخل المستودع)."
+                "إدخال معاملات المستودع يتم من الصفحات الرئيسية فقط، وتظهر الحركات هنا تلقائياً."
             ),
             "danger",
         )
@@ -3285,18 +3285,13 @@ def _warehouse_source_from_ctx(form_ctx: str) -> str:
 
 
 def _warehouse_create_contexts():
-    """السياقات المسموح منها إنشاء حركة (رئيسية أو داخل المستودع)."""
+    """السياقات المسموح منها إنشاء حركة: الصفحات الرئيسية فقط."""
     return (
         "ops",
         "constructions",
         "projects",
         "contractors",
         "reinforcement",
-        "wh_ops",
-        "wh_constructions",
-        "wh_projects",
-        "wh_contractors",
-        "wh_reinforcement",
     )
 
 
@@ -3425,10 +3420,10 @@ def _redirect_after_module(name, data, form_ctx=None):
 
 
 def _prepare_warehouse_tx_create(data: dict, form_ctx: str, conn) -> tuple:
-    """يملأ مصدر الحركة — مسموح من الصفحات الرئيسية أو تبويبات المستودع المستقلة."""
+    """يملأ مصدر الحركة — مسموح من الصفحات الرئيسية فقط."""
     if form_ctx not in _warehouse_create_contexts():
         return None, _t(
-            "إدخال معاملات المستودع يتم من الإنشاءات أو العمليات والصيانة أو المشاريع (أو تبويباتها داخل المستودع)."
+            "إدخال معاملات المستودع يتم من الصفحات الرئيسية فقط، وتظهر الحركات هنا تلقائياً."
         )
 
     source = _warehouse_source_from_ctx(form_ctx)
@@ -3777,7 +3772,7 @@ def module_new(name):
             conn.close()
             flash(
                 _t(
-                    "إدخال معاملات المستودع يتم من الإنشاءات أو العمليات والصيانة أو المشاريع (أو تبويباتها داخل المستودع)."
+                    "إدخال معاملات المستودع يتم من الصفحات الرئيسية فقط، وتظهر الحركات هنا تلقائياً."
                 ),
                 "danger",
             )

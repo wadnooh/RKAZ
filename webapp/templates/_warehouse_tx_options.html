@@ -1,5 +1,5 @@
 {# قائمة خيارات وارد / صرف / إرجاع — مرّر in_url و out_url و return_url #}
-{% if false and (in_url or out_url or return_url) %}
+{% if warehouse_tx_options_enabled is defined and warehouse_tx_options_enabled and (in_url or out_url or return_url) %}
 <select class="btn ghost wh-tx-options" aria-label="{{ _('خيارات') }}" onchange="if (this.value) { window.location.href = this.value; } this.selectedIndex = 0;">
   <option value="">{{ _('خيارات') }} ▾</option>
   {% if in_url %}<option value="{{ in_url }}">{{ _('وارد') }}</option>{% endif %}

@@ -102,6 +102,13 @@
             {% if can('tickets.read') %}<a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=t.id) }}">{{ _('عرض') }}</a>{% endif %}
             {% if can('tickets.write') %}<a class="btn ghost" href="{{ url_for('ticket_edit', ticket_id=t.id) }}">{{ _('تعديل') }}</a>{% endif %}
             {% if can('tickets.read') %}<a class="btn primary" href="{{ url_for('ticket_print', ticket_id=t.id) }}" target="_blank">{{ _('طباعة') }}</a>{% endif %}
+            {% if can('modules.write') and can('button.warehouse.issue') and can('section.warehouses') %}
+            {% set warehouse_tx_options_enabled = true %}
+            {% set in_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': 'ops', 'tx_type': 'وارد من الكهرباء'}) %}
+            {% set out_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': 'ops', 'tx_type': 'منصرف للمقاول'}) %}
+            {% set return_url = url_for('module_new', name='warehouse_tx', ticket_no=t.ticket_no, work_order=t.work_order or none, **{'from': 'ops', 'tx_type': 'إرجاع للكهرباء'}) %}
+            {% include '_warehouse_tx_options.html' %}
+            {% endif %}
           </td>
         </tr>
         {% else %}
