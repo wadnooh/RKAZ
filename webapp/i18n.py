@@ -1179,7 +1179,7 @@ VALUE_EN = {
     'ملغي': 'Cancelled',
     'منتهي': 'Ended',
     'منخفض': 'Low',
-    'منصرف للمقاول': 'Issue to contractor',
+    'منصرف للمعاملة': 'Issue to transaction',
     'منفذ': 'Executed',
     'مواد كهربائية': 'Electrical materials',
     'ناقص': 'Incomplete',

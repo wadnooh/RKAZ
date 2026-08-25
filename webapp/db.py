@@ -63,7 +63,7 @@ DEFAULT_LISTS = {
     "warehouse_categories": ["عهد", "مواد كهربائية", "كيابل", "عدد"],
     "warehouse_tx_types": [
         "وارد من الكهرباء",
-        "منصرف للمقاول",
+        "منصرف للمعاملة",
         "إرجاع للكهرباء",
         "إرجاع للمجمعة",
         "وارد من موقع العمل",
@@ -1317,6 +1317,10 @@ def init_db():
     backfill_warehouse_tx_sources(conn)
     backfill_warehouse_tx_work_orders(conn)
     normalize_warehouse_length_units_once(conn)
+    cur.execute(
+        "UPDATE warehouse_tx SET tx_type=? WHERE tx_type=?",
+        ("منصرف للمعاملة", "منصرف للمقاول"),
+    )
     for boq_table in ("boq_items", "contract_boq_items"):
         for col in ("short_desc", "long_desc", "line_type", "currency", "payment_type"):
             _ensure_column(conn, boq_table, col)
@@ -1330,6 +1334,24 @@ def init_db():
         cur.execute("INSERT OR IGNORE INTO settings(key,value) VALUES (?,?)", (k, json.dumps(v)))
     for k, v in DEFAULT_LISTS.items():
         cur.execute("INSERT OR IGNORE INTO lists(key,value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
+    row = cur.execute("SELECT value FROM lists WHERE key='warehouse_tx_types'").fetchone()
+    if row:
+        try:
+            values = json.loads(row["value"] or "[]")
+        except Exception:
+            values = []
+        if isinstance(values, list) and "منصرف للمقاول" in values:
+            seen = set()
+            updated = []
+            for x in values:
+                item = "منصرف للمعاملة" if x == "منصرف للمقاول" else x
+                if item not in seen:
+                    updated.append(item)
+                    seen.add(item)
+            cur.execute(
+                "UPDATE lists SET value=? WHERE key='warehouse_tx_types'",
+                (json.dumps(updated, ensure_ascii=False),),
+            )
 
     _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
     _ensure_column(conn, "users", "email", "TEXT")

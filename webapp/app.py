@@ -1879,9 +1879,9 @@ def _warehouse_tx_option_urls(form_from: str, *, ticket_no: str = "", source_ref
         base["source_ref"] = source_ref
     src = (source or "ops").strip().lower()
     if src == "ops":
-        in_type, out_type, ret_type = "وارد من الكهرباء", "منصرف للمقاول", "إرجاع للكهرباء"
+        in_type, out_type, ret_type = "وارد من الكهرباء", "منصرف للمعاملة", "إرجاع للكهرباء"
     else:
-        in_type, out_type, ret_type = "وارد من موقع العمل", "منصرف للمقاول", "إرجاع للمجمعة"
+        in_type, out_type, ret_type = "وارد من موقع العمل", "منصرف للمعاملة", "إرجاع للمجمعة"
     return {
         "in_url": url_for("module_new", name="warehouse_tx", tx_type=in_type, **base),
         "out_url": url_for("module_new", name="warehouse_tx", tx_type=out_type, **base),
@@ -2148,7 +2148,7 @@ def warehouse_voucher_detail(voucher_no):
         back_url=back_url,
         form_from=form_from,
         in_url=url_for("module_new", name="warehouse_tx", tx_type="وارد من الكهرباء", **base_args),
-        out_url=url_for("module_new", name="warehouse_tx", tx_type="منصرف للمقاول", **base_args),
+        out_url=url_for("module_new", name="warehouse_tx", tx_type="منصرف للمعاملة", **base_args),
         return_url=url_for("module_new", name="warehouse_tx", tx_type="إرجاع للكهرباء", **base_args),
         parent_url=_warehouse_parent_url(parent),
     )
@@ -2160,7 +2160,7 @@ def _warehouse_mirror_tx_type(tx_type: str, source: str = "") -> str | None:
     if not t or "إرجاع" in t:
         return None
     if "وارد" in t or "افتتاح" in t:
-        return "منصرف للمقاول"
+        return "منصرف للمعاملة"
     if "منصرف" in t:
         if (source or "").strip().lower() == "ops":
             return "وارد من الكهرباء"
@@ -2245,7 +2245,7 @@ def warehouse_tx_multi():
     header = {
         "voucher_no": "",
         "tx_date": datetime.now().strftime("%Y-%m-%d"),
-        "tx_type": (request.form.get("tx_type") or request.args.get("tx_type") or "").strip() or "منصرف للمقاول",
+        "tx_type": (request.form.get("tx_type") or request.args.get("tx_type") or "").strip() or "منصرف للمعاملة",
         "recipient": "",
         "sender": "",
         "ticket_no": (request.form.get("ticket_no") or request.args.get("ticket_no") or "").strip(),
@@ -2452,7 +2452,7 @@ def warehouse_tx_multi():
     title_map = {
         "وارد من الكهرباء": _t("وارد متعدد"),
         "وارد من موقع العمل": _t("وارد متعدد"),
-        "منصرف للمقاول": _t("صرف متعدد"),
+        "منصرف للمعاملة": _t("صرف متعدد"),
         "إرجاع للكهرباء": _t("إرجاع متعدد"),
         "إرجاع للمجمعة": _t("إرجاع متعدد"),
     }
@@ -3764,7 +3764,7 @@ def module_new(name):
     if name == "issued_licenses" and request.args.get("workflow_status") and "workflow_status" in prefill:
         prefill["workflow_status"] = (request.args.get("workflow_status") or "").strip()
     if name == "warehouse_tx" and request.args.get("ticket_no"):
-        prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمقاول"
+        prefill["tx_type"] = prefill.get("tx_type") or "منصرف للمعاملة"
         prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
     if name == "warehouse_tx":
         form_ctx = _warehouse_form_ctx()
@@ -3799,7 +3799,7 @@ def module_new(name):
         prefill = db.apply_warehouse_tx_work_order(prefill, conn)
         if source in ("constructions", "projects", "ops", "reinforcement"):
             requested_type = (request.args.get("tx_type") or "").strip()
-            prefill["tx_type"] = requested_type or prefill.get("tx_type") or "منصرف للمقاول"
+            prefill["tx_type"] = requested_type or prefill.get("tx_type") or "منصرف للمعاملة"
             prefill["tx_date"] = prefill.get("tx_date") or datetime.now().strftime("%Y-%m-%d")
         reuse = str(request.args.get("reuse_voucher") or "").strip() in {"1", "on", "yes", "true"}
         existing_voucher = (request.args.get("voucher_no") or "").strip()
