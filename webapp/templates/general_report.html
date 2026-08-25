@@ -38,48 +38,60 @@
   {% set summary_cards_class = 'report-money-cards' %}
   {% include "_summary_cards.html" %}
 
-  <div class="stats-grid report-metric-grid">
-    <div class="stat-card">
+  <div class="stats-grid report-metric-grid report-grouped-grid">
+    <div class="stat-card report-group-card">
       <div>{{ _('إجمالي العمليات والصيانة') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.operations|money }}</strong>
       <div class="meta">{{ _('الأعطال والتعزيز والفرق الأولية — التمتير للمتابعة فقط') }}</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card report-child-card">
       <div>{{ _('الأعطال') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.tickets|money }}</strong>
       <div class="meta">{{ report.cards.done_tickets }} {{ _('منفذ / مغلق') }}</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card report-child-card">
       <div>{{ _('العدادات / التمتير') }}</div>
       <strong style="font-size:1.05rem">{{ report.cards.metering_count }}</strong>
       <div class="meta">{{ _('سجل متابعة — لا يضاف كمبلغ مستقل') }}</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card report-child-card">
       <div>{{ _('قيمة الفرق الأولية') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.primary_teams|money }}</strong>
       <div class="meta">{{ report.cards.primary_team_count }} {{ _('أمر عمل') }}</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card report-child-card">
       <div>{{ _('التعزيز - اسكيمات') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.reinforcement|money }}</strong>
       <div class="meta">{{ report.cards.reinforcement_count }} {{ _('معاملة') }}</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card report-child-card">
       <div>{{ _('المحطات ضمن التعزيز') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.stations|money }}</strong>
       <div class="meta">{{ report.cards.station_count }} {{ _('معاملة') }}</div>
     </div>
-    <div class="stat-card">
-      <div>{{ _('قيمة الإنشاءات') }}</div>
+
+    <div class="stat-card report-group-card">
+      <div>{{ _('إجمالي الإنشاءات') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.construction|money }}</strong>
+      <div class="meta">{{ _('كل تبويبات ومعاملات الإنشاءات') }}</div>
+    </div>
+    <div class="stat-card report-child-card">
+      <div>{{ _('معاملات الإنشاءات') }}</div>
+      <strong style="font-size:1.05rem">{{ report.cards.construction_count }}</strong>
       <div class="meta">{{ report.cards.construction_count }} {{ _('معاملة') }}</div>
     </div>
-    <div class="stat-card">
-      <div>{{ _('قيمة المشاريع') }}</div>
+
+    <div class="stat-card report-group-card">
+      <div>{{ _('إجمالي المشاريع') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.projects|money }}</strong>
+      <div class="meta">{{ _('كل تبويبات وبيانات المشاريع') }}</div>
+    </div>
+    <div class="stat-card report-child-card">
+      <div>{{ _('المشاريع المسجلة') }}</div>
+      <strong style="font-size:1.05rem">{{ report.cards.project_count }}</strong>
       <div class="meta">{{ report.cards.project_count }} {{ _('مشروع') }}</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card report-child-card">
       <div>{{ _('قيمة المقاول الرئيسي') }}</div>
       <strong style="font-size:1.05rem">{{ report.metrics.contractor|money }}</strong>
       <div class="meta">{{ report.cards.contractor_count }} {{ _('معاملة') }}</div>

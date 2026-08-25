@@ -532,6 +532,34 @@ td.col-item-name[title]:hover {
   margin-top: 8px;
   font-size: 0.95rem;
 }
+.report-page .report-grouped-grid {
+  align-items: stretch;
+}
+.report-page .stat-card.report-group-card {
+  grid-column: 1 / -1;
+  min-height: 104px;
+  padding: 20px 24px;
+  background:
+    linear-gradient(90deg, rgba(183, 156, 98, 0.14), rgba(255, 255, 255, 0) 44%),
+    #fff;
+  border-color: #d8c8a8;
+  box-shadow:
+    inset 0 4px 0 rgba(183, 156, 98, 0.42),
+    0 8px 20px rgba(46, 48, 42, 0.05);
+}
+.report-page .stat-card.report-group-card div:first-child {
+  font-size: 1rem;
+  font-weight: 800;
+  color: #6f6448;
+}
+.report-page .stat-card.report-group-card strong {
+  margin-top: 8px;
+  font-size: clamp(1.45rem, 2.35vw, 2.15rem) !important;
+  line-height: 1.18;
+}
+.report-page .stat-card.report-child-card {
+  border-right: 3px solid rgba(183, 156, 98, 0.32);
+}
 .report-page .stat-card {
   position: relative;
   overflow: hidden;
