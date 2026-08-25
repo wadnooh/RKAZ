@@ -3,12 +3,11 @@
 {% set warehouse_active = 'ops' if form_ctx in ['ops','wh_ops','reinforcement','wh_reinforcement'] else ('constructions' if form_ctx in ['constructions','wh_constructions'] else ('projects' if form_ctx in ['projects','wh_projects'] else 'home')) %}
 {% include "_warehouse_subnav.html" %}
 
-<div class="card">
-  <div class="toolbar">
+<div class="card warehouse-tx-page">
+  <div class="toolbar warehouse-tx-head">
     <div>
       <h2 class="section-title">{{ title }}</h2>
-      <div class="meta">{{ _('إدخال متعدد — ابحث برقم المادة ثم أضف الكمية') }}</div>
-      <div class="meta">{{ _('عند الإضافة في الوارد يُنشأ تلقائياً سطر صفري في المنصرف، والعكس.') }}</div>
+      <div class="warehouse-tx-subtitle">{{ source_label }} · {{ tv(header.tx_type) if header.tx_type else _('حركة مستودع') }}</div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ cancel_url }}">{{ _('رجوع') }}</a>
@@ -21,7 +20,30 @@
     <input type="hidden" name="reuse_voucher" value="1">
     {% endif %}
 
-    <div class="form-grid">
+    <div class="warehouse-tx-strip">
+      <div class="warehouse-tx-chip">
+        <span>{{ _('رقم السند') }}</span>
+        <strong dir="ltr">{{ header.voucher_no or '—' }}</strong>
+      </div>
+      <div class="warehouse-tx-chip">
+        <span>{{ _('نوع الحركة') }}</span>
+        <strong>{{ tv(header.tx_type) if header.tx_type else '—' }}</strong>
+      </div>
+      <div class="warehouse-tx-chip">
+        <span>{{ _('القسم') }}</span>
+        <strong>{{ source_label }}</strong>
+      </div>
+      <div class="warehouse-tx-chip">
+        <span>{{ _('مواد المذكرة') }}</span>
+        <strong><span id="linesCount">0</span></strong>
+      </div>
+    </div>
+
+    <section class="warehouse-tx-panel">
+      <div class="warehouse-tx-panel-head">
+        <h3>{{ _('بيانات السند') }}</h3>
+      </div>
+      <div class="form-grid warehouse-tx-form-grid">
       <div class="field">
         <label>{{ _('رقم السند') }}</label>
         <input type="text" name="voucher_no" value="{{ header.voucher_no or '' }}" readonly dir="ltr" style="text-align:left">
@@ -78,18 +100,17 @@
         <label>{{ _('ملاحظات') }}</label>
         <textarea name="notes">{{ header.notes or '' }}</textarea>
       </div>
-    </div>
+      </div>
+    </section>
 
-    <div class="card" style="margin-top:18px;box-shadow:none;border:1px solid var(--border);">
-      <div class="toolbar" style="margin-bottom:8px;">
-        <div>
-          <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('إضافة مادة') }}</h3>
-          <div class="meta">{{ _('اكتب رقم المادة للبحث ثم أدخل الكمية واضغط إضافة') }}</div>
-        </div>
+    <section class="warehouse-tx-panel warehouse-tx-entry">
+      <div class="warehouse-tx-panel-head">
+        <h3>{{ _('المواد') }}</h3>
+        <div class="warehouse-tx-entry-total"><span id="linesCountMirror">0</span> {{ _('مادة') }}</div>
       </div>
 
-      <div class="form-grid" style="align-items:end;">
-        <div class="field" style="grid-column:span 2;position:relative;">
+      <div class="form-grid warehouse-tx-add-grid">
+        <div class="field warehouse-tx-search-field">
           <label>{{ _('بحث برقم المادة') }}</label>
           <input type="text" id="itemSearch" autocomplete="off" dir="ltr" style="text-align:left"
                  placeholder="{{ _('مثال: 10001234') }}">
@@ -103,20 +124,12 @@
           <label>{{ _('الكمية') }}</label>
           <input type="number" id="itemQty" step="0.01" min="0" value="1">
         </div>
-        <div class="field">
-          <button class="btn primary" type="button" id="addItemBtn" style="width:100%;">{{ _('إدراج في المذكرة') }}</button>
+        <div class="field warehouse-tx-add-action">
+          <button class="btn primary" type="button" id="addItemBtn">{{ _('إدراج في المذكرة') }}</button>
         </div>
       </div>
-    </div>
 
-    <div class="toolbar" style="margin-top:18px;">
-      <div>
-        <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('مواد المذكرة') }}</h3>
-        <div class="meta"><span id="linesCount">0</span> {{ _('مادة') }} — {{ _('تُحفظ كلها بنفس السند') }}</div>
-      </div>
-    </div>
-
-    <div class="table-wrap">
+    <div class="table-wrap warehouse-tx-lines-wrap">
       <table class="table" id="linesTable">
         <thead>
           <tr>
@@ -130,12 +143,13 @@
         </thead>
         <tbody id="linesBody"></tbody>
       </table>
-      <p class="meta" id="emptyLinesHint" style="padding:12px;">{{ _('لا توجد مواد بعد — ابحث برقم المادة أعلاه لإضافتها.') }}</p>
+      <p class="warehouse-tx-empty" id="emptyLinesHint">{{ _('لا توجد مواد في المذكرة') }}</p>
     </div>
+    </section>
 
     <div id="hiddenLines"></div>
 
-    <div class="actions" style="margin-top:14px;">
+    <div class="actions warehouse-tx-submit">
       <button class="btn primary" type="submit" id="saveAllBtn">{{ _('حفظ الكل') }}</button>
       <a class="btn ghost" href="{{ cancel_url }}">{{ _('إلغاء') }}</a>
     </div>
@@ -143,6 +157,113 @@
 </div>
 
 <style>
+.warehouse-tx-page {
+  display: grid;
+  gap: 16px;
+  padding: clamp(14px, 1.6vw, 22px);
+}
+.warehouse-tx-head {
+  align-items: flex-start;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 14px;
+  margin-bottom: 0;
+}
+.warehouse-tx-subtitle {
+  margin-top: 6px;
+  color: #667085;
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.warehouse-tx-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.warehouse-tx-chip {
+  border: 1px solid var(--border);
+  background: #f8fbff;
+  border-radius: 12px;
+  padding: 11px 12px;
+  min-height: 70px;
+  display: grid;
+  align-content: center;
+  gap: 5px;
+}
+.warehouse-tx-chip span {
+  color: #667085;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+.warehouse-tx-chip strong {
+  color: #123f69;
+  font-size: 1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.warehouse-tx-panel {
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 14px;
+  margin-top: 14px;
+  background: #fff;
+}
+.warehouse-tx-panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.warehouse-tx-panel-head h3 {
+  margin: 0;
+  color: #123f69;
+  font-size: 1rem;
+}
+.warehouse-tx-entry-total {
+  border: 1px solid #b7cff0;
+  background: #e3efff;
+  color: #174f93;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-weight: 800;
+  font-size: 0.86rem;
+}
+.warehouse-tx-form-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+.warehouse-tx-add-grid {
+  grid-template-columns: minmax(280px, 2fr) minmax(120px, 0.7fr) minmax(150px, 0.8fr);
+  align-items: end;
+}
+.warehouse-tx-search-field {
+  position: relative;
+}
+.warehouse-tx-add-action .btn {
+  width: 100%;
+  justify-content: center;
+  min-height: 40px;
+}
+.warehouse-tx-lines-wrap {
+  margin-top: 14px;
+  border-radius: 12px;
+}
+.warehouse-tx-lines-wrap table.table {
+  min-width: 760px;
+}
+.warehouse-tx-empty {
+  margin: 0;
+  padding: 18px 12px;
+  color: #667085;
+  text-align: center;
+  font-weight: 700;
+}
+.warehouse-tx-submit {
+  justify-content: flex-end;
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 14px;
+}
 .item-suggest {
   position: absolute;
   z-index: 40;
@@ -175,7 +296,39 @@
 }
 .item-suggest .sg-code { font-weight: 700; direction: ltr; display: inline-block; margin-left: 8px; }
 .item-suggest .sg-meta { color: var(--muted, #667085); font-size: .92em; }
-.line-qty { width: 120px; }
+.line-qty {
+  width: 120px;
+  max-width: 100%;
+}
+@media (max-width: 1100px) {
+  .warehouse-tx-strip,
+  .warehouse-tx-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .warehouse-tx-add-grid {
+    grid-template-columns: minmax(220px, 1fr) minmax(120px, 0.5fr);
+  }
+  .warehouse-tx-add-action {
+    grid-column: 1 / -1;
+  }
+}
+@media (max-width: 720px) {
+  .warehouse-tx-strip,
+  .warehouse-tx-form-grid,
+  .warehouse-tx-add-grid {
+    grid-template-columns: 1fr;
+  }
+  .warehouse-tx-panel {
+    padding: 12px;
+  }
+  .warehouse-tx-submit {
+    justify-content: stretch;
+  }
+  .warehouse-tx-submit .btn {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+}
 </style>
 
 <script>
@@ -200,6 +353,7 @@
   var hidden = document.getElementById("hiddenLines");
   var emptyHint = document.getElementById("emptyLinesHint");
   var linesCount = document.getElementById("linesCount");
+  var linesCountMirror = document.getElementById("linesCountMirror");
   var form = document.getElementById("multiTxForm");
   var pickedNo = document.getElementById("pickedItemNo");
   var pickedName = document.getElementById("pickedItemName");
@@ -311,6 +465,7 @@
     body.innerHTML = "";
     hidden.innerHTML = "";
     linesCount.textContent = String(lines.length);
+    if (linesCountMirror) linesCountMirror.textContent = String(lines.length);
     emptyHint.hidden = lines.length > 0;
     lines.forEach(function (line, idx) {
       var tr = document.createElement("tr");
