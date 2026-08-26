@@ -524,7 +524,7 @@ MODULES = {
             ("work_type", "نوع العمل", "text"),
             ("station_no", "رقم المحطة", "text"),
             ("location", "الموقع", "text"),
-            ("ticket_no", "رقم العطل", "ticket"),
+            ("ticket_no", "رقم العطل", "text"),
             ("status", "الحالة", "list:execution_status"),
             ("value", "القيمة", "number"),
             ("notes", "ملاحظات", "textarea"),
