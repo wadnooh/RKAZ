@@ -14,7 +14,7 @@ from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import KeepTogether, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
 from webapp import db
 
@@ -541,6 +541,56 @@ def _styles(font_name: str) -> dict:
             spaceBefore=4,
             spaceAfter=6,
         ),
+        "coverTitle": ParagraphStyle(
+            "RakazCoverTitle",
+            parent=base["Title"],
+            fontName=font_name,
+            fontSize=20,
+            leading=27,
+            alignment=TA_CENTER,
+            textColor=INK,
+            spaceAfter=3,
+        ),
+        "lead": ParagraphStyle(
+            "RakazLead",
+            parent=base["BodyText"],
+            fontName=font_name,
+            fontSize=9,
+            leading=13,
+            alignment=TA_CENTER,
+            textColor=MUTED_INK,
+        ),
+        "cardValue": ParagraphStyle(
+            "RakazCardValue",
+            parent=base["Heading2"],
+            fontName=font_name,
+            fontSize=12.5,
+            leading=16,
+            alignment=TA_CENTER,
+            textColor=INK,
+            spaceBefore=2,
+            spaceAfter=2,
+        ),
+        "heroValue": ParagraphStyle(
+            "RakazHeroValue",
+            parent=base["Heading1"],
+            fontName=font_name,
+            fontSize=22,
+            leading=28,
+            alignment=TA_CENTER,
+            textColor=INK,
+            spaceBefore=3,
+            spaceAfter=2,
+        ),
+        "sectionBand": ParagraphStyle(
+            "RakazSectionBand",
+            parent=base["Heading2"],
+            fontName=font_name,
+            fontSize=10.5,
+            leading=14,
+            alignment=TA_RIGHT,
+            textColor=GOLD_DARK,
+        ),
         "body": ParagraphStyle(
             "RakazLuxBody",
             parent=base["BodyText"],
@@ -712,14 +762,18 @@ def _pdf_card_cell(styles, title: str, value, subtitle: str = "", *, money_value
         value = money(value)
     elif value is None or value == "":
         value = "—"
-    cell = [_p(title, styles["signNote"]), _p(value, styles["h2"])]
+    cell = [_p(title, styles["signNote"]), _p(value, styles["cardValue"])]
     if subtitle:
         cell.append(_p(subtitle, styles["signNote"]))
     return cell
 
 
 def _wide_card_block(styles, title: str, value, subtitle: str, *, width_mm: float, money_value: bool = True):
-    data = [[_pdf_card_cell(styles, title, value, subtitle, money_value=money_value)]]
+    if money_value:
+        value = money(value)
+    elif value is None or value == "":
+        value = "—"
+    data = [[[_p(title, styles["signNote"]), _p(value, styles["heroValue"]), _p(subtitle, styles["signNote"])]]]
     table = Table(data, colWidths=[width_mm * mm], hAlign="CENTER")
     table.setStyle(
         TableStyle(
@@ -775,6 +829,64 @@ def _child_cards_block(styles, cards: list[dict], *, width_mm: float):
         )
     )
     return [table, Spacer(1, 9)]
+
+
+def _report_identity_block(styles, *, company: str, period: str, generated_at: str, width_mm: float):
+    data = [
+        [
+            [
+                _p("تقرير تنفيذي", styles["kicker"]),
+                _p("التقرير العام لأعمال ركاز", styles["coverTitle"]),
+                _p(company, styles["lead"]),
+                _p(f"الفترة: {period}  |  تاريخ الإصدار: {generated_at}", styles["meta"]),
+            ]
+        ]
+    ]
+    table = Table(data, colWidths=[width_mm * mm], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), IVORY),
+                ("BOX", (0, 0), (-1, -1), 0.55, LINE),
+                ("LINEABOVE", (0, 0), (-1, 0), 1.1, GOLD),
+                ("LINEBELOW", (0, 0), (-1, 0), 0.45, LINE),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 16),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 16),
+                ("TOPPADDING", (0, 0), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+            ]
+        )
+    )
+    return [table, Spacer(1, 8)]
+
+
+def _section_band(styles, title: str, subtitle: str = "", *, width_mm: float = 273):
+    body = [_p(title, styles["sectionBand"])]
+    if subtitle:
+        body.append(_p(subtitle, styles["signNote"]))
+    table = Table([[body]], colWidths=[width_mm * mm], hAlign="CENTER")
+    table.setStyle(
+        TableStyle(
+            [
+                ("BACKGROUND", (0, 0), (-1, -1), CREAM),
+                ("BOX", (0, 0), (-1, -1), 0.35, LINE),
+                ("LINEBEFORE", (0, 0), (0, -1), 2.2, GOLD),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("ALIGN", (0, 0), (-1, -1), "RIGHT"),
+                ("LEFTPADDING", (0, 0), (-1, -1), 10),
+                ("RIGHTPADDING", (0, 0), (-1, -1), 10),
+                ("TOPPADDING", (0, 0), (-1, -1), 7),
+                ("BOTTOMPADDING", (0, 0), (-1, -1), 7),
+            ]
+        )
+    )
+    return [table, Spacer(1, 6)]
+
+
+def _keep_block(items: list):
+    return KeepTogether([item for item in items if item is not None])
 
 
 def _draw_page(canvas, doc, *, subtitle: str = ""):
@@ -879,70 +991,82 @@ def build_general_report_pdf(report: dict) -> bytes:
     metrics = report["metrics"]
     cards = report["cards"]
     company = report["settings"].get("company_name") or COMPANY_FALLBACK
+    report_width = 273
     period = "كل الفترات"
     if report.get("date_from") or report.get("date_to"):
         period = f"من {report.get('date_from') or 'البداية'} إلى {report.get('date_to') or 'اليوم'}"
 
-    story = [
-        _p("تقرير تنفيذي", styles["kicker"]),
-        _p("التقرير العام لأعمال ركاز", styles["title"]),
-        _p(f"{company} — {period} — {report['generated_at']}", styles["meta"]),
-        Spacer(1, 10),
-    ]
-    story.extend(_wide_card_block(styles, "إجمالي الأعمال", metrics["total_work"], "كل الأقسام المالية", width_mm=200))
-    story.extend(
-        _child_cards_block(
-            styles,
-            [
-                {"title": "نسبة ركاز", "value": metrics["rekaz"], "money": True, "subtitle": f"{pct(metrics['rekaz_pct'])} من المبالغ المدخلة"},
-                {"title": "نسبة المقاول الرئيسي", "value": metrics["contractor_ratio"], "money": True, "subtitle": f"{pct(metrics['contractor_pct'])} من المبالغ المدخلة"},
-                {"title": "عدد الأعطال", "value": cards["tickets"], "subtitle": f"منفذ/مغلق: {cards['done_tickets']}"},
-            ],
-            width_mm=200,
+    story = _report_identity_block(
+        styles,
+        company=company,
+        period=period,
+        generated_at=report["generated_at"],
+        width_mm=report_width,
+    )
+    story.append(
+        _keep_block(
+            _wide_card_block(styles, "إجمالي الأعمال", metrics["total_work"], "كل الأقسام المالية", width_mm=report_width)
+            + _child_cards_block(
+                styles,
+                [
+                    {"title": "نسبة ركاز", "value": metrics["rekaz"], "money": True, "subtitle": f"{pct(metrics['rekaz_pct'])} من المبالغ المدخلة"},
+                    {"title": "نسبة المقاول الرئيسي", "value": metrics["contractor_ratio"], "money": True, "subtitle": f"{pct(metrics['contractor_pct'])} من المبالغ المدخلة"},
+                    {"title": "عدد الأعطال", "value": cards["tickets"], "subtitle": f"منفذ/مغلق: {cards['done_tickets']}"},
+                ],
+                width_mm=report_width,
+            )
         )
     )
-    story.extend(
-        _wide_card_block(
-            styles,
-            "إجمالي العمليات والصيانة",
-            metrics["operations"],
-            "الأعطال وصيانة العدادات والتعزيز وصيانة المحطات والفرق الأولية",
-            width_mm=200,
+    story.append(
+        _keep_block(
+            _section_band(styles, "العمليات والصيانة", "إجمالي القسم الرئيسي مع تفصيل التبويبات التابعة له", width_mm=report_width)
+            + _wide_card_block(
+                styles,
+                "إجمالي العمليات والصيانة",
+                metrics["operations"],
+                "الأعطال وصيانة العدادات والتعزيز وصيانة المحطات والفرق الأولية",
+                width_mm=report_width,
+            )
+            + _child_cards_block(
+                styles,
+                [
+                    {"title": "الأعطال", "value": metrics["tickets"], "money": True, "subtitle": f"{cards['done_tickets']} منفذ / مغلق"},
+                    {"title": "صيانة العدادات", "value": metrics["metering"], "money": True, "subtitle": f"{cards['metering_count']} معاملة"},
+                    {"title": "قيمة الفرق الأولية", "value": metrics["primary_teams"], "money": True, "subtitle": f"{cards['primary_team_count']} أمر عمل"},
+                    {"title": "التعزيز - اسكيمات", "value": metrics["reinforcement"], "money": True, "subtitle": f"{cards['reinforcement_count']} معاملة"},
+                    {"title": "صيانة المحطات", "value": metrics["stations"], "money": True, "subtitle": f"{cards['station_count']} معاملة"},
+                ],
+                width_mm=report_width,
+            )
         )
     )
-    story.extend(
-        _child_cards_block(
-            styles,
-            [
-                {"title": "الأعطال", "value": metrics["tickets"], "money": True, "subtitle": f"{cards['done_tickets']} منفذ / مغلق"},
-                {"title": "صيانة العدادات", "value": metrics["metering"], "money": True, "subtitle": f"{cards['metering_count']} معاملة"},
-                {"title": "قيمة الفرق الأولية", "value": metrics["primary_teams"], "money": True, "subtitle": f"{cards['primary_team_count']} أمر عمل"},
-                {"title": "التعزيز - اسكيمات", "value": metrics["reinforcement"], "money": True, "subtitle": f"{cards['reinforcement_count']} معاملة"},
-                {"title": "صيانة المحطات", "value": metrics["stations"], "money": True, "subtitle": f"{cards['station_count']} معاملة"},
-            ],
-            width_mm=200,
+    story.append(
+        _keep_block(
+            _section_band(styles, "الإنشاءات", "ملخص معاملات التنفيذ والإنشاءات", width_mm=report_width)
+            + _wide_card_block(styles, "إجمالي الإنشاءات", metrics["construction"], "كل تبويبات ومعاملات الإنشاءات", width_mm=report_width)
+            + _child_cards_block(
+                styles,
+                [{"title": "معاملات الإنشاءات", "value": cards["construction_count"], "subtitle": "معاملة"}],
+                width_mm=report_width,
+            )
         )
     )
-    story.extend(_wide_card_block(styles, "إجمالي الإنشاءات", metrics["construction"], "كل تبويبات ومعاملات الإنشاءات", width_mm=200))
-    story.extend(
-        _child_cards_block(
-            styles,
-            [{"title": "معاملات الإنشاءات", "value": cards["construction_count"], "subtitle": "معاملة"}],
-            width_mm=200,
-        )
-    )
-    story.extend(_wide_card_block(styles, "إجمالي المشاريع", metrics["projects"], "كل تبويبات وبيانات المشاريع", width_mm=200))
-    story.extend(
-        _child_cards_block(
-            styles,
-            [
-                {"title": "المشاريع المسجلة", "value": cards["project_count"], "subtitle": "مشروع"},
-                {"title": "قيمة المقاول الرئيسي", "value": metrics["contractor"], "money": True, "subtitle": f"{cards['contractor_count']} معاملة"},
-            ],
-            width_mm=200,
+    story.append(
+        _keep_block(
+            _section_band(styles, "المشاريع والمقاول الرئيسي", "ملخص المشاريع وقيمة المقاول الرئيسي", width_mm=report_width)
+            + _wide_card_block(styles, "إجمالي المشاريع", metrics["projects"], "كل تبويبات وبيانات المشاريع", width_mm=report_width)
+            + _child_cards_block(
+                styles,
+                [
+                    {"title": "المشاريع المسجلة", "value": cards["project_count"], "subtitle": "مشروع"},
+                    {"title": "قيمة المقاول الرئيسي", "value": metrics["contractor"], "money": True, "subtitle": f"{cards['contractor_count']} معاملة"},
+                ],
+                width_mm=report_width,
+            )
         )
     )
 
+    story.extend(_section_band(styles, "الملخص التنفيذي", "قراءة مالية مختصرة قبل تفاصيل التبويبات", width_mm=report_width))
     summary_data = [
         [_p("المؤشر", styles["head"]), _p("القيمة", styles["head"]), _p("المؤشر", styles["head"]), _p("القيمة", styles["head"])],
         [_p("إجمالي الأعمال", styles["body"]), _p(money(metrics["total_work"]), styles["body"]), _p("إجمالي العمليات والصيانة", styles["body"]), _p(money(metrics["operations"]), styles["body"])],
@@ -953,7 +1077,7 @@ def build_general_report_pdf(report: dict) -> bytes:
         [_p("المستخلصات", styles["body"]), _p(money(metrics["invoices"]), styles["body"]), _p("المحصل", styles["body"]), _p(money(metrics["collected"]), styles["body"])],
         [_p("الوارد مستودع", styles["body"]), _p(f"{metrics['warehouse_inbound']:.2f}", styles["body"]), _p("المنصرف مستودع", styles["body"]), _p(f"{metrics['warehouse_outbound']:.2f}", styles["body"])],
     ]
-    table = Table(summary_data, colWidths=[58 * mm, 42 * mm, 58 * mm, 42 * mm], hAlign="CENTER")
+    table = Table(summary_data, colWidths=[78 * mm, 58 * mm, 78 * mm, 58 * mm], hAlign="CENTER")
     table.setStyle(_luxury_table_style())
     story.append(table)
     story.append(Spacer(1, 12))
@@ -978,13 +1102,13 @@ def build_general_report_pdf(report: dict) -> bytes:
     for section in all_sections:
         heading = section.get("title") if isinstance(section, dict) else section[0]
         rows = section.get("rows") if isinstance(section, dict) else section[1]
-        story.append(_p(heading, styles["h2"]))
+        story.extend(_section_band(styles, heading, width_mm=report_width))
         data = [[_p("البند", styles["head"]), _p("القيمة", styles["head"])]]
         data.extend([[_p(a, styles["body"]), _p(b, styles["body"])] for a, b in rows])
-        t = Table(data, colWidths=[110 * mm, 50 * mm], hAlign="CENTER")
+        t = Table(data, colWidths=[185 * mm, 86 * mm], hAlign="CENTER")
         t.setStyle(_luxury_table_style())
         story.append(t)
         story.append(Spacer(1, 8))
 
-    story.extend(_archive_block(styles, width_mm=200))
+    story.extend(_archive_block(styles, width_mm=report_width))
     return _build_pdf(story, pagesize=landscape(A4), subtitle="التقرير العام")
