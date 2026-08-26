@@ -3768,6 +3768,9 @@ def module_list(name):
     ticket_filter = packed["ticket_filter"]
     source_filter = packed["source_filter"]
     dept_filter = packed["dept_filter"]
+    date_from = packed["date_from"]
+    date_to = packed["date_to"]
+    date_keys = packed["date_keys"]
     excavation_filter = packed["excavation_filter"]
     linked_section_filter = packed["linked_section_filter"]
     tickets = packed["tickets"]
@@ -3823,6 +3826,9 @@ def module_list(name):
         excavation_filter=excavation_filter,
         linked_section_filter=linked_section_filter,
         source_filter=source_filter if name == "warehouse_tx" else "",
+        date_from=date_from,
+        date_to=date_to,
+        has_date_filter=bool(date_keys),
         section=section,
         section_meta=_smeta(SECTION_META.get(section)),
         section_modules=modules_for_section(section) if section else [],
@@ -3908,6 +3914,11 @@ def _load_module_list_rows(name, module):
         for r in rows:
             r["issued"] = bool((r.get("issued_voucher_no") or "").strip())
             r["returned"] = bool((r.get("return_voucher_no") or "").strip())
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    date_keys = _module_date_keys(name, module)
+    if date_keys:
+        rows = _filter_rows_by_date_range(rows, date_from, date_to, *date_keys)
     item_filter = (request.args.get("item_no") or "").strip()
     ticket_filter = (request.args.get("ticket_no") or "").strip()
     source_filter = (request.args.get("source") or "").strip().lower()
@@ -3958,6 +3969,9 @@ def _load_module_list_rows(name, module):
         "ticket_filter": ticket_filter,
         "source_filter": source_filter,
         "dept_filter": dept_filter,
+        "date_from": date_from,
+        "date_to": date_to,
+        "date_keys": date_keys,
         "excavation_filter": excavation_filter,
         "linked_section_filter": linked_section_filter,
     }
@@ -4019,6 +4033,8 @@ def module_export_pdf(name):
         filters.append(f"{_t('التخصص')}: {packed['source_filter']}")
     if packed["dept_filter"]:
         filters.append(f"{_t('القسم')}: {packed['dept_filter']}")
+    if packed["date_from"] or packed["date_to"]:
+        filters.append(f"{_t('من')}: {packed['date_from'] or '—'} | {_t('إلى')}: {packed['date_to'] or '—'}")
     if packed["excavation_filter"]:
         filters.append(_t("حفر فقط"))
     if packed["linked_section_filter"]:

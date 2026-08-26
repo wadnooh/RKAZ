@@ -32,6 +32,9 @@
     <div class="field">
       <button class="btn primary" type="submit" style="width:100%;">{{ _('تحديث التقرير') }}</button>
     </div>
+    <div class="field">
+      <button class="btn ghost" type="submit" formaction="{{ url_for('general_report_pdf') }}" style="width:100%;">{{ _('تحميل PDF للفترة') }}</button>
+    </div>
   </form>
 
   {% set summary_cards_style = 'margin-bottom:14px;' %}

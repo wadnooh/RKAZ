@@ -82,7 +82,7 @@
         <a class="btn ghost" href="{{ url_for('reinforcement_home') }}">{{ _('أقسام التعزيز') }}</a>
       {% endif %}
       {% if missing_amount %}
-      <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=ticket_filter or none, department=department_filter or none, source=source_filter or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=ticket_filter or none, department=department_filter or none, source=source_filter or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none, date_from=date_from or none, date_to=date_to or none) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
       {% endif %}
       {% if can_mod_write and can('button.module.' ~ name ~ '.add') and name in ['construction_works', 'projects'] %}
         {% if name == 'warehouse_items' %}
@@ -100,6 +100,29 @@
     </div>
   </div>
 
+  {% if has_date_filter %}
+  <form method="get" class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
+    {% if ticket_filter %}<input type="hidden" name="ticket_no" value="{{ ticket_filter }}">{% endif %}
+    {% if source_filter %}<input type="hidden" name="source" value="{{ source_filter }}">{% endif %}
+    {% if department_filter %}<input type="hidden" name="department" value="{{ department_filter }}">{% endif %}
+    {% if item_filter %}<input type="hidden" name="item_no" value="{{ item_filter }}">{% endif %}
+    {% if excavation_filter %}<input type="hidden" name="excavation" value="1">{% endif %}
+    {% if linked_section_filter %}<input type="hidden" name="linked_section" value="{{ linked_section_filter }}">{% endif %}
+    {% if missing_amount %}<input type="hidden" name="missing_amount" value="1">{% endif %}
+    <label class="meta" style="display:flex;align-items:center;gap:6px;">
+      <span>{{ _('من') }}</span>
+      <input type="date" name="date_from" value="{{ date_from or '' }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+    </label>
+    <label class="meta" style="display:flex;align-items:center;gap:6px;">
+      <span>{{ _('إلى') }}</span>
+      <input type="date" name="date_to" value="{{ date_to or '' }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+    </label>
+    <button class="btn ghost" type="submit">{{ _('تطبيق الفترة') }}</button>
+    <button class="btn primary" type="submit" formaction="{{ url_for('module_export_pdf', name=name) }}">{{ _('تحميل PDF للفترة') }}</button>
+    <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=ticket_filter or none, department=department_filter or none, source=source_filter or none, item_no=item_filter or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none, missing_amount=1 if missing_amount else none) }}">{{ _('مسح الفترة') }}</a>
+  </form>
+  {% endif %}
+
   {% if ticket_filter or (name == 'warehouse_tx' and (item_filter or source_filter)) %}
   <p class="meta" style="margin-bottom:10px;">
     {{ _('تصفية:') }}
@@ -112,9 +135,9 @@
 
   {% if name == 'reinforcement_works' and reinforcement_departments %}
   <div class="actions" style="margin-bottom:12px;flex-wrap:wrap;" data-tab-strip="1">
-    <a class="btn ghost{% if not department_filter %} primary{% endif %}" href="{{ url_for('module_list', name=name) }}">{{ _('الكل') }}</a>
+    <a class="btn ghost{% if not department_filter %} primary{% endif %}" href="{{ url_for('module_list', name=name, date_from=date_from or none, date_to=date_to or none, missing_amount=1 if missing_amount else none) }}">{{ _('الكل') }}</a>
     {% for d in reinforcement_departments %}
-    <a class="btn ghost{% if department_filter == d.dept_name %} primary{% endif %}" href="{{ url_for('module_list', name=name, department=d.dept_name) }}">{{ d.dept_name }}</a>
+    <a class="btn ghost{% if department_filter == d.dept_name %} primary{% endif %}" href="{{ url_for('module_list', name=name, department=d.dept_name, date_from=date_from or none, date_to=date_to or none, missing_amount=1 if missing_amount else none) }}">{{ d.dept_name }}</a>
     {% endfor %}
   </div>
   {% endif %}
