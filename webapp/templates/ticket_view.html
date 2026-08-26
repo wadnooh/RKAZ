@@ -355,6 +355,9 @@
       </div>
     </div>
     <div class="actions">
+      {% if can('tickets.write') and can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=ticket.ticket_no) }}">{{ _('إضافة صور') }}</a>
+      {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
