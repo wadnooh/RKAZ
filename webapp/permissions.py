@@ -1024,6 +1024,60 @@ _ROLE_PERMS["مراقبي المواقع"] = {
     "section.ops",
     "tickets.write",
 }
+_ROLE_PERMS["محاسب"] = {
+    "button.financial.amounts",
+    "button.logout",
+    "button.module.invoices.add",
+    "button.module.invoices.edit",
+    "button.module.invoices.export",
+    "button.module.invoices.import",
+    "button.quick_jump",
+    "button.search",
+    "cashflow.read",
+    "cashflow.write",
+    "export",
+    "modules.read",
+    "modules.write",
+    "notifications.read",
+    "reports.view",
+    "search",
+    "section.contracts",
+    "section.financial",
+    "tab.contracts",
+    "tab.financial",
+    "tab.module.invoices",
+}
+_ROLE_PERMS["الموارد البشرية"] = {
+    "button.logout",
+    "button.module.hr_employees.add",
+    "button.module.hr_employees.edit",
+    "button.module.hr_employees.export",
+    "button.module.hr_employees.import",
+    "button.quick_jump",
+    "button.search",
+    "export",
+    "modules.read",
+    "modules.write",
+    "notifications.read",
+    "search",
+    "section.hr",
+    "tab.hr",
+    "tab.module.hr_employees",
+}
+for _role_name, _perms in _ROLE_PERMS.items():
+    if _role_name not in {"admin", "محاسب"}:
+        _perms.discard("button.financial.amounts")
+        _perms.discard("reports.view")
+        _perms.discard("cashflow.read")
+        _perms.discard("cashflow.write")
+        _perms.discard("section.financial")
+        _perms.discard("tab.financial")
+        _perms.discard("tab.module.invoices")
+        _perms.discard("button.module.invoices.add")
+        _perms.discard("button.module.invoices.delete")
+        _perms.discard("button.module.invoices.edit")
+        _perms.discard("button.module.invoices.export")
+        _perms.discard("button.module.invoices.import")
 _ROLE_PERMS.pop("مراقب", None)
 _ROLE_PERMS.pop("المواقع", None)
 
@@ -1036,6 +1090,13 @@ _ROLE_ALIASES = {
     "مدير النظام": "admin",
     "supervisor": "مشرف",
     "dataentry": "مدخل بيانات",
+    "accountant": "محاسب",
+    "accounts": "محاسب",
+    "محاسبين": "محاسب",
+    "المحاسبين": "محاسب",
+    "hr": "الموارد البشرية",
+    "human_resources": "الموارد البشرية",
+    "موارد بشرية": "الموارد البشرية",
     "field": "مراقبي المواقع",
     "field_user": "مراقبي المواقع",
     "site": "مراقبي المواقع",
@@ -1219,14 +1280,24 @@ def required_perm_for_request() -> str | None:
         if section_perm and not has_perm(section_perm):
             return section_perm
         if ep == "module_list":
-            return "modules.read" if not has_perm("modules.read") else None
+            if not has_perm("modules.read"):
+                return "modules.read"
+            tab_perm = f"tab.module.{mod_name}"
+            return None if has_perm(tab_perm) else tab_perm
         # كميات/صور/تمتير مرتبطة بالعطل: لا تُعدَّل دون tickets.write
         if mod_name in TICKET_LINKED_WRITE_MODULES and not has_perm("tickets.write"):
             return "tickets.write"
         if ep in {"module_new", "module_edit"}:
-            return None if has_perm("modules.write") else "modules.write"
+            if not has_perm("modules.write"):
+                return "modules.write"
+            action = "add" if ep == "module_new" else "edit"
+            button_perm = f"button.module.{mod_name}.{action}"
+            return None if has_perm(button_perm) else button_perm
         if ep == "module_delete":
-            return None if has_perm("modules.delete") else "modules.delete"
+            if not has_perm("modules.delete"):
+                return "modules.delete"
+            button_perm = f"button.module.{mod_name}.delete"
+            return None if has_perm(button_perm) else button_perm
 
     if ep == "new_coordination_transfer":
         if not has_perm("section.quality"):
@@ -1324,8 +1395,12 @@ def required_perm_for_request() -> str | None:
     if ep in {"contract_boq_template", "contract_boq_import", "contract_boq_activate"}:
         if not has_perm("section.contracts"):
             return "section.contracts"
+        if ep == "contract_boq_template" and not has_perm("button.module.boq_items.import"):
+            return "button.module.boq_items.import"
         if ep in {"contract_boq_import", "contract_boq_activate"} and not has_perm("modules.write"):
             return "modules.write"
+        if ep in {"contract_boq_import", "contract_boq_activate"} and not has_perm("button.module.boq_items.import"):
+            return "button.module.boq_items.import"
         return None
 
     if ep in {"ticket_boq_add", "ticket_boq_delete"}:
@@ -1367,7 +1442,14 @@ def required_perm_for_request() -> str | None:
     if ep in {"export_tickets_excel", "tickets.export_pdf"}:
         return None if has_perm("export") else "export"
 
-    if ep in {"module_export_excel", "module_export_pdf", "export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf"}:
+    if ep in {"module_export_excel", "module_export_pdf"}:
+        mod_name = args.get("name")
+        button_perm = f"button.module.{mod_name}.export"
+        if not has_perm(button_perm):
+            return button_perm
+        return None if has_perm("export") else "export"
+
+    if ep in {"export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf"}:
         return None if has_perm("export") else "export"
 
     if ep == "global_search":
@@ -1462,6 +1544,7 @@ def _perm_for_path(path: str) -> str | None:
         ("/financial", "section.financial"),
         ("/maintenance", "section.maintenance"),
         ("/hr", "section.hr"),
+        ("/reports", "reports.view"),
         ("/contracts-admin/tabs", "app.tabs.manage"),
         ("/contracts-admin", "section.contracts"),
         ("/reinforcement", "section.reinforcement"),

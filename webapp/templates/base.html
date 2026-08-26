@@ -84,10 +84,7 @@
     <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') %} active{% endif %}" href="{{ url_for('hr_home') }}">{{ tr('nav_hr') }}</a>
     {% endif %}
     {% if can('tab.contracts') %}
-    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">{{ tr('nav_contracts') }}</a>
-    {% endif %}
-    {% if can('reports.view') %}
-    <a class="tab{% if p.startswith('/reports') %} active{% endif %}" href="{{ url_for('reports_home') }}">{{ _('التقارير') }}</a>
+    <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') or p.startswith('/reports') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">{{ tr('nav_contracts') }}</a>
     {% endif %}
 
     {% if can('tab.users') %}

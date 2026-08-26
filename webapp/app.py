@@ -747,6 +747,8 @@ def section_links(section):
     for key, mod in modules_for_section(section):
         if mod.get("hub_hidden"):
             continue
+        if not permissions.can(f"tab.module.{key}"):
+            continue
         links.append(
             {
                 "label": mod["title"],
@@ -2997,6 +2999,9 @@ def reports_home():
         pdf_url=pdf_url,
         whatsapp_url=whatsapp_url,
         summary_cards=summary_cards,
+        section="contracts",
+        section_modules=modules_for_section("contracts"),
+        section_meta=_smeta(SECTION_META["contracts"]),
     )
 
 
@@ -3045,6 +3050,14 @@ def hr_home():
 @login_required
 def contracts_admin_home():
     links = section_links("contracts")
+    if permissions.can("reports.view"):
+        links.append(
+            {
+                "label": _t("التقارير"),
+                "href": url_for("reports_home"),
+                "key": "reports",
+            }
+        )
     boq_file = db.active_contract_boq_file()
     boq_files = db.list_contract_boq_files()
     boq_count = int((boq_file or {}).get("item_count") or 0)
