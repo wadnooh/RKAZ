@@ -3,6 +3,8 @@ from __future__ import annotations
 import io
 import json
 import os
+import secrets
+import time
 from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
@@ -82,9 +84,11 @@ app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise ValueError("متغير البيئة SECRET_KEY غير معين. هذا المتغير مطلوب لتشغيل التطبيق بأمان.")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-app.permanent_session_lifetime = timedelta(days=30)
+IDLE_TIMEOUT_SECONDS = int(os.environ.get("RAKAZ_IDLE_TIMEOUT_SECONDS", "240") or "240")
+app.permanent_session_lifetime = timedelta(seconds=IDLE_TIMEOUT_SECONDS)
+app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
 # HTTPS خلف nginx/Render: SESSION_COOKIE_SECURE=1 أو RENDER أو FORCE_HTTPS
 _secure_cookie = os.environ.get("SESSION_COOKIE_SECURE", "").strip().lower()
 if _secure_cookie in {"1", "true", "yes", "on"}:
@@ -114,6 +118,55 @@ PUBLIC_ENDPOINTS = {
     "api_backups_auto_run",
     "api_backups_sync_status",
 }
+UNSAFE_METHODS = {"POST", "PUT", "PATCH", "DELETE"}
+CSRF_EXEMPT_ENDPOINT_PREFIXES = ("api.",)
+
+
+def _new_session_token() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def _session_expired_by_idle(now: float | None = None) -> bool:
+    last = session.get("last_activity_at")
+    if not last:
+        return False
+    try:
+        return (now or time.time()) - float(last) > IDLE_TIMEOUT_SECONDS
+    except (TypeError, ValueError):
+        return True
+
+
+def _clear_session_keep_lang(message: str | None = None):
+    lang = session.get("lang")
+    session.clear()
+    if lang in ("ar", "en"):
+        session["lang"] = lang
+    if message:
+        flash(message, "danger")
+    return redirect(url_for("login"))
+
+
+def _csrf_token() -> str:
+    token = session.get("_csrf_token")
+    if not token:
+        token = secrets.token_urlsafe(32)
+        session["_csrf_token"] = token
+    return token
+
+
+def _csrf_ok() -> bool:
+    if request.method not in UNSAFE_METHODS:
+        return True
+    endpoint = request.endpoint or ""
+    if endpoint in PUBLIC_ENDPOINTS or any(endpoint.startswith(p) for p in CSRF_EXEMPT_ENDPOINT_PREFIXES):
+        return True
+    token = request.form.get("_csrf_token") or request.headers.get("X-CSRF-Token")
+    return bool(token and secrets.compare_digest(str(token), str(session.get("_csrf_token") or "")))
+
+
+def _is_api_endpoint() -> bool:
+    endpoint = request.endpoint or ""
+    return endpoint.startswith("api.")
 
 
 def login_required(fn):
@@ -192,11 +245,43 @@ def _load_context():
     g.lists = db.get_lists()
     g.year = datetime.now().year
     g.lang = session.get("lang") or "ar"
+    if _is_api_endpoint():
+        return None
     # حماية الصفحات — يتطلب تسجيل دخول
     if request.endpoint and request.endpoint not in PUBLIC_ENDPOINTS and not session.get("user_id"):
         if request.endpoint != "static":
             return redirect(url_for("login", next=request.full_path))
         return None
+    if session.get("user_id") and request.endpoint not in PUBLIC_ENDPOINTS:
+        now = time.time()
+        if _session_expired_by_idle(now):
+            db.log_audit(current_user_name(), "خروج تلقائي", "نظام", session.get("user_id"), "خمول أكثر من 4 دقائق")
+            return _clear_session_keep_lang(_t("تم تسجيل الخروج تلقائياً بسبب عدم النشاط لمدة 4 دقائق."))
+        if not _csrf_ok():
+            abort(400)
+        active_token = (session.get("session_token") or "").strip()
+        if not active_token:
+            return _clear_session_keep_lang(_t("انتهت الجلسة الأمنية. سجل الدخول مرة أخرى."))
+        conn = db.connect()
+        try:
+            user = conn.execute(
+                "SELECT id, active, active_session_token FROM users WHERE id=?",
+                (session.get("user_id"),),
+            ).fetchone()
+            stored_token = (user["active_session_token"] if user else "") or ""
+            if not user or not user["active"]:
+                return _clear_session_keep_lang(_t("تم إيقاف المستخدم أو انتهت الجلسة."))
+            if not stored_token or not secrets.compare_digest(stored_token, active_token):
+                return _clear_session_keep_lang(_t("تم تسجيل الدخول من جهاز آخر، لذلك أُغلقت هذه الجلسة."))
+            conn.execute(
+                "UPDATE users SET active_session_seen_at=? WHERE id=?",
+                (datetime.now().isoformat(timespec="seconds"), session.get("user_id")),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        session["last_activity_at"] = now
+        session.permanent = True
     # نظام الصلاحيات لكل التطبيق
     if session.get("user_id") and request.endpoint not in PUBLIC_ENDPOINTS:
         if db.is_hidden_username(session.get("username")):
@@ -211,6 +296,22 @@ def _load_context():
         blocked = prog_guard.gate_control_plane_mutation()
         if blocked is not None:
             return blocked
+
+
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=(self)")
+    resp.headers.setdefault("Cross-Origin-Opener-Policy", "same-origin")
+    if request.is_secure:
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+    if session.get("user_id") and not _is_api_endpoint():
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
+    return resp
 
 _SECTION_PERM = {
     "ops": "section.ops",
@@ -325,6 +426,8 @@ def inject_globals():
         "is_login_page": (request.endpoint or "") in {"login", "forgot_password"},
         "hosting": backup_svc.hosting_info(),
         "asset_v": static_asset_version(),
+        "csrf_token": _csrf_token,
+        "idle_timeout_seconds": IDLE_TIMEOUT_SECONDS,
     }
     ctx.update(prog_guard.template_context())
     return ctx
@@ -513,6 +616,21 @@ def login():
         else:
             session["role"] = permissions.normalize_role(user["role"])
         session["lang"] = saved_lang
+        session["session_token"] = _new_session_token()
+        session["last_activity_at"] = time.time()
+        conn = db.connect()
+        try:
+            conn.execute(
+                "UPDATE users SET active_session_token=?, active_session_seen_at=? WHERE id=?",
+                (
+                    session["session_token"],
+                    datetime.now().isoformat(timespec="seconds"),
+                    user["id"],
+                ),
+            )
+            conn.commit()
+        finally:
+            conn.close()
         db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
         default_next = url_for("field_upload") if session.get("role") == "مراقبي المواقع" else url_for("ops_home")
         nxt = request.args.get("next") or default_next
@@ -531,6 +649,19 @@ def forgot_password():
 @app.route("/logout")
 def logout():
     if session.get("user_id"):
+        conn = db.connect()
+        try:
+            conn.execute(
+                """
+                UPDATE users
+                SET active_session_token=NULL, active_session_seen_at=NULL
+                WHERE id=? AND active_session_token=?
+                """,
+                (session.get("user_id"), session.get("session_token") or ""),
+            )
+            conn.commit()
+        finally:
+            conn.close()
         db.log_audit(current_user_name(), "خروج", "نظام", session.get("user_id"))
     lang = session.get("lang")
     session.clear()
@@ -1437,7 +1568,17 @@ def reinforcement_home():
             ((latest or {}).get("work_date") or "—"),
             _t("أحدث تاريخ في القائمة"),
         ),
+        _summary_card(
+            _t("آخر محطة"),
+            ((latest or {}).get("station_no") or "—"),
+            _t("رقم المحطة لآخر معاملة"),
+        ),
     ]
+    recent_works = sorted(
+        works,
+        key=lambda r: ((r.get("work_date") or ""), int(r.get("id") or 0)),
+        reverse=True,
+    )[:8]
     return render_template(
         "reinforcement_home.html",
         title=_t("التعزيز - اسكيمات"),
@@ -1449,6 +1590,7 @@ def reinforcement_home():
         section_meta=_smeta(SECTION_META["reinforcement"]),
         total_count=sum(i.get("count") or 0 for i in links),
         summary_cards=summary_cards,
+        recent_works=recent_works,
     )
 
 

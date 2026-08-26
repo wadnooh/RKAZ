@@ -522,13 +522,14 @@ MODULES = {
             ("work_date", "التاريخ", "date"),
             ("department", "القسم", "reinforcement_dept"),
             ("work_type", "نوع العمل", "text"),
+            ("station_no", "رقم المحطة", "text"),
             ("location", "الموقع", "text"),
             ("ticket_no", "رقم العطل", "ticket"),
             ("status", "الحالة", "list:execution_status"),
             ("value", "القيمة", "number"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["work_no", "work_date", "department", "work_type", "location", "status", "value"],
+        "list_cols": ["work_no", "work_date", "department", "work_type", "station_no", "location", "status", "value"],
     },
 }
 

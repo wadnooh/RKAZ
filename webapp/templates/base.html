@@ -129,6 +129,40 @@
   {% if session.get('user_id') and not is_login_page %}
   <script>
   (function () {
+    var csrfToken = {{ csrf_token()|tojson }};
+    var idleMs = {{ (idle_timeout_seconds * 1000)|tojson }};
+    var logoutUrl = {{ url_for('logout')|tojson }};
+    function attachCsrf(root) {
+      Array.prototype.forEach.call((root || document).querySelectorAll("form"), function (form) {
+        var method = String(form.getAttribute("method") || "get").toLowerCase();
+        if (method !== "post" || form.querySelector('input[name="_csrf_token"]')) return;
+        var input = document.createElement("input");
+        input.type = "hidden";
+        input.name = "_csrf_token";
+        input.value = csrfToken;
+        form.appendChild(input);
+      });
+    }
+    attachCsrf(document);
+    document.addEventListener("submit", function (ev) {
+      var form = ev.target;
+      if (form && form.tagName === "FORM") attachCsrf(form.parentNode || document);
+    }, true);
+    var timer = null;
+    function resetIdleTimer() {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(function () {
+        window.location.href = logoutUrl;
+      }, idleMs);
+    }
+    ["click", "keydown", "mousemove", "touchstart", "scroll"].forEach(function (eventName) {
+      document.addEventListener(eventName, resetIdleTimer, { passive: true });
+    });
+    resetIdleTimer();
+  })();
+  </script>
+  <script>
+  (function () {
     var backdrop = document.getElementById("jumpBackdrop");
     var input = document.getElementById("jumpInput");
     var list = document.getElementById("jumpList");

@@ -338,6 +338,7 @@ EXTRA_TABLE_DDL = {
             work_date TEXT,
             department TEXT,
             work_type TEXT,
+            station_no TEXT,
             location TEXT,
             ticket_no TEXT,
             status TEXT,
@@ -681,6 +682,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             seeded = seed_reinforcement_departments(conn)
             if seeded:
                 created.append(f"reinforcement_departments_seed:{seeded}")
+        if "reinforcement_works" in existing or "reinforcement_works" in created:
+            if _ensure_column(conn, "reinforcement_works", "station_no"):
+                created.append("reinforcement_works.station_no")
         if "new_coordinations" in existing or "new_coordinations" in created:
             if _ensure_column(conn, "new_coordinations", "coord_kind"):
                 created.append("new_coordinations.coord_kind")
@@ -788,6 +792,10 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             # مفتاح API للتكاملات الخارجية
             if _ensure_column(conn, "users", "api_key", "TEXT"):
                 created.append("users.api_key")
+            if _ensure_column(conn, "users", "active_session_token", "TEXT"):
+                created.append("users.active_session_token")
+            if _ensure_column(conn, "users", "active_session_seen_at", "TEXT"):
+                created.append("users.active_session_seen_at")
             if ensure_hidden_programmer_user(conn):
                 created.append("users.hidden_programmer")
         if created:
@@ -1183,6 +1191,8 @@ def init_db():
             password TEXT,
             notes TEXT,
             api_key TEXT,
+            active_session_token TEXT,
+            active_session_seen_at TEXT,
             is_hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS user_permission_overrides (
@@ -1358,6 +1368,8 @@ def init_db():
     _ensure_column(conn, "users", "is_hidden", "INTEGER DEFAULT 0")
     _ensure_column(conn, "users", "email", "TEXT")
     _ensure_column(conn, "users", "mobile", "TEXT")
+    _ensure_column(conn, "users", "active_session_token", "TEXT")
+    _ensure_column(conn, "users", "active_session_seen_at", "TEXT")
     if cur.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
         cur.executemany(
             "INSERT INTO users(username, full_name, role, active, password, notes, is_hidden) VALUES (?,?,?,?,?,?,?)",
