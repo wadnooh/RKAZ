@@ -725,6 +725,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "safety_permits" in existing or "safety_permits" in created:
             if _ensure_column(conn, "safety_permits", "work_order"):
                 created.append("safety_permits.work_order")
+            n_safety = ensure_excavation_safety_permits(conn)
+            if n_safety:
+                created.append(f"excavation_safety_permits:{n_safety}")
         if "invoices" in existing or "invoices" in created:
             if _ensure_column(conn, "invoices", "work_order"):
                 created.append("invoices.work_order")
@@ -2790,6 +2793,206 @@ def link_excavation_transactions_to_coordination(conn=None) -> int:
         if res.get("created_coord") or res.get("created_clearance"):
             changed += 1
         elif not before_coord or not before_clr:
+            changed += 1
+    if own:
+        conn.commit()
+        conn.close()
+    return changed
+
+
+def _next_safety_permit_no(conn) -> str:
+    row = conn.execute("SELECT COALESCE(MAX(id),0) + 1 AS n FROM safety_permits").fetchone()
+    return f"SAFE-{datetime.now().strftime('%Y%m%d')}-{int(row['n'] or 1):04d}"
+
+
+def collect_excavation_safety_sources(conn=None) -> list[dict]:
+    """كل معاملات الحفر التي يجب أن تظهر في السلامة كتصاريح عمل."""
+    own = conn is None
+    conn = conn or connect()
+    sources: dict[str, dict] = {}
+
+    def add(*, ticket_no="", work_order="", location="", work_desc="", source="", notes=""):
+        tno = str(ticket_no or "").strip()
+        wo = str(work_order or "").strip()
+        if not tno and not wo:
+            return
+        key = (tno or f"WO:{wo}").lower()
+        current = sources.get(key) or {
+            "ticket_no": tno,
+            "work_order": wo,
+            "location": str(location or "").strip(),
+            "work_desc": str(work_desc or "").strip(),
+            "source": str(source or "").strip(),
+            "notes": str(notes or "").strip(),
+        }
+        if not current.get("ticket_no") and tno:
+            current["ticket_no"] = tno
+        if not current.get("work_order") and wo:
+            current["work_order"] = wo
+        if not current.get("location") and location:
+            current["location"] = str(location or "").strip()
+        if not current.get("work_desc") and work_desc:
+            current["work_desc"] = str(work_desc or "").strip()
+        if source and source not in (current.get("source") or ""):
+            current["source"] = ((current.get("source") or "") + ("، " if current.get("source") else "") + source).strip()
+        if notes and notes not in (current.get("notes") or ""):
+            current["notes"] = ((current.get("notes") or "") + (" | " if current.get("notes") else "") + notes).strip()
+        sources[key] = current
+
+    for row in conn.execute(
+        """
+        SELECT ticket_no, work_order, location, fault_type, notes
+        FROM tickets
+        WHERE trim(COALESCE(ticket_no,'')) <> ''
+          AND (
+            IFNULL(asphalt_clearance,'') = 'نعم'
+            OR IFNULL(status,'') LIKE '%حفر%'
+            OR IFNULL(fault_type,'') LIKE '%حفر%'
+            OR IFNULL(notes,'') LIKE '%حفر%'
+            OR IFNULL(location,'') LIKE '%حفر%'
+          )
+        """
+    ).fetchall():
+        add(
+            ticket_no=row["ticket_no"],
+            work_order=row["work_order"],
+            location=row["location"],
+            work_desc=row["fault_type"] or "معاملة حفر",
+            source="الأعطال",
+            notes=row["notes"],
+        )
+
+    for table, source_label, loc_col in (
+        ("construction_works", "الإنشاءات", "site"),
+        ("contractor_works", "المقاولين", "site"),
+    ):
+        for row in conn.execute(
+            f"""
+            SELECT ticket_no, work_no, {loc_col} AS location, work_type, notes
+            FROM {table}
+            WHERE IFNULL(work_type,'') LIKE '%حفر%'
+               OR IFNULL(notes,'') LIKE '%حفر%'
+               OR IFNULL({loc_col},'') LIKE '%حفر%'
+            """
+        ).fetchall():
+            add(
+                ticket_no=row["ticket_no"],
+                work_order=row["work_no"],
+                location=row["location"],
+                work_desc=row["work_type"] or "معاملة حفر",
+                source=source_label,
+                notes=row["notes"],
+            )
+
+    for row in conn.execute(
+        """
+        SELECT ticket_no, work_no, location, work_type, department, notes
+        FROM reinforcement_works
+        WHERE IFNULL(work_type,'') LIKE '%حفر%'
+           OR IFNULL(notes,'') LIKE '%حفر%'
+           OR IFNULL(location,'') LIKE '%حفر%'
+           OR IFNULL(department,'') LIKE '%حفر%'
+        """
+    ).fetchall():
+        add(
+            ticket_no=row["ticket_no"],
+            work_order=row["work_no"],
+            location=row["location"],
+            work_desc=row["work_type"] or row["department"] or "معاملة حفر",
+            source="التعزيز - اسكيمات",
+            notes=row["notes"],
+        )
+
+    for table, source_label in (("ticket_boq_lines", "بنود العقد"), ("quantities", "الكميات")):
+        for row in conn.execute(
+            f"""
+            SELECT DISTINCT q.ticket_no, q.description, q.notes, t.work_order, t.location
+            FROM {table} q
+            LEFT JOIN tickets t ON t.ticket_no=q.ticket_no
+            WHERE trim(COALESCE(q.ticket_no,'')) <> ''
+              AND (
+                IFNULL(q.description,'') LIKE '%حفر%'
+                OR IFNULL(q.notes,'') LIKE '%حفر%'
+                OR IFNULL(q.item_no,'') LIKE '%حفر%'
+              )
+            """
+        ).fetchall():
+            add(
+                ticket_no=row["ticket_no"],
+                work_order=row["work_order"],
+                location=row["location"],
+                work_desc=row["description"] or "بند حفر",
+                source=source_label,
+                notes=row["notes"],
+            )
+
+    if own:
+        conn.close()
+    return list(sources.values())
+
+
+def ensure_excavation_safety_permits(conn=None) -> int:
+    """ينشئ/يحدث تصاريح السلامة لكل معاملات الحفر الحالية بدون تكرار."""
+    own = conn is None
+    conn = conn or connect()
+    today = datetime.now().strftime("%Y-%m-%d")
+    changed = 0
+    for src in collect_excavation_safety_sources(conn):
+        tno = (src.get("ticket_no") or "").strip()
+        wo = (src.get("work_order") or "").strip()
+        existing = None
+        if tno:
+            existing = conn.execute(
+                "SELECT * FROM safety_permits WHERE ticket_no=? ORDER BY id LIMIT 1",
+                (tno,),
+            ).fetchone()
+        if not existing and wo:
+            existing = conn.execute(
+                "SELECT * FROM safety_permits WHERE work_order=? ORDER BY id LIMIT 1",
+                (wo,),
+            ).fetchone()
+        note = f"إضافة تلقائية من معاملات الحفر"
+        if src.get("source"):
+            note += f" — {src.get('source')}"
+        if src.get("notes"):
+            note += f" | {src.get('notes')}"
+        if existing:
+            updates = []
+            vals = []
+            for col in ("ticket_no", "work_order", "location", "work_desc"):
+                val = (src.get(col) or "").strip()
+                if val and not (existing[col] or "").strip():
+                    updates.append(f"{col}=?")
+                    vals.append(val)
+            if note and note not in (existing["notes"] or ""):
+                merged = ((existing["notes"] or "").strip() + (" | " if existing["notes"] else "") + note).strip()
+                updates.append("notes=?")
+                vals.append(merged[:700])
+            if updates:
+                vals.append(existing["id"])
+                conn.execute(f"UPDATE safety_permits SET {', '.join(updates)} WHERE id=?", vals)
+                changed += 1
+        else:
+            conn.execute(
+                """
+                INSERT INTO safety_permits(
+                  permit_no, ticket_no, work_order, permit_date, location,
+                  issuer, receiver, work_desc, status, notes
+                ) VALUES (?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    _next_safety_permit_no(conn),
+                    tno,
+                    wo,
+                    today,
+                    src.get("location") or "",
+                    "النظام",
+                    "",
+                    src.get("work_desc") or "معاملة حفر",
+                    "ساري",
+                    note[:700],
+                ),
+            )
             changed += 1
     if own:
         conn.commit()

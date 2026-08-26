@@ -1526,6 +1526,7 @@ def quality_home():
 @app.route("/safety")
 @login_required
 def safety_home():
+    db.ensure_excavation_safety_permits()
     return _redirect_section_first_child("safety")
 
 
@@ -3914,6 +3915,8 @@ def module_list(name):
             return redirect(url_for("warehouse_ops", view="reinforcement"))
         if not (request.args.get("ticket_no") or request.args.get("item_no")):
             return redirect(url_for("warehouses_home"))
+    if name == "safety_permits":
+        db.ensure_excavation_safety_permits()
     packed = _load_module_list_rows(name, module)
     rows = packed["rows"]
     money_keys = packed["money_keys"]
@@ -4515,6 +4518,7 @@ def module_new(name):
                 )
             else:
                 flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
+        safety_created = db.ensure_excavation_safety_permits(conn)
         transfer_res = None
         if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
             transfer_res = db.transfer_new_coordination_to_license(cur.lastrowid, conn=conn)
@@ -4543,6 +4547,8 @@ def module_new(name):
         else:
             flash(_t("تمت الإضافة"), "ok")
         _flash_excavation_link(link_res)
+        if safety_created:
+            flash(_t("تم تحديث تصاريح السلامة لمعاملات الحفر"), "ok")
         if transfer_res and transfer_res.get("created"):
             flash(
                 _t(
@@ -4793,6 +4799,7 @@ def module_edit(name, row_id):
                 )
             else:
                 flash(_t("معاملة حفر: اربط رقم العطل لبدء إجراءات الإخلاء من التنسيقات"), "danger")
+        safety_created = db.ensure_excavation_safety_permits(conn)
         transfer_res = None
         if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
             transfer_res = db.transfer_new_coordination_to_license(row_id, conn=conn)
@@ -4801,6 +4808,8 @@ def module_edit(name, row_id):
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
         flash(_t("تم الحفظ"), "ok")
         _flash_excavation_link(link_res)
+        if safety_created:
+            flash(_t("تم تحديث تصاريح السلامة لمعاملات الحفر"), "ok")
         if transfer_res and transfer_res.get("created"):
             flash(
                 _t(

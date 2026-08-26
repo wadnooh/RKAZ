@@ -172,6 +172,7 @@ def import_from_excel():
             flash(" / ".join(result["errors"][:5]), "danger")
         db.log_audit(helpers.current_user_name(), "استيراد Excel", "أعطال", details=str(result)[:240])
         if result["ok"] or result["updated"]:
+            db.ensure_excavation_safety_permits()
             helpers.after_data_change()
     except Exception as exc:
         flash(helpers.t("تعذر الاستيراد: {exc}", exc=exc), "danger")
@@ -194,6 +195,7 @@ def new():
             cur = conn.execute(
                 f"INSERT INTO tickets({cols}) VALUES ({placeholders})", [data[f] for f in TICKET_FIELDS],
             )
+            db.ensure_excavation_safety_permits(conn)
             conn.commit()
             db.log_audit(
                 helpers.current_user_name(), "إضافة", "عطل", cur.lastrowid,
@@ -274,6 +276,7 @@ def view(ticket_id):
         excavation_link = db.ensure_excavation_coordination(
             tno, reason="ربط تلقائي من عرض العطل — حفر", conn=conn, create_clearance=True,
         )
+        db.ensure_excavation_safety_permits(conn)
         related["coordination"] = db.rows_to_dicts(conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall())
         related["clearances"] = db.rows_to_dicts(conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall())
     else:
@@ -341,6 +344,7 @@ def edit(ticket_id):
             data.get("ticket_no") or dict(row).get("ticket_no") or "",
             data.get("work_order") or "", data.get("rekaz_code") or "", conn,
         )
+        db.ensure_excavation_safety_permits(conn)
         conn.commit()
         link_res = helpers.link_excavation_if_needed(
             data.get("ticket_no") or dict(row).get("ticket_no") or "",
@@ -436,6 +440,7 @@ def boq_add(ticket_id):
     )
     db.sync_ticket_items_value(ticket_id, conn)
     db.sync_metering_approved_value_for_ticket(ticket["ticket_no"], conn)
+    db.ensure_excavation_safety_permits(conn)
     link_res = None
     if db.is_excavation_text(desc, notes, item_no):
         link_res = db.ensure_excavation_coordination(
@@ -471,6 +476,7 @@ def boq_delete(ticket_id, line_id):
     db.sync_ticket_items_value(ticket_id, conn)
     if line:
         db.sync_metering_approved_value_for_ticket(line["ticket_no"], conn)
+    db.ensure_excavation_safety_permits(conn)
     conn.commit()
     conn.close()
     flash(helpers.t("تم حذف البند"), "ok")
