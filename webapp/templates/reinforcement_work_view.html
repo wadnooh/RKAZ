@@ -34,7 +34,7 @@
 <div class="card{% if focus == 'quantities' %} is-active{% endif %}" id="section-quantities" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الكميات') }}</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الكميات وورقة التمتير') }}</h3>
       <div class="meta">{{ related.quantities|length }} {{ _('بند') }} | {{ _('الإجمالي') }} {{ qty_total|money }}</div>
     </div>
     <div class="actions">
@@ -115,8 +115,8 @@
 <div class="card{% if focus == 'metering' %} is-active{% endif %}" id="section-metering" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير') }}</h3>
-      <div class="meta">{{ related.metering|length }} {{ _('سجل') }}</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير والكميات المعتمدة') }}</h3>
+      <div class="meta">{{ related.metering|length }} {{ _('سجل') }} | {{ _('مبلغ الكميات المحسوب') }} <strong>{{ qty_total|money }}</strong></div>
     </div>
     <div class="actions">
       {% if can_mutate %}

@@ -435,6 +435,7 @@ def boq_add(ticket_id):
         ),
     )
     db.sync_ticket_items_value(ticket_id, conn)
+    db.sync_metering_approved_value_for_ticket(ticket["ticket_no"], conn)
     link_res = None
     if db.is_excavation_text(desc, notes, item_no):
         link_res = db.ensure_excavation_coordination(
@@ -468,6 +469,8 @@ def boq_delete(ticket_id, line_id):
             conn.execute("DELETE FROM quantities WHERE id=?", (qty_row["id"],))
     conn.execute("DELETE FROM ticket_boq_lines WHERE id=? AND ticket_id=?", (line_id, ticket_id))
     db.sync_ticket_items_value(ticket_id, conn)
+    if line:
+        db.sync_metering_approved_value_for_ticket(line["ticket_no"], conn)
     conn.commit()
     conn.close()
     flash(helpers.t("تم حذف البند"), "ok")

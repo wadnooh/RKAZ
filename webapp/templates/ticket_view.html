@@ -198,7 +198,7 @@
 <div class="card{% if editing and step=='boq' %} ticket-step-panel is-active{% endif %}" id="step-boq" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('بنود العقد والكميات') }}</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('بنود العقد والكميات والتمتير') }}</h3>
       <div class="meta">
         {% if editing and step=='boq' %}<strong>{{ _('الخطوة الحالية: إضافة الكمية') }}</strong> — {% endif %}
         {% if boq_file %}{{ _('مرتبط بالدليل:') }} {{ boq_file.filename }} — {% endif %}
@@ -234,6 +234,10 @@
       <div class="meta">{{ _('اعتيادي = بدون زيادة على القيمة النهائية — طوارئ = تُطبَّق النسبة مرة واحدة على إجمالي البنود في القيمة النهائية') }}</div>
     </div>
     <div class="field full"><label>{{ _('ملاحظات البند') }}</label><input name="notes" value=""></div>
+    <div class="actions" style="grid-column:1/-1;">
+      <button class="btn primary" type="submit">{{ _('إضافة بند وربطه بالتمتير') }}</button>
+      <span class="meta">{{ _('يُحسب إجمالي التمتير تلقائياً من بنود العقد المرتبطة بهذا العطل.') }}</span>
+    </div>
   </form>
   <script>
   (function () {
@@ -410,20 +414,46 @@
 <div class="card{% if editing and step=='metering' %} ticket-step-panel is-active{% endif %}" id="step-metering" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير') }}</h3>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير والكميات المعتمدة') }}</h3>
       <div class="meta">
         {% if editing and step=='metering' %}<strong>{{ _('الخطوة الحالية: التمتير') }}</strong> — {% endif %}
-        {{ related.metering|length }} {{ _('سجل تمتير مرتبط بهذا العطل') }}
-        {% if ticket.boq_final_total %}
-        — {{ _('مبلغ الكميات (القيمة المعتمدة):') }} <strong>{{ ticket.boq_final_total|money }}</strong>
-        {% endif %}
+        {{ related.boq_lines|length }} {{ _('بند كمية') }} |
+        {{ _('مبلغ التمتير المحسوب') }} <strong>{{ (ticket.boq_final_total or 0)|money }}</strong> |
+        {{ related.metering|length }} {{ _('سجل رفع/اعتماد') }}
       </div>
     </div>
     <div class="actions">
       {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step='boq') }}#step-boq">{{ _('إضافة/تعديل البنود') }}</a>
       <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
     </div>
+  </div>
+  <div class="meta-grid" style="margin-bottom:12px;">
+    <div class="meta-item"><div class="k">{{ _('إجمالي البنود') }}</div><div class="v">{{ (ticket.boq_base_total or 0)|money }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('نسبة الطوارئ') }}</div><div class="v">{% if ticket.emergency_ratio_applied %}{{ (ticket.emergency_ratio_applied * 100)|round(1) }}٪{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القيمة المعتمدة للتمتير') }}</div><div class="v"><strong>{{ (ticket.boq_final_total or 0)|money }}</strong></div></div>
+  </div>
+  <div class="table-wrap" style="margin-bottom:12px;">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>{{ _('رقم البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('السعر') }}</th><th>{{ _('الإجمالي') }}</th><th>{{ _('التصنيف') }}</th></tr>
+      </thead>
+      <tbody>
+        {% for line in related.boq_lines %}
+        <tr>
+          <td>{{ line.item_no or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
+          <td>{{ line.qty if line.qty is not none else '—' }}</td>
+          <td>{% if line.unit_price is not none %}{{ line.unit_price|money }}{% else %}—{% endif %}</td>
+          <td><strong>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</strong></td>
+          <td>{{ tv(line.work_class) or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="meta">{{ _('لا توجد بنود كميات مرتبطة بالتمتير بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
   <div class="table-wrap">
     <table class="table" style="min-width:0">

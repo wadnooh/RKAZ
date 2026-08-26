@@ -2132,6 +2132,24 @@ def sync_ticket_items_value(ticket_id: int, conn=None) -> float:
     return total
 
 
+def sync_metering_approved_value_for_ticket(ticket_no: str, conn=None) -> float | None:
+    """يوحّد قيمة التمتير مع إجمالي بنود العقد/الكميات المرتبطة بالعطل."""
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return None
+    own = conn is None
+    conn = conn or connect()
+    total = ticket_boq_final_total(ticket_no=tno, conn=conn)
+    conn.execute(
+        "UPDATE metering SET approved_value=? WHERE ticket_no=?",
+        (total, tno),
+    )
+    if own:
+        conn.commit()
+        conn.close()
+    return total
+
+
 def repair_boq_emergency_double_count(conn=None) -> int:
     """إصلاح مضاعفة نسبة الطوارئ: إجمالي البند = كمية×سعر، والنسبة مرة واحدة في القيمة النهائية."""
     own = conn is None
