@@ -3744,7 +3744,6 @@ def _warehouse_create_contexts():
         "wh_constructions",
         "wh_projects",
         "wh_contractors",
-        "reinforcement",
         "wh_reinforcement",
     )
 

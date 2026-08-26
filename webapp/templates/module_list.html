@@ -84,7 +84,9 @@
       {% if missing_amount %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name, ticket_no=ticket_filter or none, department=department_filter or none, source=source_filter or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none, date_from=date_from or none, date_to=date_to or none) }}">{{ _('إلغاء فلتر بدون مبلغ') }}</a>
       {% endif %}
-      {% if can_mod_write and can('button.module.' ~ name ~ '.add') and name in ['construction_works', 'projects', 'external_purchases', 'custody'] %}
+      {% if can_mod_write and can('button.module.' ~ name ~ '.add') and name == 'reinforcement_works' and department_filter %}
+        <a class="btn primary" href="{{ url_for('module_new', name=name, department=department_filter) }}">{{ _('+ إضافة معاملة') }}</a>
+      {% elif can_mod_write and can('button.module.' ~ name ~ '.add') and name in ['construction_works', 'projects', 'external_purchases', 'custody'] %}
         <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
       {% endif %}
     </div>
