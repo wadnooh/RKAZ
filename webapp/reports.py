@@ -74,9 +74,21 @@ def _sum_reinforcement_department(conn, pattern: str, date_from: str = "", date_
     try:
         row = conn.execute(
             f"""
-            SELECT COALESCE(SUM(COALESCE(value,0)),0)
-            FROM reinforcement_works
-            WHERE {where} AND department LIKE ?
+            WITH qtotals AS (
+                SELECT ticket_no, COALESCE(SUM(COALESCE(qty,0) * COALESCE(unit_price,0)),0) AS total
+                FROM quantities
+                GROUP BY ticket_no
+            )
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(r.value,0) != 0 THEN COALESCE(r.value,0)
+                    ELSE COALESCE(qw.total, qt.total, 0)
+                END
+            ),0)
+            FROM reinforcement_works r
+            LEFT JOIN qtotals qw ON qw.ticket_no = r.work_no
+            LEFT JOIN qtotals qt ON qt.ticket_no = r.ticket_no
+            WHERE {where} AND r.department LIKE ?
             """,
             [*params, f"%{pattern}%"],
         ).fetchone()
@@ -89,7 +101,7 @@ def _count_reinforcement_department(conn, pattern: str, date_from: str = "", dat
     where, params = _date_where("work_date", date_from, date_to)
     try:
         row = conn.execute(
-            f"SELECT COUNT(*) FROM reinforcement_works WHERE {where} AND department LIKE ?",
+            f"SELECT COUNT(*) FROM reinforcement_works r WHERE {where} AND r.department LIKE ?",
             [*params, f"%{pattern}%"],
         ).fetchone()
         return int(row[0] if row else 0)
@@ -102,11 +114,23 @@ def _sum_reinforcement_other(conn, date_from: str = "", date_to: str = "") -> fl
     try:
         row = conn.execute(
             f"""
-            SELECT COALESCE(SUM(COALESCE(value,0)),0)
-            FROM reinforcement_works
+            WITH qtotals AS (
+                SELECT ticket_no, COALESCE(SUM(COALESCE(qty,0) * COALESCE(unit_price,0)),0) AS total
+                FROM quantities
+                GROUP BY ticket_no
+            )
+            SELECT COALESCE(SUM(
+                CASE
+                    WHEN COALESCE(r.value,0) != 0 THEN COALESCE(r.value,0)
+                    ELSE COALESCE(qw.total, qt.total, 0)
+                END
+            ),0)
+            FROM reinforcement_works r
+            LEFT JOIN qtotals qw ON qw.ticket_no = r.work_no
+            LEFT JOIN qtotals qt ON qt.ticket_no = r.ticket_no
             WHERE {where}
-              AND COALESCE(department,'') NOT LIKE ?
-              AND COALESCE(department,'') NOT LIKE ?
+              AND COALESCE(r.department,'') NOT LIKE ?
+              AND COALESCE(r.department,'') NOT LIKE ?
             """,
             [*params, "%عدادات%", "%محطات%"],
         ).fetchone()
@@ -121,10 +145,10 @@ def _count_reinforcement_other(conn, date_from: str = "", date_to: str = "") -> 
         row = conn.execute(
             f"""
             SELECT COUNT(*)
-            FROM reinforcement_works
+            FROM reinforcement_works r
             WHERE {where}
-              AND COALESCE(department,'') NOT LIKE ?
-              AND COALESCE(department,'') NOT LIKE ?
+              AND COALESCE(r.department,'') NOT LIKE ?
+              AND COALESCE(r.department,'') NOT LIKE ?
             """,
             [*params, "%عدادات%", "%محطات%"],
         ).fetchone()

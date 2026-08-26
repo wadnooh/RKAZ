@@ -3841,6 +3841,36 @@ def _load_module_list_rows(name, module):
     conn = db.connect()
     rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {module['table']} ORDER BY id DESC").fetchall())
     tickets = [r["ticket_no"] for r in conn.execute("SELECT ticket_no FROM tickets ORDER BY id DESC").fetchall()]
+    if name == "reinforcement_works":
+        refs = sorted(
+            {
+                ref
+                for r in rows
+                for ref in ((r.get("work_no") or "").strip(), (r.get("ticket_no") or "").strip())
+                if ref
+            }
+        )
+        qty_totals = {}
+        if refs:
+            placeholders = ",".join("?" for _ in refs)
+            qty_rows = conn.execute(
+                f"""
+                SELECT ticket_no, COALESCE(SUM(COALESCE(qty,0) * COALESCE(unit_price,0)),0) AS total
+                FROM quantities
+                WHERE ticket_no IN ({placeholders})
+                GROUP BY ticket_no
+                """,
+                refs,
+            ).fetchall()
+            qty_totals = {r["ticket_no"]: float(r["total"] or 0) for r in qty_rows}
+        for r in rows:
+            direct = helpers.to_float_safe(r.get("value"))
+            work_total = qty_totals.get((r.get("work_no") or "").strip(), 0)
+            ticket_total = qty_totals.get((r.get("ticket_no") or "").strip(), 0)
+            linked_total = work_total or ticket_total
+            if (direct is None or direct == 0) and linked_total:
+                r["value"] = linked_total
+                r["value_source"] = "quantities"
     conn.close()
     if name == "quantities":
         for r in rows:
