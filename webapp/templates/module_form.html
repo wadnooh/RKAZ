@@ -128,10 +128,10 @@
       {% elif ftype == 'warehouse_item' %}
         <div class="warehouse-item-picker" data-warehouse-picker>
           <input type="hidden" name="{{ key }}" id="warehouseItemSelect" value="{{ row[key] or '' }}">
-          <input type="text" id="warehouseItemSearch" value="{{ row[key] or '' }}" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها') }}" dir="auto">
+          <input class="warehouse-item-picker__input" type="text" id="warehouseItemSearch" value="{{ row[key] or '' }}" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها') }}" dir="auto">
           <div class="item-suggest" id="warehouseItemSuggest" hidden></div>
         </div>
-        <div class="meta" id="warehouseItemPreview" style="margin-top:4px;"></div>
+        <div class="item-preview" id="warehouseItemPreview" hidden></div>
       {% elif ftype == 'reinforcement_dept' %}
         <select name="{{ key }}">
           <option value="">—</option>
@@ -334,7 +334,10 @@
       var unitInput = document.querySelector('input[name="unit"]');
       if (nameInput && it.item_name) nameInput.value = it.item_name;
       if (unitInput && it.unit) unitInput.value = it.unit;
-      if (preview) preview.textContent = (it.item_name || "") + (it.unit ? (" — " + it.unit) : "");
+      if (preview) {
+        preview.textContent = (it.item_name || "") + (it.unit ? (" — " + it.unit) : "");
+        preview.hidden = !preview.textContent;
+      }
       suggest.hidden = true;
     }
     function renderSuggest(list) {
@@ -361,7 +364,10 @@
     }
     search.addEventListener("input", function () {
       itemNo.value = "";
-      if (preview) preview.textContent = "";
+      if (preview) {
+        preview.textContent = "";
+        preview.hidden = true;
+      }
       renderSuggest(filterItems(search.value));
     });
     search.addEventListener("blur", function () {

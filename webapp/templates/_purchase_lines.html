@@ -77,15 +77,15 @@
     </table>
   </div>
   {% if not received and can('modules.write') %}
-  <form method="post" action="{{ url_for('purchase_line_add', row_id=row.id) }}" class="form-grid" id="purchaseLineAddForm" style="margin-top:12px;align-items:end;">
+  <form method="post" action="{{ url_for('purchase_line_add', row_id=row.id) }}" class="form-grid purchase-line-form" id="purchaseLineAddForm">
     <div class="field">
       <label>{{ _('اختيار المادة') }}</label>
-      <div class="warehouse-item-picker" style="position:relative;">
+      <div class="warehouse-item-picker">
         <input type="hidden" name="item_no" id="purchaseItemNo" value="">
-        <input type="text" id="purchaseItemSearch" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها من المستودع') }}" dir="auto">
+        <input class="warehouse-item-picker__input" type="text" id="purchaseItemSearch" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها من المستودع') }}" dir="auto">
         <div class="item-suggest" id="purchaseItemSuggest" hidden></div>
       </div>
-      <div class="meta" id="purchaseItemPreview"></div>
+      <div class="item-preview" id="purchaseItemPreview" hidden></div>
     </div>
     <div class="field">
       <label>{{ _('الكمية') }}</label>
@@ -108,40 +108,6 @@
 </div>
 
 {% if mode == 'edit' and not received and can('modules.write') %}
-<style>
-.item-suggest {
-  position: absolute;
-  z-index: 40;
-  left: 0;
-  right: 0;
-  top: calc(100% - 2px);
-  background: var(--card, #fff);
-  border: 1px solid var(--border, #d0d5dd);
-  border-radius: 10px;
-  max-height: 240px;
-  overflow: auto;
-  box-shadow: 0 8px 24px rgba(16,24,40,.12);
-}
-.item-suggest button {
-  display: block;
-  width: 100%;
-  text-align: right;
-  background: transparent;
-  border: 0;
-  border-bottom: 1px solid var(--border, #eee);
-  padding: 10px 12px;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}
-.item-suggest button:last-child { border-bottom: 0; }
-.item-suggest button:hover,
-.item-suggest button.active {
-  background: color-mix(in srgb, var(--accent, #8a7349) 12%, transparent);
-}
-.item-suggest .sg-code { font-weight: 700; direction: ltr; display: inline-block; margin-left: 8px; }
-.item-suggest .sg-meta { color: var(--muted, #667085); font-size: .92em; }
-</style>
 <script>
 (function () {
   var ITEMS = {{ items|tojson }};
@@ -176,6 +142,7 @@
     itemNo.value = it.item_no || "";
     search.value = it.item_no || "";
     preview.textContent = (it.item_name || "") + (it.unit ? (" — " + it.unit) : "");
+    preview.hidden = !preview.textContent;
     suggest.hidden = true;
   }
   function renderSuggest(list) {
@@ -200,6 +167,7 @@
   search.addEventListener("input", function () {
     itemNo.value = "";
     preview.textContent = "";
+    preview.hidden = true;
     renderSuggest(filterItems(search.value));
   });
   search.addEventListener("blur", function () {
@@ -213,6 +181,7 @@
     if (!itemNo.value) {
       e.preventDefault();
       preview.textContent = {{ _('اختر مادة من نتائج البحث')|tojson }};
+      preview.hidden = false;
     }
   });
 })();
