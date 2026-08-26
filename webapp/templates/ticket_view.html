@@ -499,6 +499,9 @@
       </div>
     </div>
     <div class="actions">
+      {% if editing and step=='warehouse' and can('tickets.write') and can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=ticket.ticket_no, work_order=ticket.work_order or none, **{'from': 'ops', 'tx_type': 'منصرف للمعاملة'}) }}">{{ _('إضافة حركة') }}</a>
+      {% endif %}
       {% if can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', ticket_no=ticket.ticket_no) }}">{{ _('عرض الكل') }}</a>
       {% endif %}

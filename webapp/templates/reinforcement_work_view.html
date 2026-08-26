@@ -155,7 +155,7 @@
     </div>
     <div class="actions">
       {% if can_mutate and can_warehouse %}
-      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=work.ticket_no or none, **{'from': 'wh_reinforcement', 'source_ref': work.work_no, 'work_order': work.work_no, 'tx_type': 'منصرف للمعاملة'}) }}">{{ _('إضافة حركة') }}</a>
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=work.ticket_no or none, **{'from': 'reinforcement', 'source_ref': work.work_no, 'work_order': work.work_no, 'tx_type': 'منصرف للمعاملة'}) }}">{{ _('إضافة حركة') }}</a>
       {% endif %}
       <a class="btn ghost" href="{{ url_for('warehouse_movements_summary', source='reinforcement') }}">{{ _('حركات التعزيز') }}</a>
     </div>

@@ -3737,12 +3737,14 @@ def _warehouse_source_from_ctx(form_ctx: str) -> str:
 
 
 def _warehouse_create_contexts():
-    """السياقات المسموح منها إنشاء حركة: صفحات المستودعات فقط."""
+    """السياقات المسموح منها إنشاء حركة: صفحات المعاملة أو المستودع."""
     return (
+        "ops",
         "wh_ops",
         "wh_constructions",
         "wh_projects",
         "wh_contractors",
+        "reinforcement",
         "wh_reinforcement",
     )
 
