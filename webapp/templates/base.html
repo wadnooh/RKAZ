@@ -218,7 +218,7 @@
   <div id="deletePasswordModal" class="delete-pw-backdrop" hidden>
     <div class="delete-pw-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePasswordTitle">
       <h3 id="deletePasswordTitle" class="section-title" style="font-size:1.1rem;margin:0 0 8px;">{{ _('تأكيد الحذف') }}</h3>
-      <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">{{ _('اضغط تأكيد لإرسال كود الحذف إلى بريدك أو واتساب، ثم أدخل الكود لإتمام الحذف.') }}</p>
+      <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">{{ _('اضغط تأكيد لإرسال كود الحذف إلى بريد حسابات admin، ثم أدخل الكود لإتمام الحذف.') }}</p>
       <div id="deletePasswordForm" style="margin:0;">
         <label class="field" style="display:block;margin-bottom:12px;" for="deletePasswordInput">
           <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كود تأكيد الحذف') }}</span>
@@ -239,7 +239,7 @@
     var hint = document.getElementById("deletePasswordHint");
     var err = document.getElementById("deletePasswordError");
     var pendingForm = null;
-    var emptyMsg = {{ _('اضغط تأكيد لإرسال كود الحذف إلى بريدك أو واتساب، ثم أدخل الكود لإتمام الحذف.')|tojson }};
+    var emptyMsg = {{ _('اضغط تأكيد لإرسال كود الحذف إلى بريد حسابات admin، ثم أدخل الكود لإتمام الحذف.')|tojson }};
     var focusTimer = null;
     var submitting = false;
 

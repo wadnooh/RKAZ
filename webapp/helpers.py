@@ -22,7 +22,6 @@ from webapp import db
 from webapp import media as media_svc
 from webapp import backup as backup_svc
 from webapp import mailer
-from webapp import whatsapp as whatsapp_svc
 from webapp.i18n import _ as i18n_phrase, tv as i18n_tv, tr as i18n_tr, localize_module, localize_section_meta
 from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import permissions
@@ -82,24 +81,37 @@ def _hash_delete_code(code: str) -> str:
     return hashlib.sha256((code or "").strip().encode("utf-8")).hexdigest()
 
 
-def _current_user_contact() -> tuple[str, str, str]:
-    if not session.get("user_id"):
-        return "", "", ""
+def _admin_delete_code_recipients() -> list[dict]:
     conn = db.connect()
-    user = conn.execute("SELECT full_name, username, email, mobile FROM users WHERE id=?", (session["user_id"],)).fetchone()
+    users = conn.execute(
+        """
+        SELECT full_name, username, email, role
+        FROM users
+        WHERE active=1 AND coalesce(email,'')<>''
+        ORDER BY id
+        """
+    ).fetchall()
     conn.close()
-    if not user:
-        return "", "", ""
-    email = (user["email"] or "").strip()
-    mobile = (user["mobile"] or "").strip()
-    name = (user["full_name"] or user["username"] or current_user_name()).strip()
-    return email, mobile, name
+    recipients = []
+    for user in users:
+        if permissions.normalize_role(user["role"]) != "admin":
+            continue
+        email = (user["email"] or "").strip()
+        if not email:
+            continue
+        recipients.append(
+            {
+                "email": email,
+                "name": (user["full_name"] or user["username"] or "admin").strip(),
+            }
+        )
+    return recipients
 
 
 def _send_delete_code(scope: str) -> bool:
-    email, mobile, name = _current_user_contact()
-    if not email and not mobile:
-        g.delete_confirm_message = t("لا يمكن الحذف: لا يوجد بريد إلكتروني أو رقم جوال مسجل لحسابك.")
+    recipients = _admin_delete_code_recipients()
+    if not recipients:
+        g.delete_confirm_message = t("لا يمكن الحذف: لا يوجد بريد إلكتروني مسجل لأي حساب admin نشط.")
         return False
     code = f"{secrets.randbelow(1_000_000):06d}"
     session["delete_email_confirm"] = {
@@ -108,47 +120,40 @@ def _send_delete_code(scope: str) -> bool:
         "expires_at": time.time() + DELETE_CODE_TTL_SECONDS,
     }
     subject = "كود تأكيد الحذف - ركاز"
+    requester = current_user_name()
     body = "\n".join(
         [
-            f"مرحباً {name},",
+            "مرحباً مدير النظام,",
             "",
             "تم طلب تنفيذ عملية حذف في نظام ركاز.",
+            f"المستخدم الطالب للحذف: {requester}",
             f"كود تأكيد الحذف: {code}",
             "صلاحية الكود 10 دقائق، ولا يعمل إلا لهذه العملية فقط.",
             "",
             "إذا لم تطلب الحذف فتجاهل هذه الرسالة وراجع مدير النظام.",
         ]
     )
-    sent_channels = []
     errors = []
-    if email:
-        if mailer.smtp_configured():
-            ok, err = mailer.send_email(to_addrs=[email], subject=subject, body=body)
-            if ok:
-                sent_channels.append(t("البريد"))
-            else:
-                errors.append(t("البريد: {err}", err=err))
-        else:
-            errors.append(t("البريد غير مفعل"))
-    if mobile:
-        if whatsapp_svc.configured():
-            ok, err = whatsapp_svc.send_text(to_phone=mobile, body=body)
-            if ok:
-                sent_channels.append(t("واتساب"))
-            else:
-                errors.append(t("واتساب: {err}", err=err))
-        else:
-            errors.append(t("واتساب غير مفعل"))
-    if sent_channels:
-        g.delete_confirm_message = t("تم إرسال كود تأكيد الحذف عبر {channels}. أدخل الكود لإتمام الحذف.", channels=" / ".join(sent_channels))
-        g.delete_confirm_category = "ok"
+    if mailer.smtp_configured():
+        to_addrs = [r["email"] for r in recipients]
+        ok, err = mailer.send_email(to_addrs=to_addrs, subject=subject, body=body)
+        if ok:
+            g.delete_confirm_message = t("تم إرسال كود تأكيد الحذف إلى بريد حسابات admin. أدخل الكود لإتمام الحذف.")
+            g.delete_confirm_category = "ok"
+            return False
+        errors.append(t("البريد: {err}", err=err))
+    else:
+        errors.append(t("البريد غير مفعل"))
+    if errors:
+        session.pop("delete_email_confirm", None)
+        g.delete_confirm_message = t("تعذر إرسال كود تأكيد الحذف: {err}", err=" | ".join(errors))
         return False
-    g.delete_confirm_message = t("تعذر إرسال كود تأكيد الحذف: {err}", err=" | ".join(errors) or "لا توجد قناة إرسال مفعلة")
+    g.delete_confirm_message = t("تعذر إرسال كود تأكيد الحذف: {err}", err="لا توجد قناة إرسال مفعلة")
     return False
 
 
 def delete_password_ok() -> bool:
-    """يتحقق من كود حذف مرسل لبريد المستخدم، مع ربط الكود بعملية الحذف الحالية."""
+    """يتحقق من كود حذف مرسل لبريد admin، مع ربط الكود بعملية الحذف الحالية."""
     code = (request.form.get("delete_code") or request.form.get("delete_password") or "").strip()
     if not session.get("user_id"):
         return False
@@ -170,7 +175,7 @@ def delete_password_ok() -> bool:
 
 def reject_bad_delete_password(fallback_url: str):
     flash(
-        getattr(g, "delete_confirm_message", None) or t("أدخل كود تأكيد الحذف المرسل إلى بريدك أو واتساب."),
+        getattr(g, "delete_confirm_message", None) or t("أدخل كود تأكيد الحذف المرسل إلى بريد حسابات admin."),
         getattr(g, "delete_confirm_category", "danger"),
     )
     nxt = (request.form.get("next") or "").strip()
