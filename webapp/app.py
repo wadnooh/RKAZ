@@ -5049,12 +5049,12 @@ def ops_primary_teams():
     """الفرق الأولية (أوامر عمل الكهرباء) — الإضافة من العمليات والصيانة وليس من المستودع."""
     conn = db.connect()
     if request.method == "POST":
-        if not permissions.can("modules.write"):
-            conn.close()
-            flash(_t("لا تملك صلاحية الإضافة."), "danger")
-            return redirect(url_for("ops_primary_teams"))
         action = request.form.get("action")
         if action == "add":
+            if not permissions.can("modules.write") or not permissions.can("button.module.primary_team_orders.add"):
+                conn.close()
+                flash(_t("لا تملك صلاحية الإضافة."), "danger")
+                return redirect(url_for("ops_primary_teams"))
             work_order = (request.form.get("work_order") or "").strip()
             if not work_order:
                 flash(_t("أمر العمل مطلوب"), "danger")
@@ -5093,6 +5093,10 @@ def ops_primary_teams():
                 flash(_t("تمت إضافة أمر العمل"), "ok")
                 _after_data_change()
         elif action == "delete":
+            if not permissions.can("modules.write") or not permissions.can("button.module.primary_team_orders.delete"):
+                conn.close()
+                flash(_t("لا تملك صلاحية الحذف."), "danger")
+                return redirect(url_for("ops_primary_teams"))
             if not _delete_password_ok():
                 conn.close()
                 return _reject_bad_delete_password(url_for("ops_primary_teams"))
