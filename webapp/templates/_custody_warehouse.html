@@ -1,12 +1,14 @@
-{# ربط العهد بالمستودع: صرف مستقل وإرجاع مستقل #}
+{# ربط العهد بالمستودع: عدة بنود تصرف وترجع بسندات مستقلة #}
+{% set lines = custody_lines if custody_lines is defined else [] %}
 {% set issued = (row.issued_voucher_no or '')|trim %}
 {% set returned = (row.return_voucher_no or '')|trim %}
+{% set items = warehouse_items if warehouse_items is defined else [] %}
 
-<div class="card" style="margin-top:14px;">
+<div class="card purchase-lines-card" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('ربط العهدة بالمستودع') }}</h3>
-      <div class="meta">{{ _('العهد تصرف من المستودع بسند صرف عهدة مستقل، وترجع بسند إرجاع عهدة مستقل.') }}</div>
+      <h3 class="section-title" style="font-size:1.08rem;margin:0;">{{ _('بنود العهدة وربطها بالمستودع') }}</h3>
+      <div class="meta">{{ _('أضف أكثر من مادة للعهدة، ثم اصرفها من المستودع بسند واحد وترجع بسند إرجاع واحد.') }}</div>
     </div>
     <div class="actions">
       {% if issued %}
@@ -16,34 +18,186 @@
       <span class="badge ok">{{ _('مرتجعة للمستودع') }}</span>
       {% elif mode == 'edit' and can('modules.write') %}
       <form method="post" action="{{ url_for('custody_return_warehouse', row_id=row.id) }}" style="display:inline;">
-        <button class="btn primary" type="submit">{{ _('إرجاع للمستودع') }}</button>
+        <button class="btn primary" type="submit">{{ _('إرجاع كل البنود للمستودع') }}</button>
       </form>
       {% endif %}
-      {% elif mode == 'edit' and can('modules.write') %}
+      {% elif mode == 'edit' and can('modules.write') and lines %}
       <form method="post" action="{{ url_for('custody_issue_warehouse', row_id=row.id) }}" style="display:inline;">
-        <button class="btn primary" type="submit">{{ _('صرف من المستودع') }}</button>
+        <button class="btn primary" type="submit">{{ _('صرف كل البنود من المستودع') }}</button>
       </form>
+      {% elif mode == 'edit' %}
+      <span class="badge">{{ _('أضف بند عهدة أولاً') }}</span>
       {% else %}
       <span class="badge">{{ _('احفظ العهدة أولاً') }}</span>
       {% endif %}
     </div>
   </div>
 
-  <div class="stats-grid">
-    <div class="stat-card">
-      <div>{{ _('المادة') }}</div>
-      <strong dir="ltr" style="text-align:left">{{ row.item_no or '—' }}</strong>
-      <div class="meta">{{ row.item_name or '—' }}</div>
-    </div>
-    <div class="stat-card">
-      <div>{{ _('الكمية') }}</div>
-      <strong>{{ row.qty if row.qty is not none else '—' }}</strong>
-      <div class="meta">{{ row.unit or '—' }}</div>
-    </div>
-    <div class="stat-card">
-      <div>{{ _('الحالة') }}</div>
-      <strong>{{ row.status or '—' }}</strong>
-      <div class="meta">{{ _('مصدر حركات المستودع: العهد') }}</div>
-    </div>
+  {% if mode == 'new' %}
+  <p class="meta">{{ _('احفظ بيانات العهدة أولاً، ثم أضف البنود من صفحة التعديل.') }}</p>
+  {% else %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('رقم المادة') }}</th>
+          <th>{{ _('اسم المادة') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('المستودع') }}</th>
+          {% if not issued and can('modules.write') %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% set ns = namespace(qty=0) %}
+        {% for ln in lines %}
+        {% set ns.qty = ns.qty + (ln.qty or 0) %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td dir="ltr" style="text-align:left">{{ ln.item_no or '—' }}</td>
+          <td>{{ ln.item_name or '—' }}</td>
+          <td>{{ ln.unit or '—' }}</td>
+          <td>{{ ln.qty if ln.qty is not none else '—' }}</td>
+          <td>
+            {% if ln.return_warehouse_tx_id %}
+            <span class="badge ok">{{ _('مرتجع') }}</span>
+            {% elif ln.warehouse_tx_id %}
+            <span class="badge ok">{{ _('مصروف') }}</span>
+            {% else %}
+            <span class="badge">{{ _('لم يصرف') }}</span>
+            {% endif %}
+          </td>
+          {% if not issued and can('modules.write') %}
+          <td class="actions">
+            <form method="post" action="{{ url_for('custody_line_delete', line_id=ln.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كود تأكيد الحذف لحذف بند العهدة') }}">
+              <input type="hidden" name="delete_password" value="">
+              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+      {% if lines %}
+      <tfoot>
+        <tr>
+          <td colspan="4" style="text-align:left;font-weight:800;">{{ _('إجمالي الكميات') }}</td>
+          <td style="font-weight:800;">{{ '%.2f'|format(ns.qty) }}</td>
+          <td>{% if returned %}<span class="badge ok">{{ _('كلها مرتجعة') }}</span>{% elif issued %}<span class="badge ok">{{ _('كلها مصروفة') }}</span>{% endif %}</td>
+          {% if not issued and can('modules.write') %}<td></td>{% endif %}
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
   </div>
+
+  {% if not issued and can('modules.write') %}
+  <form method="post" action="{{ url_for('custody_line_add', row_id=row.id) }}" class="form-grid purchase-line-form" id="custodyLineAddForm">
+    <div class="field">
+      <label>{{ _('اختيار المادة') }}</label>
+      <div class="warehouse-item-picker">
+        <input type="hidden" name="item_no" id="custodyItemNo" value="">
+        <input class="warehouse-item-picker__input" type="text" id="custodyItemSearch" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها من المستودع') }}" dir="auto">
+        <div class="item-suggest" id="custodyItemSuggest" hidden></div>
+      </div>
+      <div class="item-preview" id="custodyItemPreview" hidden></div>
+    </div>
+    <div class="field">
+      <label>{{ _('الكمية') }}</label>
+      <input type="number" step="0.01" min="0" name="qty" required>
+    </div>
+    <div class="field full">
+      <label>{{ _('ملاحظات') }}</label>
+      <input type="text" name="notes" placeholder="{{ _('ملاحظات اختيارية للبند') }}">
+    </div>
+    <div class="actions" style="grid-column:1/-1;">
+      <button class="btn primary" type="submit">{{ _('إضافة بند عهدة') }}</button>
+    </div>
+  </form>
+  {% endif %}
+  {% endif %}
 </div>
+
+{% if mode == 'edit' and not issued and can('modules.write') %}
+<script>
+(function () {
+  var ITEMS = {{ items|tojson }};
+  var search = document.getElementById("custodyItemSearch");
+  var suggest = document.getElementById("custodyItemSuggest");
+  var preview = document.getElementById("custodyItemPreview");
+  var itemNo = document.getElementById("custodyItemNo");
+  var form = document.getElementById("custodyLineAddForm");
+  if (!search || !form) return;
+
+  function norm(s) { return String(s || "").trim().toLowerCase(); }
+  function findExact(code) {
+    var n = norm(code);
+    for (var i = 0; i < ITEMS.length; i++) {
+      if (norm(ITEMS[i].item_no) === n) return ITEMS[i];
+    }
+    return null;
+  }
+  function filterItems(q) {
+    q = norm(q);
+    if (!q) return [];
+    var out = [];
+    for (var i = 0; i < ITEMS.length; i++) {
+      var it = ITEMS[i];
+      var hay = norm(it.item_no) + " " + norm(it.item_name);
+      if (hay.indexOf(q) !== -1) out.push(it);
+      if (out.length >= 12) break;
+    }
+    return out;
+  }
+  function pick(it) {
+    itemNo.value = it.item_no || "";
+    search.value = it.item_no || "";
+    preview.textContent = (it.item_name || "") + (it.unit ? (" — " + it.unit) : "");
+    preview.hidden = !preview.textContent;
+    suggest.hidden = true;
+  }
+  function renderSuggest(list) {
+    suggest.innerHTML = "";
+    if (!list.length) { suggest.hidden = true; return; }
+    list.forEach(function (it) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      var code = document.createElement("span");
+      code.className = "sg-code";
+      code.textContent = it.item_no || "";
+      var meta = document.createElement("span");
+      meta.className = "sg-meta";
+      meta.textContent = (it.item_name || "") + (it.unit ? (" · " + it.unit) : "");
+      btn.appendChild(code);
+      btn.appendChild(meta);
+      btn.addEventListener("click", function () { pick(it); });
+      suggest.appendChild(btn);
+    });
+    suggest.hidden = false;
+  }
+  search.addEventListener("input", function () {
+    itemNo.value = "";
+    preview.textContent = "";
+    preview.hidden = true;
+    renderSuggest(filterItems(search.value));
+  });
+  search.addEventListener("blur", function () {
+    setTimeout(function () { suggest.hidden = true; }, 180);
+  });
+  form.addEventListener("submit", function (e) {
+    if (!itemNo.value) {
+      var exact = findExact(search.value);
+      if (exact) pick(exact);
+    }
+    if (!itemNo.value) {
+      e.preventDefault();
+      preview.textContent = {{ _('اختر مادة من نتائج البحث')|tojson }};
+      preview.hidden = false;
+    }
+  });
+})();
+</script>
+{% endif %}

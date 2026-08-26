@@ -161,6 +161,12 @@
           <td>
             {% if key == 'ticket_no' and r[key] %}
               <a href="{{ url_for('tickets_list', q=r[key]) }}">{{ r[key] }}</a>
+            {% elif name == 'custody' and key == 'item_no' %}
+              <span class="meta">{{ r.line_count or 0 }} {{ _('بند') }}</span>
+            {% elif name == 'custody' and key == 'item_name' %}
+              {{ r.items_summary or r[key] or '—' }}
+            {% elif name == 'custody' and key == 'qty' %}
+              {{ r.qty_total if r.qty_total is not none else (r[key] or '—') }}
             {% elif ftype == 'image' %}
               {% set refs = photo_refs(r[key]) %}
               {% if refs %}

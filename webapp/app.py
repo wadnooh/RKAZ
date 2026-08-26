@@ -2945,6 +2945,53 @@ def custody_return_warehouse(row_id):
     return redirect(url_for("module_edit", name="custody", row_id=row_id))
 
 
+@app.route("/module/custody/<int:row_id>/lines/add", methods=["POST"])
+@login_required
+def custody_line_add(row_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    item_no = (request.form.get("item_no") or "").strip()
+    qty_raw = (request.form.get("qty") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    try:
+        qty = float(qty_raw) if qty_raw != "" else 0.0
+    except ValueError:
+        flash(_t("الكمية غير صالحة"), "danger")
+        return redirect(url_for("module_edit", name="custody", row_id=row_id))
+    try:
+        db.add_custody_line(row_id, item_no=item_no, qty=qty, notes=notes)
+        flash(_t("تمت إضافة بند العهدة"), "ok")
+        db.log_audit(current_user_name(), "إضافة بند عهدة", "العهد", row_id, f"{item_no} × {qty}")
+        _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="custody", row_id=row_id))
+
+
+@app.route("/module/custody/lines/<int:line_id>/delete", methods=["POST"])
+@login_required
+def custody_line_delete(line_id):
+    if not permissions.can("section.external") or not permissions.can("modules.write"):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    line = conn.execute("SELECT custody_id FROM custody_lines WHERE id=?", (line_id,)).fetchone()
+    custody_id = line["custody_id"] if line else None
+    conn.close()
+    if not custody_id:
+        flash(_t("السطر غير موجود"), "danger")
+        return redirect(url_for("module_list", name="custody"))
+    if not _delete_password_ok():
+        return _reject_bad_delete_password(url_for("module_edit", name="custody", row_id=custody_id))
+    try:
+        db.delete_custody_line(line_id)
+        flash(_t("تم حذف بند العهدة"), "ok")
+        db.log_audit(current_user_name(), "حذف بند عهدة", "العهد", custody_id, str(line_id))
+        _after_data_change()
+    except ValueError as exc:
+        flash(str(exc), "danger")
+    return redirect(url_for("module_edit", name="custody", row_id=custody_id))
+
+
 @app.route("/module/external_purchases/<int:row_id>/lines/add", methods=["POST"])
 @login_required
 def purchase_line_add(row_id):
@@ -4069,7 +4116,14 @@ def _load_module_list_rows(name, module):
             r["total"] = sm.get("total") or 0
             r["received"] = bool((r.get("received_voucher_no") or "").strip())
     if name == "custody":
+        summaries = db.custody_lines_summary([r["id"] for r in rows if r.get("id")])
         for r in rows:
+            sm = summaries.get(int(r["id"]), {})
+            r["line_count"] = sm.get("line_count") or 0
+            r["qty_total"] = sm.get("qty_total") or (float(r.get("qty") or 0) if r.get("qty") not in (None, "") else 0)
+            r["items_summary"] = sm.get("first_item") or r.get("item_name") or "—"
+            if sm.get("line_count", 0) > 1:
+                r["items_summary"] = f"{sm.get('first_item') or '—'} (+{sm['line_count'] - 1})"
             r["issued"] = bool((r.get("issued_voucher_no") or "").strip())
             r["returned"] = bool((r.get("return_voucher_no") or "").strip())
     date_from = (request.args.get("date_from") or "").strip()
@@ -4845,6 +4899,7 @@ def module_edit(name, row_id):
             data["approved_value"] = boq_approved_total
     quality_workflow = None
     purchase_lines = []
+    custody_lines = []
     supply_lines = []
     if name == "construction_works":
         quality_workflow = db.quality_workflow_for_ref(
@@ -4862,6 +4917,8 @@ def module_edit(name, row_id):
         )
     elif name == "external_purchases":
         purchase_lines = db.list_purchase_lines(row_id, conn=conn)
+    elif name == "custody":
+        custody_lines = db.list_custody_lines(row_id, conn=conn)
     elif name == "contractor_supplies":
         supply_lines = db.list_contractor_supply_lines(row_id, conn=conn)
     reinforcement_departments = []
@@ -4887,6 +4944,7 @@ def module_edit(name, row_id):
         boq_approved_total=boq_approved_total,
         quality_workflow=quality_workflow,
         purchase_lines=purchase_lines,
+        custody_lines=custody_lines,
         supply_lines=supply_lines,
         reinforcement_departments=reinforcement_departments,
         form_ctx=(
