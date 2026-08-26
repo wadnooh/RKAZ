@@ -126,17 +126,12 @@
         <input type="text" name="{{ key }}" id="boqItemNo" value="{{ row[key] or '' }}" required autocomplete="off" placeholder="{{ _('اكتب رقم البند من الدليل') }}" dir="ltr" style="text-align:left">
         <div class="meta" id="boqItemPreview" style="margin-top:4px;"></div>
       {% elif ftype == 'warehouse_item' %}
-        <select name="{{ key }}" id="warehouseItemSelect">
-          <option value="">{{ _('— اختر مادة —') }}</option>
-          {% for it in warehouse_items or [] %}
-          <option value="{{ it.item_no }}"
-                  data-name="{{ it.item_name or '' }}"
-                  data-unit="{{ it.unit or '' }}"
-                  {% if row[key]==it.item_no %}selected{% endif %}>
-            {{ it.item_no }} — {{ it.item_name }}
-          </option>
-          {% endfor %}
-        </select>
+        <div class="warehouse-item-picker" data-warehouse-picker>
+          <input type="hidden" name="{{ key }}" id="warehouseItemSelect" value="{{ row[key] or '' }}">
+          <input type="text" id="warehouseItemSearch" value="{{ row[key] or '' }}" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها') }}" dir="auto">
+          <div class="item-suggest" id="warehouseItemSuggest" hidden></div>
+        </div>
+        <div class="meta" id="warehouseItemPreview" style="margin-top:4px;"></div>
       {% elif ftype == 'reinforcement_dept' %}
         <select name="{{ key }}">
           <option value="">—</option>
@@ -305,17 +300,90 @@
 {% if name in ['warehouse_tx', 'custody'] %}
 <script>
 (function () {
-  var sel = document.getElementById("warehouseItemSelect");
-  if (sel) {
-    function fillItem() {
-      var opt = sel.options[sel.selectedIndex];
-      if (!opt) return;
+  var ITEMS = {{ (warehouse_items or [])|tojson }};
+  var itemNo = document.getElementById("warehouseItemSelect");
+  var search = document.getElementById("warehouseItemSearch");
+  var suggest = document.getElementById("warehouseItemSuggest");
+  var preview = document.getElementById("warehouseItemPreview");
+  if (itemNo && search && suggest) {
+    function norm(s) { return String(s || "").trim().toLowerCase(); }
+    function findExact(code) {
+      var n = norm(code);
+      for (var i = 0; i < ITEMS.length; i++) {
+        if (norm(ITEMS[i].item_no) === n) return ITEMS[i];
+      }
+      return null;
+    }
+    function filterItems(q) {
+      q = norm(q);
+      if (!q) return [];
+      var out = [];
+      for (var i = 0; i < ITEMS.length; i++) {
+        var it = ITEMS[i];
+        var hay = norm(it.item_no) + " " + norm(it.item_name);
+        if (hay.indexOf(q) !== -1) out.push(it);
+        if (out.length >= 12) break;
+      }
+      return out;
+    }
+    function applyItem(it) {
+      if (!it) return;
+      itemNo.value = it.item_no || "";
+      search.value = it.item_no || "";
       var nameInput = document.querySelector('input[name="item_name"]');
       var unitInput = document.querySelector('input[name="unit"]');
-      if (nameInput && opt.dataset.name) nameInput.value = opt.dataset.name;
-      if (unitInput && opt.dataset.unit) unitInput.value = opt.dataset.unit;
+      if (nameInput && it.item_name) nameInput.value = it.item_name;
+      if (unitInput && it.unit) unitInput.value = it.unit;
+      if (preview) preview.textContent = (it.item_name || "") + (it.unit ? (" — " + it.unit) : "");
+      suggest.hidden = true;
     }
-    sel.addEventListener("change", fillItem);
+    function renderSuggest(list) {
+      suggest.innerHTML = "";
+      if (!list.length) {
+        suggest.hidden = true;
+        return;
+      }
+      list.forEach(function (it) {
+        var btn = document.createElement("button");
+        btn.type = "button";
+        var code = document.createElement("span");
+        code.className = "sg-code";
+        code.textContent = it.item_no || "";
+        var meta = document.createElement("span");
+        meta.className = "sg-meta";
+        meta.textContent = (it.item_name || "") + (it.unit ? (" · " + it.unit) : "");
+        btn.appendChild(code);
+        btn.appendChild(meta);
+        btn.addEventListener("click", function () { applyItem(it); });
+        suggest.appendChild(btn);
+      });
+      suggest.hidden = false;
+    }
+    search.addEventListener("input", function () {
+      itemNo.value = "";
+      if (preview) preview.textContent = "";
+      renderSuggest(filterItems(search.value));
+    });
+    search.addEventListener("blur", function () {
+      setTimeout(function () {
+        if (!itemNo.value) {
+          var exact = findExact(search.value);
+          if (exact) applyItem(exact);
+        }
+        suggest.hidden = true;
+      }, 180);
+    });
+    var form = search.closest("form");
+    if (form) {
+      form.addEventListener("submit", function () {
+        if (!itemNo.value) {
+          var exact = findExact(search.value);
+          if (exact) applyItem(exact);
+        }
+      });
+    }
+    var initial = findExact(itemNo.value || search.value);
+    if (initial) applyItem(initial);
   }
   var ticketSel = document.getElementById("warehouseTicketSelect");
   var rekazInput = document.getElementById("warehouseRekazCode");

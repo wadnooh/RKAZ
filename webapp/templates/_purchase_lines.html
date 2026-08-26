@@ -76,6 +76,34 @@
       {% endif %}
     </table>
   </div>
+  {% if not received and can('modules.write') %}
+  <form method="post" action="{{ url_for('purchase_line_add', row_id=row.id) }}" class="form-grid" id="purchaseLineAddForm" style="margin-top:12px;align-items:end;">
+    <div class="field">
+      <label>{{ _('اختيار المادة') }}</label>
+      <div class="warehouse-item-picker" style="position:relative;">
+        <input type="hidden" name="item_no" id="purchaseItemNo" value="">
+        <input type="text" id="purchaseItemSearch" autocomplete="off" placeholder="{{ _('ابحث برقم المادة أو اسمها من المستودع') }}" dir="auto">
+        <div class="item-suggest" id="purchaseItemSuggest" hidden></div>
+      </div>
+      <div class="meta" id="purchaseItemPreview"></div>
+    </div>
+    <div class="field">
+      <label>{{ _('الكمية') }}</label>
+      <input type="number" step="0.01" min="0" name="qty" required>
+    </div>
+    <div class="field">
+      <label>{{ _('سعر الوحدة') }}</label>
+      <input type="number" step="0.01" min="0" name="unit_price">
+    </div>
+    <div class="field full">
+      <label>{{ _('ملاحظات') }}</label>
+      <input type="text" name="notes" placeholder="{{ _('ملاحظات اختيارية للصنف') }}">
+    </div>
+    <div class="actions" style="grid-column:1/-1;">
+      <button class="btn primary" type="submit">{{ _('إضافة صنف') }}</button>
+    </div>
+  </form>
+  {% endif %}
   {% endif %}
 </div>
 

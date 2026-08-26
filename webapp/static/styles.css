@@ -672,6 +672,50 @@ td.col-item-name[title]:hover {
   box-shadow: 0 0 0 3px rgba(11,116,222,0.12);
 }
 
+.warehouse-item-picker {
+  position: relative;
+}
+.item-suggest {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(100% - 2px);
+  background: var(--card, #fff);
+  border: 1px solid var(--border, #d0d5dd);
+  border-radius: 10px;
+  max-height: 240px;
+  overflow: auto;
+  box-shadow: 0 8px 24px rgba(16,24,40,.12);
+}
+.item-suggest button {
+  display: block;
+  width: 100%;
+  text-align: right;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border, #eee);
+  padding: 10px 12px;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.item-suggest button:last-child { border-bottom: 0; }
+.item-suggest button:hover,
+.item-suggest button.active {
+  background: color-mix(in srgb, var(--accent, #8a7349) 12%, transparent);
+}
+.item-suggest .sg-code {
+  font-weight: 800;
+  direction: ltr;
+  display: inline-block;
+  margin-left: 8px;
+}
+.item-suggest .sg-meta {
+  color: var(--muted, #667085);
+  font-size: .92em;
+}
+
 .flash-list { display: grid; gap: 8px; margin-bottom: 12px; }
 .flash {
   padding: 10px 12px;
