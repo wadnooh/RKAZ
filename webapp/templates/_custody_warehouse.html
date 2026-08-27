@@ -3,6 +3,11 @@
 {% set issued = (row.issued_voucher_no or '')|trim %}
 {% set returned = (row.return_voucher_no or '')|trim %}
 {% set items = warehouse_items if warehouse_items is defined else [] %}
+{% set state = namespace(unissued=0, issued_open=0) %}
+{% for ln in lines %}
+  {% if not ln.warehouse_tx_id %}{% set state.unissued = state.unissued + 1 %}{% endif %}
+  {% if ln.warehouse_tx_id and not ln.return_warehouse_tx_id %}{% set state.issued_open = state.issued_open + 1 %}{% endif %}
+{% endfor %}
 
 <div class="card purchase-lines-card" style="margin-top:14px;">
   <div class="toolbar">
@@ -11,23 +16,25 @@
       <div class="meta">{{ _('أضف أكثر من مادة للعهدة، ثم اصرفها من المستودع بسند واحد وترجع بسند إرجاع واحد.') }}</div>
     </div>
     <div class="actions">
-      {% if issued %}
-      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=issued) }}">{{ _('سند الصرف') }} {{ issued }}</a>
-      {% if returned %}
-      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=returned) }}">{{ _('سند الإرجاع') }} {{ returned }}</a>
-      <span class="badge ok">{{ _('مرتجعة للمستودع') }}</span>
-      {% elif mode == 'edit' and can('modules.write') %}
-      <form method="post" action="{{ url_for('custody_return_warehouse', row_id=row.id) }}" style="display:inline;">
-        <button class="btn primary" type="submit">{{ _('إرجاع كل البنود للمستودع') }}</button>
+      {% if state.unissued and mode == 'edit' and can('modules.write') %}
+      <form method="post" action="{{ url_for('custody_issue_warehouse', row_id=row.id) }}" style="display:inline;">
+        <button class="btn primary" type="submit">{{ _('صرف البنود غير المصروفة') }}</button>
       </form>
       {% endif %}
-      {% elif mode == 'edit' and can('modules.write') and lines %}
-      <form method="post" action="{{ url_for('custody_issue_warehouse', row_id=row.id) }}" style="display:inline;">
-        <button class="btn primary" type="submit">{{ _('صرف كل البنود من المستودع') }}</button>
+      {% if state.issued_open and mode == 'edit' and can('modules.write') %}
+      <form method="post" action="{{ url_for('custody_return_warehouse', row_id=row.id) }}" style="display:inline;">
+        <button class="btn primary" type="submit">{{ _('إرجاع البنود المصروفة') }}</button>
       </form>
-      {% elif mode == 'edit' %}
+      {% endif %}
+      {% if issued %}
+      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=issued) }}">{{ _('سند الصرف') }} {{ issued }}</a>
+      {% endif %}
+      {% if returned %}
+      <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=returned) }}">{{ _('سند الإرجاع') }} {{ returned }}</a>
+      {% endif %}
+      {% if mode == 'edit' and not lines %}
       <span class="badge">{{ _('أضف بند عهدة أولاً') }}</span>
-      {% else %}
+      {% elif mode == 'new' %}
       <span class="badge">{{ _('احفظ العهدة أولاً') }}</span>
       {% endif %}
     </div>
@@ -47,7 +54,8 @@
           <th>{{ _('الكمية') }}</th>
           <th>{{ _('الرصيد العام') }}</th>
           <th>{{ _('المستودع') }}</th>
-          {% if not issued and can('modules.write') %}<th></th>{% endif %}
+          <th>{{ _('المصدر') }}</th>
+          {% if can('modules.write') %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -70,17 +78,20 @@
             <span class="badge">{{ _('لم يصرف') }}</span>
             {% endif %}
           </td>
-          {% if not issued and can('modules.write') %}
+          <td>{% if ln.source_type == 'external' %}{{ _('خارجي / مؤقت') }}{% else %}{{ _('المستودع') }}{% endif %}</td>
+          {% if can('modules.write') %}
           <td class="actions">
+            {% if not ln.warehouse_tx_id and not ln.return_warehouse_tx_id %}
             <form method="post" action="{{ url_for('custody_line_delete', line_id=ln.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كود تأكيد الحذف لحذف بند العهدة') }}">
               <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
             </form>
+            {% else %}—{% endif %}
           </td>
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="8" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
+        <tr><td colspan="9" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
       {% if lines %}
@@ -90,15 +101,23 @@
           <td style="font-weight:800;">{{ '%.2f'|format(ns.qty) }}</td>
           <td></td>
           <td>{% if returned %}<span class="badge ok">{{ _('كلها مرتجعة') }}</span>{% elif issued %}<span class="badge ok">{{ _('كلها مصروفة') }}</span>{% endif %}</td>
-          {% if not issued and can('modules.write') %}<td></td>{% endif %}
+          <td></td>
+          {% if can('modules.write') %}<td></td>{% endif %}
         </tr>
       </tfoot>
       {% endif %}
     </table>
   </div>
 
-  {% if not issued and can('modules.write') %}
+  {% if can('modules.write') %}
   <form method="post" action="{{ url_for('custody_line_add', row_id=row.id) }}" class="form-grid purchase-line-form" id="custodyLineAddForm">
+    <div class="field">
+      <label>{{ _('مصدر المادة') }}</label>
+      <select name="source_type" id="custodySourceType">
+        <option value="warehouse">{{ _('من المستودع الرئيسي') }}</option>
+        <option value="external">{{ _('مصدر خارجي / مؤقت') }}</option>
+      </select>
+    </div>
     <div class="field">
       <label>{{ _('اختيار المادة') }}</label>
       <div class="warehouse-item-picker">
@@ -107,6 +126,18 @@
         <div class="item-suggest" id="custodyItemSuggest" hidden></div>
       </div>
       <div class="item-preview" id="custodyItemPreview" hidden></div>
+    </div>
+    <div class="field custody-external-field" hidden>
+      <label>{{ _('رقم المادة الخارجية') }}</label>
+      <input type="text" name="external_item_no" id="custodyExternalItemNo" dir="ltr" style="text-align:left">
+    </div>
+    <div class="field custody-external-field" hidden>
+      <label>{{ _('اسم المادة الخارجية') }}</label>
+      <input type="text" name="external_item_name" id="custodyExternalItemName">
+    </div>
+    <div class="field custody-external-field" hidden>
+      <label>{{ _('الوحدة') }}</label>
+      <input type="text" name="external_unit" id="custodyExternalUnit" placeholder="M / حبة / متر">
     </div>
     <div class="field">
       <label>{{ _('الكمية') }}</label>
@@ -118,22 +149,30 @@
     </div>
     <div class="actions" style="grid-column:1/-1;">
       <button class="btn primary" type="submit">{{ _('إضافة بند عهدة') }}</button>
+      <span class="meta">{{ _('المصدر الخارجي يُسجل على العهدة ويظهر على الرصيد عند الصرف حتى لو لم يكن له رصيد سابق.') }}</span>
     </div>
   </form>
   {% endif %}
   {% endif %}
 </div>
 
-{% if mode == 'edit' and not issued and can('modules.write') %}
+{% if mode == 'edit' and can('modules.write') %}
 <script>
 (function () {
   var ITEMS = {{ items|tojson }};
+  var sourceType = document.getElementById("custodySourceType");
   var search = document.getElementById("custodyItemSearch");
   var suggest = document.getElementById("custodyItemSuggest");
   var preview = document.getElementById("custodyItemPreview");
   var itemNo = document.getElementById("custodyItemNo");
   var form = document.getElementById("custodyLineAddForm");
+  var externalFields = Array.prototype.slice.call(document.querySelectorAll(".custody-external-field"));
   if (!search || !form) return;
+  function syncSourceMode() {
+    var external = sourceType && sourceType.value === "external";
+    externalFields.forEach(function (el) { el.hidden = !external; });
+    search.closest(".field").hidden = external;
+  }
 
   function norm(s) { return String(s || "").trim().toLowerCase(); }
   function findExact(code) {
@@ -191,6 +230,7 @@
     setTimeout(function () { suggest.hidden = true; }, 180);
   });
   form.addEventListener("submit", function (e) {
+    if (sourceType && sourceType.value === "external") return;
     if (!itemNo.value) {
       var exact = findExact(search.value);
       if (exact) pick(exact);
@@ -201,6 +241,8 @@
       preview.hidden = false;
     }
   });
+  if (sourceType) sourceType.addEventListener("change", syncSourceMode);
+  syncSourceMode();
 })();
 </script>
 {% endif %}

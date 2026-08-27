@@ -2950,7 +2950,15 @@ def custody_return_warehouse(row_id):
 def custody_line_add(row_id):
     if not permissions.can("section.external") or not permissions.can("modules.write"):
         return permissions.deny_redirect()
-    item_no = (request.form.get("item_no") or "").strip()
+    source_type = (request.form.get("source_type") or "warehouse").strip()
+    if source_type == "external":
+        item_no = (request.form.get("external_item_no") or request.form.get("item_no") or "").strip()
+        item_name = (request.form.get("external_item_name") or "").strip()
+        unit = (request.form.get("external_unit") or "").strip()
+    else:
+        item_no = (request.form.get("item_no") or "").strip()
+        item_name = ""
+        unit = ""
     qty_raw = (request.form.get("qty") or "").strip()
     notes = (request.form.get("notes") or "").strip()
     try:
@@ -2959,7 +2967,7 @@ def custody_line_add(row_id):
         flash(_t("الكمية غير صالحة"), "danger")
         return redirect(url_for("module_edit", name="custody", row_id=row_id))
     try:
-        db.add_custody_line(row_id, item_no=item_no, qty=qty, notes=notes)
+        db.add_custody_line(row_id, item_no=item_no, item_name=item_name, unit=unit, qty=qty, notes=notes, source_type=source_type)
         flash(_t("تمت إضافة بند العهدة"), "ok")
         db.log_audit(current_user_name(), "إضافة بند عهدة", "العهد", row_id, f"{item_no} × {qty}")
         _after_data_change()
