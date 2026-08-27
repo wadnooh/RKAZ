@@ -1222,6 +1222,7 @@ VALUE_EN = {
     'بحث عن معاملة موجودة': 'Search for an existing transaction',
     'رقم العطل أو المعاملة': 'Ticket or transaction number',
     'رقم العطل أو المعاملة أو المحطة': 'Ticket, transaction, or station number',
+    'رقم العطل أو المعاملة أو ركاز أو المحطة': 'Ticket, transaction, Rekaz, or station number',
     'عدد المرفقات': 'Attachments count',
     'يمكن اختيار أكثر من صورة': 'You can select more than one photo',
     'أكمل رقم العطل أو المعاملة ورقم المحطة.': 'Enter the ticket/transaction number and station number.',

@@ -708,15 +708,16 @@ def _field_upload_search(conn, q: str) -> list[dict]:
     results: list[dict] = []
     for row in db.rows_to_dicts(conn.execute(
         """
-        SELECT id, ticket_no, station_no, district, fault_type, status, 'ticket' AS source
+        SELECT id, ticket_no, rekaz_code, station_no, district, fault_type, status, 'ticket' AS source
         FROM tickets
-        WHERE ticket_no LIKE ? OR station_no LIKE ? OR district LIKE ? OR fault_type LIKE ? OR work_order LIKE ?
+        WHERE ticket_no LIKE ? OR rekaz_code LIKE ? OR station_no LIKE ? OR district LIKE ? OR fault_type LIKE ? OR work_order LIKE ?
         ORDER BY id DESC LIMIT 12
         """,
-        (like, like, like, like, like),
+        (like, like, like, like, like, like),
     ).fetchall()):
         results.append({
             "ref": row.get("ticket_no") or "",
+            "rekaz_code": row.get("rekaz_code") or "",
             "station_no": row.get("station_no") or "",
             "title": row.get("fault_type") or row.get("district") or "عطل",
             "status": row.get("status") or "",
@@ -735,6 +736,7 @@ def _field_upload_search(conn, q: str) -> list[dict]:
         for row in rows:
             results.append({
                 "ref": row.get("work_no") or "",
+                "rekaz_code": "",
                 "station_no": row.get("station_no") or "",
                 "title": row.get("department") or row.get("work_type") or "معاملة",
                 "status": row.get("status") or "",

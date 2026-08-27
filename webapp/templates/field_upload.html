@@ -52,7 +52,7 @@
       <label class="field-upload__field">
         <span>{{ _('بحث عن معاملة موجودة') }}</span>
         <div class="field-upload__search-row">
-          <input name="q" value="{{ form.get('q', '') }}" autocomplete="off" placeholder="{{ _('رقم العطل أو المعاملة أو المحطة') }}">
+          <input name="q" value="{{ form.get('q', '') }}" autocomplete="off" placeholder="{{ _('رقم العطل أو المعاملة أو ركاز أو المحطة') }}">
           <button class="btn ghost" type="submit" formmethod="get" formnovalidate>{{ _('بحث') }}</button>
         </div>
       </label>
@@ -64,7 +64,7 @@
                 data-ref="{{ item.ref }}"
                 data-station="{{ item.station_no }}">
           <strong>{{ item.ref }}</strong>
-          <span>{{ item.source }}{% if item.station_no %} · {{ _('محطة') }} {{ item.station_no }}{% endif %}</span>
+          <span>{{ item.source }}{% if item.rekaz_code %} · {{ _('رقم ركاز') }} {{ item.rekaz_code }}{% endif %}{% if item.station_no %} · {{ _('محطة') }} {{ item.station_no }}{% endif %}</span>
           <em>{{ item.title }}{% if item.status %} · {{ item.status }}{% endif %}</em>
         </button>
         {% endfor %}
