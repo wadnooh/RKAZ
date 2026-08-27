@@ -84,7 +84,7 @@ app.secret_key = os.environ.get("SECRET_KEY")
 if not app.secret_key:
     raise ValueError("متغير البيئة SECRET_KEY غير معين. هذا المتغير مطلوب لتشغيل التطبيق بأمان.")
 app.config["TEMPLATES_AUTO_RELOAD"] = True
-IDLE_TIMEOUT_SECONDS = int(os.environ.get("RAKAZ_IDLE_TIMEOUT_SECONDS", "240") or "240")
+IDLE_TIMEOUT_SECONDS = int(os.environ.get("RAKAZ_IDLE_TIMEOUT_SECONDS", "1200") or "1200")
 app.permanent_session_lifetime = timedelta(seconds=IDLE_TIMEOUT_SECONDS)
 app.config["SESSION_REFRESH_EACH_REQUEST"] = True
 app.config["SESSION_COOKIE_HTTPONLY"] = True
@@ -255,8 +255,9 @@ def _load_context():
     if session.get("user_id") and request.endpoint not in PUBLIC_ENDPOINTS:
         now = time.time()
         if _session_expired_by_idle(now):
-            db.log_audit(current_user_name(), "خروج تلقائي", "نظام", session.get("user_id"), "خمول أكثر من 4 دقائق")
-            return _clear_session_keep_lang(_t("تم تسجيل الخروج تلقائياً بسبب عدم النشاط لمدة 4 دقائق."))
+            minutes = max(1, int(IDLE_TIMEOUT_SECONDS / 60))
+            db.log_audit(current_user_name(), "خروج تلقائي", "نظام", session.get("user_id"), f"خمول أكثر من {minutes} دقيقة")
+            return _clear_session_keep_lang(_t("تم تسجيل الخروج تلقائياً بسبب عدم النشاط لمدة {minutes} دقيقة.", minutes=minutes))
         if not _csrf_ok():
             abort(400)
         active_token = (session.get("session_token") or "").strip()
@@ -645,6 +646,18 @@ def login():
 def forgot_password():
     flash(i18n_tr(session.get("lang") or "ar", "forgot_hint"), "ok")
     return redirect(url_for("login"))
+
+
+@app.route("/session/extend", methods=["POST"])
+@login_required
+def session_extend():
+    session["last_activity_at"] = time.time()
+    session.permanent = True
+    return {
+        "ok": True,
+        "idle_timeout_seconds": IDLE_TIMEOUT_SECONDS,
+        "extended_at": datetime.now().isoformat(timespec="seconds"),
+    }
 
 
 @app.route("/logout")

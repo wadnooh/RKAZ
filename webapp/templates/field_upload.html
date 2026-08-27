@@ -44,6 +44,7 @@
   {% endif %}
 
   <form method="post" enctype="multipart/form-data" class="field-upload__form" id="fieldUploadForm">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="latitude" id="fieldLatitude" value="{{ form.get('latitude', '') }}">
     <input type="hidden" name="longitude" id="fieldLongitude" value="{{ form.get('longitude', '') }}">
     <input type="hidden" name="accuracy" id="fieldAccuracy" value="{{ form.get('accuracy', '') }}">
@@ -100,8 +101,31 @@
   </form>
   </main>
 
+  <div id="idleExtendModal" class="idle-extend-backdrop" hidden>
+    <div class="idle-extend-dialog" role="dialog" aria-modal="true" aria-labelledby="idleExtendTitle">
+      <h3 id="idleExtendTitle" class="section-title" style="font-size:1.1rem;margin:0 0 8px;">{{ _('تمديد الجلسة') }}</h3>
+      <p class="app-runtime-message" style="margin:0 0 14px;">{{ _('ستنتهي الجلسة قريباً بسبب عدم النشاط. اضغط تمديد لإضافة 20 دقيقة أخرى.') }}</p>
+      <div class="actions" style="justify-content:flex-end;gap:8px;">
+        <a class="btn ghost" href="{{ url_for('logout') }}">{{ _('خروج') }}</a>
+        <button type="button" class="btn primary" id="idleExtendButton">{{ _('تمديد 20 دقيقة') }}</button>
+      </div>
+    </div>
+  </div>
+
 <script>
 (function () {
+  var csrfToken = {{ csrf_token()|tojson }};
+  var idleMs = {{ (idle_timeout_seconds * 1000)|tojson }};
+  var logoutUrl = {{ url_for('logout')|tojson }};
+  var extendUrl = {{ url_for('session_extend')|tojson }};
+  var warningBeforeMs = Math.min(60000, Math.max(15000, Math.floor(idleMs / 10)));
+  var keepAliveEveryMs = Math.min(300000, Math.max(60000, Math.floor(idleMs / 4)));
+  var idleModal = document.getElementById("idleExtendModal");
+  var idleExtendBtn = document.getElementById("idleExtendButton");
+  var warningTimer = null;
+  var logoutTimer = null;
+  var lastKeepAlive = Date.now();
+  var extending = false;
   var form = document.getElementById("fieldUploadForm");
   var panel = document.getElementById("fieldPhotoPanel");
   var files = Array.prototype.slice.call(document.querySelectorAll('.field-upload__slot input[type="file"]'));
@@ -115,6 +139,66 @@
   var locationStatus = document.getElementById("fieldLocationStatus");
   var savingStatus = document.getElementById("fieldSavingStatus");
   var submitting = false;
+
+  function showIdleWarning() {
+    if (!idleModal) return;
+    idleModal.hidden = false;
+    idleModal.style.display = "flex";
+    document.body.classList.add("idle-extend-open");
+    if (idleExtendBtn) idleExtendBtn.focus();
+  }
+
+  function hideIdleWarning() {
+    if (!idleModal) return;
+    idleModal.hidden = true;
+    idleModal.style.display = "none";
+    document.body.classList.remove("idle-extend-open");
+  }
+
+  function scheduleIdleTimers() {
+    if (warningTimer) clearTimeout(warningTimer);
+    if (logoutTimer) clearTimeout(logoutTimer);
+    hideIdleWarning();
+    warningTimer = setTimeout(showIdleWarning, Math.max(1000, idleMs - warningBeforeMs));
+    logoutTimer = setTimeout(function () {
+      window.location.href = logoutUrl;
+    }, idleMs);
+  }
+
+  function extendSession(silent) {
+    if (extending) return Promise.resolve(false);
+    extending = true;
+    return fetch(extendUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: {"X-CSRF-Token": csrfToken, "Accept": "application/json"}
+    }).then(function (resp) {
+      if (!resp.ok) throw new Error("extend failed");
+      return resp.json();
+    }).then(function () {
+      lastKeepAlive = Date.now();
+      scheduleIdleTimers();
+      return true;
+    }).catch(function () {
+      if (!silent) window.location.href = logoutUrl;
+      return false;
+    }).finally(function () {
+      extending = false;
+    });
+  }
+
+  function noteActivity() {
+    scheduleIdleTimers();
+    if (Date.now() - lastKeepAlive >= keepAliveEveryMs) {
+      extendSession(true);
+    }
+  }
+
+  ["click", "keydown", "mousemove", "touchstart", "scroll"].forEach(function (eventName) {
+    document.addEventListener(eventName, noteActivity, { passive: true });
+  });
+  if (idleExtendBtn) idleExtendBtn.addEventListener("click", function () { extendSession(false); });
+  scheduleIdleTimers();
 
   function updateLabel() {
     if (!label || !kind) return;

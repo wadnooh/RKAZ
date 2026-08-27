@@ -377,6 +377,30 @@ body.delete-pw-open {
   cursor: pointer !important;
 }
 
+.idle-extend-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483645 !important;
+  background: rgba(12, 22, 34, 0.54);
+  display: flex !important;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 34px 16px 24px;
+  overflow: auto;
+}
+.idle-extend-backdrop[hidden] { display: none !important; }
+body.idle-extend-open {
+  overflow: hidden !important;
+}
+.idle-extend-dialog {
+  width: min(460px, 100%);
+  background: #fff;
+  border: 2px solid #8a7349;
+  border-radius: 14px;
+  padding: 20px 18px 16px;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.32);
+}
+
 .stats-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
