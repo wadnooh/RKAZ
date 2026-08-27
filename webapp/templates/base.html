@@ -10,7 +10,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&family=Tajawal:wght@500;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}?v={{ asset_v }}">
 </head>
-<body>
+<body class="{% if programmer_is_admin %}programmer-view{% else %}standard-view{% endif %}">
   <div class="app-watermark" aria-hidden="true">
     <img src="{{ logo_rekaz }}" alt="">
   </div>
@@ -40,7 +40,7 @@
       </div>
       {% if session.get('user_id') and not is_login_page %}
       <div class="actions">
-        <span class="meta">{{ session.get('full_name', '') }} ({{ session.get('role', '') }})</span>
+        <span class="meta app-user-chip">{{ session.get('full_name', '') }} ({{ session.get('role', '') }})</span>
         {% if can('button.logout') %}<a class="btn ghost" href="{{ url_for('logout') }}">{{ tr('logout') }}</a>{% endif %}
       </div>
       {% endif %}
@@ -267,6 +267,21 @@
       </div>
     </div>
   </div>
+  <script>
+  (function () {
+    if (!document.body || !document.body.classList.contains("standard-view")) return;
+    document.querySelectorAll("[placeholder]").forEach(function (el) {
+      if (el.hasAttribute("data-keep-placeholder")) return;
+      el.setAttribute("data-programmer-placeholder", el.getAttribute("placeholder") || "");
+      el.removeAttribute("placeholder");
+    });
+    document.querySelectorAll("[title]").forEach(function (el) {
+      if (el.hasAttribute("data-keep-title")) return;
+      el.setAttribute("data-programmer-title", el.getAttribute("title") || "");
+      el.removeAttribute("title");
+    });
+  })();
+  </script>
   <script>
   (function () {
     var modal = document.getElementById("deletePasswordModal");

@@ -28,6 +28,16 @@ body {
   /* الاتجاه يأتي من html[dir] (ar=rtl / en=ltr) — لا تفرض rtl هنا */
 }
 
+body.standard-view div.meta,
+body.standard-view p.meta,
+body.standard-view span.meta:not(.app-user-chip) {
+  display: none !important;
+}
+body.standard-view input::placeholder,
+body.standard-view textarea::placeholder {
+  color: transparent !important;
+}
+
 .app-watermark {
   position: fixed;
   inset: 0;
