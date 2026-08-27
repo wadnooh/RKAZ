@@ -792,7 +792,7 @@ def _field_upload_search(conn, q: str) -> list[dict]:
     return unique[:18]
 
 
-def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: str, location_url: str = "") -> tuple[int, dict, bool]:
+def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: str, work_order: str = "", location_url: str = "") -> tuple[int, dict, bool]:
     ticket = db.resolve_ticket_ref(ticket_no, conn)
     notes_piece = f"رفع ميداني: {work_kind}"
     if location_url:
@@ -803,6 +803,8 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
             updates["station_no"] = station_no
         if location_url:
             updates["location"] = location_url
+        if work_order and not ticket.get("work_order"):
+            updates["work_order"] = work_order
         existing_notes = (ticket.get("notes") or "").strip()
         updates["notes"] = existing_notes if notes_piece in existing_notes else (f"{existing_notes}\n{notes_piece}".strip() if existing_notes else notes_piece)
         sets = ", ".join([f"{key}=?" for key in updates])
@@ -813,7 +815,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
         ticket.update(updates)
         ticket["ref_label"] = "رقم العطل"
         ticket["ref_kind"] = "ticket"
-        ticket["work_order"] = ticket.get("work_order") or ""
+        ticket["work_order"] = ticket.get("work_order") or work_order or ""
         return ticket["id"], ticket, False
     try:
         construction = conn.execute("SELECT * FROM construction_works WHERE work_no=? LIMIT 1", (ticket_no,)).fetchone()
@@ -841,7 +843,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
             "location": location_url or work["location"],
             "ref_label": "رقم المعاملة",
             "ref_kind": "reinforcement",
-            "work_order": "",
+            "work_order": work_order or "",
         }, False
     return 0, {
         "ticket_no": ticket_no,
@@ -849,7 +851,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
         "location": location_url,
         "ref_label": "رقم المعاملة",
         "ref_kind": "unknown",
-        "work_order": "",
+        "work_order": work_order or "",
     }, False
 
 
@@ -894,6 +896,7 @@ def field_upload():
                 ticket_no=ticket_no,
                 station_no=station_no,
                 work_kind=work_kind,
+                work_order=selected_work_order,
                 location_url=location_url,
             )
             if not ticket_id:
@@ -907,25 +910,35 @@ def field_upload():
             photo_data = {field: ((existing_photo[field] if existing_photo else "") or "") for field in FIELD_UPLOAD_FIELDS}
             saved_labels = []
             uploaded_count = 0
+            username = (session.get("username") or "").strip()
+            full_name = (session.get("full_name") or "").strip() or current_user_name()
+            ref_label = ticket.get("ref_label") or "رقم المعاملة"
+            effective_work_order = (selected_work_order or ticket.get("work_order") or "").strip()
             for field, field_files in uploaded_by_field.items():
                 refs = media_svc.photo_refs(photo_data.get(field))
                 for file in field_files:
-                    ref_label = ticket.get("ref_label") or "رقم المعاملة"
                     stamp_lines = [
                         f"{ref_label}: {canonical_ticket_no}",
-                        f"رقم أمر العمل: {selected_work_order or ticket.get('work_order')}" if (selected_ref_kind == "ticket" or ticket.get("ref_kind") == "ticket") and (selected_work_order or ticket.get("work_order")) else "",
-                        f"رقم المحطة: {station_no}",
-                        f"الاسم الكامل: {current_user_name()}",
-                        f"الإحداثيات: {latitude},{longitude}" if latitude and longitude else "",
                     ]
+                    if effective_work_order and ref_label != "رقم أمر العمل":
+                        stamp_lines.append(f"رقم أمر العمل: {effective_work_order}")
+                    stamp_lines.append(f"رقم المحطة: {station_no}")
+                    if username:
+                        stamp_lines.append(f"اسم المستخدم: {username}")
+                    if full_name:
+                        stamp_lines.append(f"الاسم الكامل: {full_name}")
+                    if latitude and longitude:
+                        stamp_lines.append(f"الإحداثيات: {latitude},{longitude}")
                     refs.append(media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no, stamp_lines=stamp_lines))
                     uploaded_count += 1
                 photo_data[field] = media_svc.encode_attachment_refs(refs)
                 saved_labels.append(FIELD_UPLOAD_LABELS.get(field, field))
+            user_label = f"{full_name} ({username})" if username and full_name and full_name != username else (full_name or username or current_user_name())
             notes = " / ".join(
                 x
                 for x in [
-                    f"رفع ميداني بواسطة {current_user_name()}",
+                    f"رفع ميداني بواسطة {user_label}",
+                    f"أمر العمل: {effective_work_order}" if effective_work_order else "",
                     f"تم تحديث: {', '.join(saved_labels)}" if saved_labels else "",
                     f"الإحداثيات: {location_url}" if location_url else "",
                     f"دقة الموقع: {accuracy} متر" if accuracy else "",

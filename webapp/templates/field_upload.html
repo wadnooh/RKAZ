@@ -49,7 +49,6 @@
     <input type="hidden" name="longitude" id="fieldLongitude" value="{{ form.get('longitude', '') }}">
     <input type="hidden" name="accuracy" id="fieldAccuracy" value="{{ form.get('accuracy', '') }}">
     <input type="hidden" name="ref_kind" id="fieldRefKind" value="{{ form.get('ref_kind', '') }}">
-    <input type="hidden" name="work_order" id="fieldWorkOrder" value="{{ form.get('work_order', '') }}">
     <div class="field-upload__search">
       <label class="field-upload__field">
         <span>{{ _('بحث عن معاملة موجودة') }}</span>
@@ -80,6 +79,10 @@
       <label class="field-upload__field">
         <span id="fieldRefLabel">{{ _('رقم العطل أو المعاملة') }}</span>
         <input name="ticket_no" value="{{ form.get('ticket_no', '') }}" required autocomplete="off" inputmode="text">
+      </label>
+      <label class="field-upload__field">
+        <span>{{ _('رقم أمر العمل') }}</span>
+        <input name="work_order" id="fieldWorkOrder" value="{{ form.get('work_order', '') }}" autocomplete="off" inputmode="text" placeholder="{{ _('رقم أمر العمل') }}">
       </label>
       <label class="field-upload__field">
         <span>{{ _('رقم المحطة') }}</span>
