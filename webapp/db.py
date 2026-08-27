@@ -4738,6 +4738,14 @@ def list_custody_lines(custody_id: int, conn=None) -> list[dict]:
         ).fetchall()
     )
     for row in rows:
+        try:
+            qty = float(row.get("qty") or 0)
+        except (TypeError, ValueError):
+            qty = 0.0
+        out_qty = qty if row.get("return_warehouse_tx_id") else 0.0
+        row["custody_in_qty"] = qty
+        row["custody_out_qty"] = out_qty
+        row["custody_balance_qty"] = max(qty - out_qty, 0.0)
         row["item_balance"] = warehouse_balance(row.get("item_no") or "") if row.get("item_no") else None
     if own:
         conn.close()
@@ -4757,6 +4765,8 @@ def custody_lines_summary(custody_ids: list[int] | None = None, conn=None) -> di
         SELECT custody_id,
                COUNT(*) AS line_count,
                COALESCE(SUM(qty), 0) AS qty_total,
+               COALESCE(SUM(CASE WHEN return_warehouse_tx_id IS NOT NULL THEN qty ELSE 0 END), 0) AS qty_out_total,
+               COALESCE(SUM(CASE WHEN return_warehouse_tx_id IS NULL THEN qty ELSE 0 END), 0) AS qty_balance_total,
                MIN(item_name) AS first_item
         FROM custody_lines
     """
@@ -4770,6 +4780,8 @@ def custody_lines_summary(custody_ids: list[int] | None = None, conn=None) -> di
         out[int(r["custody_id"])] = {
             "line_count": int(r["line_count"] or 0),
             "qty_total": float(r["qty_total"] or 0),
+            "qty_out_total": float(r["qty_out_total"] or 0),
+            "qty_balance_total": float(r["qty_balance_total"] or 0),
             "first_item": r.get("first_item") or "",
         }
     if own:

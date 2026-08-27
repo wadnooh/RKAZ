@@ -3,9 +3,18 @@
 {% set issued = (row.issued_voucher_no or '')|trim %}
 {% set returned = (row.return_voucher_no or '')|trim %}
 {% set items = warehouse_items if warehouse_items is defined else [] %}
-{% set state = namespace(unissued=0, issued_open=0) %}
+{% set state = namespace(unissued=0, issued_open=0, unissued_qty=0, in_qty=0, out_qty=0, balance_qty=0) %}
 {% for ln in lines %}
-  {% if not ln.warehouse_tx_id %}{% set state.unissued = state.unissued + 1 %}{% endif %}
+  {% set line_in = ln.custody_in_qty if ln.custody_in_qty is defined else (ln.qty or 0) %}
+  {% set line_out = ln.custody_out_qty if ln.custody_out_qty is defined else ((ln.qty or 0) if ln.return_warehouse_tx_id else 0) %}
+  {% set line_balance = ln.custody_balance_qty if ln.custody_balance_qty is defined else (line_in - line_out) %}
+  {% set state.in_qty = state.in_qty + line_in %}
+  {% set state.out_qty = state.out_qty + line_out %}
+  {% set state.balance_qty = state.balance_qty + line_balance %}
+  {% if not ln.warehouse_tx_id %}
+    {% set state.unissued = state.unissued + 1 %}
+    {% set state.unissued_qty = state.unissued_qty + (ln.qty or 0) %}
+  {% endif %}
   {% if ln.warehouse_tx_id and not ln.return_warehouse_tx_id %}{% set state.issued_open = state.issued_open + 1 %}{% endif %}
 {% endfor %}
 
@@ -43,6 +52,28 @@
   {% if mode == 'new' %}
   <p class="meta">{{ _('احفظ بيانات العهدة أولاً، ثم أضف البنود من صفحة التعديل.') }}</p>
   {% else %}
+  <div class="custody-ledger-grid">
+    <div class="custody-ledger-card">
+      <span>{{ _('وارد العهدة') }}</span>
+      <strong>{{ '%.2f'|format(state.in_qty) }}</strong>
+      <small>{{ _('إجمالي المواد المسجلة على العهدة') }}</small>
+    </div>
+    <div class="custody-ledger-card">
+      <span>{{ _('صادر / مرتجع') }}</span>
+      <strong>{{ '%.2f'|format(state.out_qty) }}</strong>
+      <small>{{ _('ما خرج من العهدة ورجع للمستودع') }}</small>
+    </div>
+    <div class="custody-ledger-card">
+      <span>{{ _('رصيد العهدة الحالي') }}</span>
+      <strong>{{ '%.2f'|format(state.balance_qty) }}</strong>
+      <small>{{ _('المتبقي على الموظف أو الجهة المستلمة') }}</small>
+    </div>
+    <div class="custody-ledger-card">
+      <span>{{ _('بانتظار المستودع') }}</span>
+      <strong>{{ '%.2f'|format(state.unissued_qty) }}</strong>
+      <small>{{ state.unissued }} {{ _('بند غير مصروف بعد') }}</small>
+    </div>
+  </div>
   <div class="table-wrap">
     <table class="table">
       <thead>
@@ -51,7 +82,9 @@
           <th>{{ _('رقم المادة') }}</th>
           <th>{{ _('اسم المادة') }}</th>
           <th>{{ _('الوحدة') }}</th>
-          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('وارد') }}</th>
+          <th>{{ _('صادر') }}</th>
+          <th>{{ _('رصيد العهدة') }}</th>
           <th>{{ _('الرصيد العام') }}</th>
           <th>{{ _('المستودع') }}</th>
           <th>{{ _('المصدر') }}</th>
@@ -59,15 +92,22 @@
         </tr>
       </thead>
       <tbody>
-        {% set ns = namespace(qty=0) %}
+        {% set ns = namespace(in_qty=0, out_qty=0, balance_qty=0) %}
         {% for ln in lines %}
-        {% set ns.qty = ns.qty + (ln.qty or 0) %}
+        {% set line_in = ln.custody_in_qty if ln.custody_in_qty is defined else (ln.qty or 0) %}
+        {% set line_out = ln.custody_out_qty if ln.custody_out_qty is defined else ((ln.qty or 0) if ln.return_warehouse_tx_id else 0) %}
+        {% set line_balance = ln.custody_balance_qty if ln.custody_balance_qty is defined else (line_in - line_out) %}
+        {% set ns.in_qty = ns.in_qty + line_in %}
+        {% set ns.out_qty = ns.out_qty + line_out %}
+        {% set ns.balance_qty = ns.balance_qty + line_balance %}
         <tr>
           <td>{{ loop.index }}</td>
           <td dir="ltr" style="text-align:left">{{ ln.item_no or '—' }}</td>
           <td>{{ ln.item_name or '—' }}</td>
           <td>{{ ln.unit or '—' }}</td>
-          <td>{{ ln.qty if ln.qty is not none else '—' }}</td>
+          <td>{{ '%.2f'|format(line_in) }}</td>
+          <td>{{ '%.2f'|format(line_out) }}</td>
+          <td style="font-weight:800;">{{ '%.2f'|format(line_balance) }}</td>
           <td>{{ ln.item_balance if ln.item_balance is not none else '—' }}</td>
           <td>
             {% if ln.return_warehouse_tx_id %}
@@ -91,14 +131,16 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="9" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
+        <tr><td colspan="11" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
       {% if lines %}
       <tfoot>
         <tr>
-          <td colspan="4" style="text-align:left;font-weight:800;">{{ _('إجمالي الكميات') }}</td>
-          <td style="font-weight:800;">{{ '%.2f'|format(ns.qty) }}</td>
+          <td colspan="4" style="text-align:left;font-weight:800;">{{ _('إجمالي حركة العهدة') }}</td>
+          <td style="font-weight:800;">{{ '%.2f'|format(ns.in_qty) }}</td>
+          <td style="font-weight:800;">{{ '%.2f'|format(ns.out_qty) }}</td>
+          <td style="font-weight:800;">{{ '%.2f'|format(ns.balance_qty) }}</td>
           <td></td>
           <td>{% if returned %}<span class="badge ok">{{ _('كلها مرتجعة') }}</span>{% elif issued %}<span class="badge ok">{{ _('كلها مصروفة') }}</span>{% endif %}</td>
           <td></td>
