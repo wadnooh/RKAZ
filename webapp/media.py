@@ -79,6 +79,58 @@ _CONTENT_TYPES = {
 }
 
 
+def _stamp_image(data: bytes, lines: list[str] | None, ext: str) -> bytes:
+    clean_lines = [str(line).strip() for line in (lines or []) if str(line or "").strip()]
+    if not clean_lines or ext not in {".jpg", ".png", ".webp"}:
+        return data
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except Exception:
+        return data
+    try:
+        image = Image.open(io.BytesIO(data)).convert("RGBA")
+        width, height = image.size
+        font_size = max(18, min(42, width // 34))
+        font_paths = [
+            "C:/Windows/Fonts/arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
+        ]
+        font = None
+        for path in font_paths:
+            try:
+                if Path(path).exists():
+                    font = ImageFont.truetype(path, font_size)
+                    break
+            except Exception:
+                continue
+        if font is None:
+            font = ImageFont.load_default()
+        draw = ImageDraw.Draw(image)
+        padding = max(14, width // 90)
+        line_gap = max(6, font_size // 3)
+        text_sizes = [draw.textbbox((0, 0), line, font=font) for line in clean_lines]
+        text_height = sum((box[3] - box[1]) for box in text_sizes) + line_gap * (len(clean_lines) - 1)
+        box_height = text_height + padding * 2
+        overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.rectangle((0, height - box_height, width, height), fill=(0, 0, 0, 150))
+        y = height - box_height + padding
+        for line, box in zip(clean_lines, text_sizes):
+            text_width = box[2] - box[0]
+            x = max(padding, width - text_width - padding)
+            overlay_draw.text((x, y), line, font=font, fill=(255, 255, 255, 245))
+            y += (box[3] - box[1]) + line_gap
+        image = Image.alpha_composite(image, overlay)
+        out = io.BytesIO()
+        fmt = "JPEG" if ext == ".jpg" else "PNG" if ext == ".png" else "WEBP"
+        save_image = image.convert("RGB") if fmt == "JPEG" else image
+        save_image.save(out, format=fmt, quality=88)
+        return out.getvalue()
+    except Exception:
+        return data
+
+
 def uploads_root() -> Path:
     root = db.DB_PATH.parent / "uploads"
     root.mkdir(parents=True, exist_ok=True)
@@ -269,6 +321,7 @@ def save_photo(
     *,
     field: str,
     ticket_no: str | None = None,
+    stamp_lines: list[str] | None = None,
 ) -> str:
     """يحفظ الصورة أو PDF ويعيد مسار عرض `/media/...` للتخزين في الحقل."""
     if field not in PHOTO_FIELDS:
@@ -276,6 +329,7 @@ def save_photo(
     data = validate_image(file)
     kind = _kind_from_bytes(data)
     ext = _ext_for(file, kind=kind)
+    data = _stamp_image(data, stamp_lines, ext)
     photo_rel = f"{_safe_ticket(ticket_no)}/{field}_{uuid.uuid4().hex}{ext}"
     rel = f"photos/{photo_rel}"
     content_type = _CONTENT_TYPES.get(ext, "application/octet-stream")

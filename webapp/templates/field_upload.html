@@ -34,9 +34,9 @@
   {% if saved_ticket %}
   <div class="field-upload__done">
     <strong>{{ _('تم الحفظ') }}</strong>
-    <span>{{ _('رقم العطل') }}: {{ saved_ticket.ticket_no }}</span>
-    <span>{{ _('كود ركاز') }}: {{ saved_ticket.rekaz_code or '—' }}</span>
-    <span>{{ _('عدد الصور') }}: {{ uploaded_count }}</span>
+    <span>{{ _('رقم العطل أو المعاملة') }}: {{ saved_ticket.ticket_no }}</span>
+    <span>{{ _('رقم المحطة') }}: {{ saved_ticket.station_no or '—' }}</span>
+    <span>{{ _('عدد المرفقات') }}: {{ uploaded_count }}</span>
   </div>
   <div class="actions field-upload__actions">
     <a class="btn primary" href="{{ url_for('field_upload') }}">{{ _('رفع مرفقات أخرى') }}</a>
@@ -48,9 +48,32 @@
     <input type="hidden" name="latitude" id="fieldLatitude" value="{{ form.get('latitude', '') }}">
     <input type="hidden" name="longitude" id="fieldLongitude" value="{{ form.get('longitude', '') }}">
     <input type="hidden" name="accuracy" id="fieldAccuracy" value="{{ form.get('accuracy', '') }}">
+    <div class="field-upload__search">
+      <label class="field-upload__field">
+        <span>{{ _('بحث عن معاملة موجودة') }}</span>
+        <div class="field-upload__search-row">
+          <input name="q" value="{{ form.get('q', '') }}" autocomplete="off" placeholder="{{ _('رقم العطل أو المعاملة أو المحطة') }}">
+          <button class="btn ghost" type="submit" formmethod="get" formnovalidate>{{ _('بحث') }}</button>
+        </div>
+      </label>
+      {% if search_results %}
+      <div class="field-upload__results">
+        {% for item in search_results %}
+        <button type="button"
+                data-pick-transaction
+                data-ref="{{ item.ref }}"
+                data-station="{{ item.station_no }}">
+          <strong>{{ item.ref }}</strong>
+          <span>{{ item.source }}{% if item.station_no %} · {{ _('محطة') }} {{ item.station_no }}{% endif %}</span>
+          <em>{{ item.title }}{% if item.status %} · {{ item.status }}{% endif %}</em>
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
     <div class="field-upload__grid">
       <label class="field-upload__field">
-        <span>{{ _('رقم العطل') }}</span>
+        <span>{{ _('رقم العطل أو المعاملة') }}</span>
         <input name="ticket_no" value="{{ form.get('ticket_no', '') }}" required autocomplete="off" inputmode="text">
       </label>
       <label class="field-upload__field">
@@ -65,18 +88,6 @@
           <option value="حفر" {% if wk == 'حفر' %}selected{% endif %}>{{ _('حفر') }}</option>
         </select>
       </label>
-      <label class="field-upload__field">
-        <span>{{ _('نوع الرقم') }}</span>
-        {% set ik = form.get('identifier_kind', 'rekaz') %}
-        <select name="identifier_kind" id="fieldIdentifierKind">
-          <option value="rekaz" {% if ik == 'rekaz' %}selected{% endif %}>{{ _('رقم ركاز') }}</option>
-          <option value="capital" {% if ik == 'capital' %}selected{% endif %}>{{ _('رقم رسملة') }}</option>
-        </select>
-      </label>
-      <label class="field-upload__field field-upload__field--wide">
-        <span id="fieldIdentifierLabel">{{ _('رقم ركاز أو رسملة') }}</span>
-        <input name="identifier_value" value="{{ form.get('identifier_value', '') }}" required autocomplete="off" inputmode="text" dir="ltr">
-      </label>
     </div>
 
     <div class="field-upload__photos" id="fieldPhotoPanel">
@@ -86,6 +97,7 @@
           <input type="file" name="file_{{ key }}" accept="image/*" capture="environment" multiple data-label="{{ label }}">
           <span class="field-upload__slot-icon">+</span>
           <span class="field-upload__slot-label">{{ label }}</span>
+          <small>{{ _('يمكن اختيار أكثر من صورة') }}</small>
         </label>
         {% endfor %}
       </div>
@@ -130,14 +142,13 @@
   var panel = document.getElementById("fieldPhotoPanel");
   var files = Array.prototype.slice.call(document.querySelectorAll('.field-upload__slot input[type="file"]'));
   var status = document.getElementById("fieldPhotoStatus");
-  var kind = document.getElementById("fieldIdentifierKind");
-  var label = document.getElementById("fieldIdentifierLabel");
   var latitude = document.getElementById("fieldLatitude");
   var longitude = document.getElementById("fieldLongitude");
   var accuracy = document.getElementById("fieldAccuracy");
   var locationButton = document.getElementById("fieldLocationButton");
   var locationStatus = document.getElementById("fieldLocationStatus");
   var savingStatus = document.getElementById("fieldSavingStatus");
+  var picks = Array.prototype.slice.call(document.querySelectorAll("[data-pick-transaction]"));
   var submitting = false;
 
   function showIdleWarning() {
@@ -200,14 +211,9 @@
   if (idleExtendBtn) idleExtendBtn.addEventListener("click", function () { extendSession(false); });
   scheduleIdleTimers();
 
-  function updateLabel() {
-    if (!label || !kind) return;
-    label.textContent = kind.value === "capital" ? {{ _('رقم الرسملة')|tojson }} : {{ _('رقم ركاز')|tojson }};
-  }
-
   function requiredReady() {
     if (!form) return false;
-    return ["ticket_no", "station_no", "identifier_value"].every(function (name) {
+    return ["ticket_no", "station_no"].every(function (name) {
       var input = form.querySelector('[name="' + name + '"]');
       return input && String(input.value || "").trim();
     });
@@ -268,7 +274,16 @@
     }
   }
 
-  if (kind) kind.addEventListener("change", updateLabel);
+  picks.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var refInput = form ? form.querySelector('[name="ticket_no"]') : null;
+      var stationInput = form ? form.querySelector('[name="station_no"]') : null;
+      if (refInput) refInput.value = btn.getAttribute("data-ref") || "";
+      if (stationInput) stationInput.value = btn.getAttribute("data-station") || "";
+      picks.forEach(function (item) { item.classList.toggle("is-active", item === btn); });
+      maybeOpenPicker();
+    });
+  });
   if (form) {
     form.querySelectorAll("input, select").forEach(function (input) {
       input.addEventListener("input", maybeOpenPicker);
@@ -288,7 +303,6 @@
     input.addEventListener("change", function () { renderFile(input); });
   });
   if (locationButton) locationButton.addEventListener("click", captureLocation);
-  updateLabel();
   maybeOpenPicker();
   captureLocation();
 })();

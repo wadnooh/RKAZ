@@ -1325,6 +1325,49 @@ td.col-item-name[title]:hover {
   border-radius: 14px;
   padding: 14px;
 }
+.field-upload__search {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e8dfd1;
+  border-radius: 12px;
+  background: #fffdf8;
+}
+.field-upload__search-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+}
+.field-upload__results {
+  display: grid;
+  gap: 8px;
+}
+.field-upload__results button {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #fff;
+  padding: 10px;
+  display: grid;
+  gap: 3px;
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+.field-upload__results button.is-active,
+.field-upload__results button:focus {
+  border-color: var(--accent);
+  outline: 2px solid rgba(138, 115, 73, 0.18);
+}
+.field-upload__results strong {
+  color: #123f69;
+  font-weight: 900;
+}
+.field-upload__results span,
+.field-upload__results em {
+  color: var(--muted);
+  font-style: normal;
+  font-size: 0.88rem;
+}
 .field-upload__grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1410,6 +1453,13 @@ td.col-item-name[title]:hover {
 .field-upload__slot-label {
   position: relative;
   z-index: 1;
+}
+.field-upload__slot small {
+  position: relative;
+  z-index: 1;
+  color: var(--muted);
+  font-weight: 800;
+  font-size: 0.78rem;
 }
 .field-upload__slot-preview {
   position: absolute;
@@ -1993,6 +2043,9 @@ a.quality-metric.active {
     flex-direction: column;
   }
   .field-upload__grid {
+    grid-template-columns: 1fr;
+  }
+  .field-upload__search-row {
     grid-template-columns: 1fr;
   }
   .field-upload-shell {

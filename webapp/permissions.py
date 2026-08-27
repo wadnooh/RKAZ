@@ -171,6 +171,7 @@ PERM_LABELS = {
     'delete.email_code': 'تأكيد الحذف بكود البريد',
     'delete.static_password': 'تأكيد الحذف بكلمة مرور ثابتة',
     'export': 'تصدير Excel',
+    'field_upload.attach': 'رفع مرفقات ميدانية على معاملات موجودة',
     'modules.delete': 'حذف السجلات',
     'modules.read': 'عرض سجلات الأقسام',
     'modules.write': 'إضافة/تعديل السجلات',
@@ -280,6 +281,7 @@ _PERMISSION_PAGE_OVERRIDES = {
     "delete.email_code": "إعدادات الحذف",
     "delete.static_password": "إعدادات الحذف",
     "export": "التصدير العام",
+    "field_upload.attach": "الرفع الميداني",
     "modules.delete": "السجلات العامة",
     "modules.read": "السجلات العامة",
     "modules.write": "السجلات العامة",
@@ -1128,10 +1130,8 @@ _ROLE_PERMS["مراقبي المواقع"] = {
     "button.logout",
     "button.module.photos.add",
     "button.module.photos.edit",
-    "button.ticket.new",
-    "modules.write",
+    "field_upload.attach",
     "section.ops",
-    "tickets.write",
 }
 _ROLE_PERMS["محاسب"] = {
     "button.financial.amounts",
@@ -1415,9 +1415,14 @@ def required_perm_for_request() -> str | None:
 
     if ep == "media_serve":
         # صور العمليات: يحتاج قراءة وحدات أو قراءة أعطال + قسم العمليات
-        if has_perm("modules.read") or (has_perm("tickets.read") and has_perm("section.ops")):
+        if has_perm("modules.read") or has_perm("field_upload.attach") or (has_perm("tickets.read") and has_perm("section.ops")):
             return None
         return "modules.read"
+
+    if ep == "field_upload":
+        if not has_perm("section.ops"):
+            return "section.ops"
+        return None if has_perm("field_upload.attach") else "field_upload.attach"
 
     # الأعطال
     ticket_map = {

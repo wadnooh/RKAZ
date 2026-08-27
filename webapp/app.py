@@ -700,24 +700,69 @@ FIELD_UPLOAD_LABELS = {
 }
 
 
-def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_kind: str, identifier_value: str, work_kind: str, location_url: str = "") -> tuple[int, dict, bool]:
+def _field_upload_search(conn, q: str) -> list[dict]:
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+    like = f"%{q}%"
+    results: list[dict] = []
+    for row in db.rows_to_dicts(conn.execute(
+        """
+        SELECT id, ticket_no, station_no, district, fault_type, status, 'ticket' AS source
+        FROM tickets
+        WHERE ticket_no LIKE ? OR station_no LIKE ? OR district LIKE ? OR fault_type LIKE ? OR work_order LIKE ?
+        ORDER BY id DESC LIMIT 12
+        """,
+        (like, like, like, like, like),
+    ).fetchall()):
+        results.append({
+            "ref": row.get("ticket_no") or "",
+            "station_no": row.get("station_no") or "",
+            "title": row.get("fault_type") or row.get("district") or "عطل",
+            "status": row.get("status") or "",
+            "source": "الأعطال",
+        })
+    try:
+        rows = db.rows_to_dicts(conn.execute(
+            """
+            SELECT id, work_no, station_no, department, work_type, status, 'reinforcement' AS source
+            FROM reinforcement_works
+            WHERE work_no LIKE ? OR station_no LIKE ? OR department LIKE ? OR work_type LIKE ?
+            ORDER BY id DESC LIMIT 12
+            """,
+            (like, like, like, like),
+        ).fetchall())
+        for row in rows:
+            results.append({
+                "ref": row.get("work_no") or "",
+                "station_no": row.get("station_no") or "",
+                "title": row.get("department") or row.get("work_type") or "معاملة",
+                "status": row.get("status") or "",
+                "source": "التعزيز / الصيانة",
+            })
+    except Exception:
+        pass
+    seen = set()
+    unique = []
+    for item in results:
+        key = (item["ref"], item["station_no"])
+        if item["ref"] and key not in seen:
+            seen.add(key)
+            unique.append(item)
+    return unique[:18]
+
+
+def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: str, location_url: str = "") -> tuple[int, dict, bool]:
     ticket = db.resolve_ticket_ref(ticket_no, conn)
-    today = datetime.now().strftime("%Y-%m-%d")
     notes_piece = f"رفع ميداني: {work_kind}"
-    if identifier_kind == "capital":
-        notes_piece += f" / رقم الرسملة: {identifier_value}"
-    elif identifier_value:
-        notes_piece += f" / رقم ركاز: {identifier_value}"
     if location_url:
         notes_piece += f" / الإحداثيات: {location_url}"
     if ticket:
-        updates = {"station_no": station_no, "photographed": "نعم"}
+        updates = {"photographed": "نعم"}
+        if station_no:
+            updates["station_no"] = station_no
         if location_url:
             updates["location"] = location_url
-        if identifier_kind == "rekaz" and identifier_value:
-            updates["rekaz_code"] = identifier_value
-        if identifier_kind == "capital" and identifier_value:
-            updates["work_order"] = identifier_value
         existing_notes = (ticket.get("notes") or "").strip()
         updates["notes"] = existing_notes if notes_piece in existing_notes else (f"{existing_notes}\n{notes_piece}".strip() if existing_notes else notes_piece)
         sets = ", ".join([f"{key}=?" for key in updates])
@@ -727,39 +772,37 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, identifier_ki
         )
         ticket.update(updates)
         return ticket["id"], ticket, False
-
-    rekaz_code = identifier_value if identifier_kind == "rekaz" else ""
-    work_order = identifier_value if identifier_kind == "capital" else ""
-    if not rekaz_code:
-        rekaz_code = db.next_series_code("er", conn)
-    cur = conn.execute(
-        """
-        INSERT INTO tickets(ticket_no, rekaz_code, receive_date, station_no, location, status, photographed, work_order, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (ticket_no, rekaz_code, today, station_no, location_url, "تم الإسناد", "نعم", work_order, notes_piece),
-    )
-    ticket = {
-        "id": cur.lastrowid,
+    try:
+        work = conn.execute("SELECT * FROM reinforcement_works WHERE work_no=? LIMIT 1", (ticket_no,)).fetchone()
+    except Exception:
+        work = None
+    if work:
+        return int(work["id"]), {
+            "id": work["id"],
+            "ticket_no": work["work_no"],
+            "station_no": station_no or work["station_no"],
+            "location": location_url or work["location"],
+        }, False
+    return 0, {
         "ticket_no": ticket_no,
-        "rekaz_code": rekaz_code,
         "station_no": station_no,
         "location": location_url,
-        "work_order": work_order,
-    }
-    return cur.lastrowid, ticket, True
+    }, False
 
 
 @app.route("/field-upload", methods=["GET", "POST"])
 @login_required
 def field_upload():
-    if not permissions.can("section.ops", "tickets.write"):
+    if not permissions.can("section.ops", "field_upload.attach"):
         return permissions.deny_redirect(_t("هذه الشاشة مخصصة لموظفي رفع الصور فقط."))
+    conn = db.connect()
+    try:
+        search_results = _field_upload_search(conn, request.values.get("q") or request.form.get("ticket_no") or "")
+    finally:
+        conn.close()
     if request.method == "POST":
         ticket_no = (request.form.get("ticket_no") or "").strip()
         station_no = (request.form.get("station_no") or "").strip()
-        identifier_kind = (request.form.get("identifier_kind") or "rekaz").strip()
-        identifier_value = (request.form.get("identifier_value") or "").strip()
         work_kind = (request.form.get("work_kind") or "").strip()
         latitude = (request.form.get("latitude") or "").strip()
         longitude = (request.form.get("longitude") or "").strip()
@@ -773,23 +816,24 @@ def field_upload():
             field_files = [file for file in field_files if file and (file.filename or "").strip()]
             if field_files:
                 uploaded_by_field[field] = field_files
-        if not ticket_no or not station_no or not identifier_value or identifier_kind not in {"rekaz", "capital"}:
-            flash(_t("أكمل رقم العطل ورقم المحطة ورقم ركاز/الرسملة."), "danger")
-            return render_template("field_upload.html", form=request.form)
+        if not ticket_no or not station_no:
+            flash(_t("أكمل رقم العطل أو المعاملة ورقم المحطة."), "danger")
+            return render_template("field_upload.html", form=request.form, search_results=search_results)
         if not uploaded_by_field:
             flash(_t("اختر صورة واحدة على الأقل من الكاميرا أو الهاتف."), "danger")
-            return render_template("field_upload.html", form=request.form)
+            return render_template("field_upload.html", form=request.form, search_results=search_results)
         conn = db.connect()
         try:
             ticket_id, ticket, created = _field_upload_ticket(
                 conn,
                 ticket_no=ticket_no,
                 station_no=station_no,
-                identifier_kind=identifier_kind,
-                identifier_value=identifier_value,
                 work_kind=work_kind,
                 location_url=location_url,
             )
+            if not ticket_id:
+                flash(_t("لا يمكن إنشاء معاملة جديدة من الرفع الميداني. اختر معاملة موجودة من البحث ثم ارفع المرفقات."), "danger")
+                return render_template("field_upload.html", form=request.form, search_results=search_results)
             canonical_ticket_no = (ticket.get("ticket_no") or ticket_no).strip()
             existing_photo = conn.execute(
                 "SELECT * FROM photos WHERE ticket_no=? ORDER BY id DESC LIMIT 1",
@@ -801,7 +845,13 @@ def field_upload():
             for field, field_files in uploaded_by_field.items():
                 refs = media_svc.photo_refs(photo_data.get(field))
                 for file in field_files:
-                    refs.append(media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no))
+                    stamp_lines = [
+                        f"رقم المعاملة: {canonical_ticket_no}",
+                        f"رقم المحطة: {station_no}",
+                        f"المستخدم: {current_user_name()}",
+                        f"الإحداثيات: {latitude},{longitude}" if latitude and longitude else "",
+                    ]
+                    refs.append(media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no, stamp_lines=stamp_lines))
                     uploaded_count += 1
                 photo_data[field] = media_svc.encode_attachment_refs(refs)
                 saved_labels.append(FIELD_UPLOAD_LABELS.get(field, field))
@@ -854,7 +904,7 @@ def field_upload():
         except Exception as exc:
             conn.rollback()
             flash(_t("تعذر حفظ الرفع: {exc}", exc=exc), "danger")
-            return render_template("field_upload.html", form=request.form)
+            return render_template("field_upload.html", form=request.form, search_results=search_results)
         finally:
             conn.close()
         db.log_audit(
@@ -862,12 +912,12 @@ def field_upload():
             "رفع ميداني",
             "صور الأعطال",
             ticket_id,
-            f"{ticket.get('ticket_no') or ticket_no} / {ticket.get('rekaz_code') or ''} / صور {uploaded_count}",
+            f"{ticket.get('ticket_no') or ticket_no} / محطة {station_no} / مرفقات {uploaded_count}",
         )
         _after_data_change()
-        flash(_t("تم رفع الصور وربطها بالعطل. يمكن لموظف المكتب إكمال باقي التفاصيل."), "ok")
+        flash(_t("تم رفع المرفقات وربطها بالمعاملة الموجودة."), "ok")
         return render_template("field_upload.html", form={}, saved_ticket=ticket, created=created, uploaded_count=uploaded_count)
-    return render_template("field_upload.html", form={})
+    return render_template("field_upload.html", form=request.args, search_results=search_results)
 
 
 # ---------- Main hubs ----------
