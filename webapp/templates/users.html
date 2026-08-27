@@ -250,12 +250,12 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
     });
     list.innerHTML = "";
     buckets.forEach(function(bucket, index) {
-      var details = document.createElement("details");
-      details.className = "permission-page-section";
-      details.open = index < 3;
-      details.setAttribute("data-permission-page-section", "1");
+      var section = document.createElement("section");
+      section.className = "permission-page-section";
+      section.setAttribute("data-permission-page-section", "1");
 
-      var summary = document.createElement("summary");
+      var summary = document.createElement("div");
+      summary.className = "permission-page-head";
       var title = document.createElement("strong");
       title.textContent = bucket.title || {{ _('عام')|tojson }};
       var count = document.createElement("span");
@@ -267,12 +267,13 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
       var body = document.createElement("div");
       body.className = "permission-page-body";
       bucket.rows.forEach(function(row) { body.appendChild(row); });
-      details.appendChild(summary);
-      details.appendChild(body);
-      list.appendChild(details);
+      section.appendChild(summary);
+      section.appendChild(body);
+      list.appendChild(section);
     });
     list.setAttribute("data-grouped", "1");
     renderPageTabs();
+    applyFilters();
   }
 
   function renderPageTabs() {
@@ -322,9 +323,8 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
     Array.prototype.forEach.call(panel.querySelectorAll("[data-permission-page-section]"), function(section) {
       var visible = section.querySelectorAll("[data-permission-row]:not([hidden])").length;
       section.hidden = visible === 0;
-      var badge = section.querySelector("summary .badge");
+      var badge = section.querySelector(".permission-page-head .badge");
       if (badge) badge.textContent = visible + " " + {{ _('صلاحية')|tojson }};
-      if (activePage !== "all" || query || activeFilter !== "all") section.open = visible > 0;
     });
   }
 
