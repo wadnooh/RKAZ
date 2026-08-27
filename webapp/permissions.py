@@ -1452,7 +1452,7 @@ def required_perm_for_request() -> str | None:
     if ep in {"export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf"}:
         return None if has_perm("export") else "export"
 
-    if ep == "global_search":
+    if ep in {"global_search", "transaction_trace"}:
         return None if has_perm("search") else "search"
 
     if ep == "api_jump_destinations":
@@ -1491,6 +1491,7 @@ def required_perm_for_request() -> str | None:
         "export_primary_teams_pdf": "export",
         "warehouse_specialty_pdf": "export",
         "global_search": "search",
+        "transaction_trace": "search",
     }
 
     if ep in endpoint_to_perm_map:

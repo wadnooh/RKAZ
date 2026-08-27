@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('تتبع المعاملة') }}</h2>
+      <div class="meta">{{ _('اكتب رقم العطل أو أمر العمل أو رقم السند لمعرفة رحلة المعاملة وآخر مكان وصلت له.') }}</div>
+    </div>
+    <form method="get" class="actions">
+      <input type="search" name="q" value="{{ q or '' }}" placeholder="{{ _('رقم المعاملة / العطل / السند') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:260px;">
+      <button class="btn primary" type="submit">{{ _('تتبع') }}</button>
+    </form>
+  </div>
+
+  {% if q %}
+  <div class="summary-cards" style="margin-top:12px;">
+    <div class="stat-card">
+      <div>{{ _('إجمالي الروابط') }}</div>
+      <strong>{{ trace.summary.count or 0 }}</strong>
+      <span class="meta">{{ _('كل ما وجد للنفس الرقم') }}</span>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('الأقسام') }}</div>
+      <strong>{{ trace.summary.sections or 0 }}</strong>
+      <span class="meta">{{ _('مسار المعاملة') }}</span>
+    </div>
+    <div class="stat-card">
+      <div>{{ _('ملاحظات تحتاج معالجة') }}</div>
+      <strong>{{ trace.summary.issues or 0 }}</strong>
+      <span class="meta">{{ _('روابط ناقصة أو غير مكتملة') }}</span>
+    </div>
+  </div>
+  {% endif %}
+</div>
+
+{% if q and trace.current %}
+<div class="card" style="margin-top:14px;">
+  <h3 class="section-title" style="font-size:1.05rem;margin:0 0 8px;">{{ _('آخر مكان ظاهر للمعاملة') }}</h3>
+  <div class="meta-grid">
+    <div class="meta-item"><div class="k">{{ _('القسم') }}</div><div class="v">{{ trace.current.section }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('المرحلة') }}</div><div class="v">{{ trace.current.title }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(trace.current.status) }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('التاريخ') }}</div><div class="v">{{ trace.current.date or '—' }}</div></div>
+  </div>
+  {% if trace.current.url %}<div class="actions" style="margin-top:10px;"><a class="btn primary" href="{{ trace.current.url }}">{{ _('فتح آخر مكان') }}</a></div>{% endif %}
+</div>
+{% endif %}
+
+{% if q and trace.issues %}
+<div class="card" style="margin-top:14px;">
+  <h3 class="section-title" style="font-size:1.05rem;margin:0 0 8px;">{{ _('مراجعة ومعالجة') }}</h3>
+  {% for issue in trace.issues %}
+  <p class="meta" style="margin:6px 0;">{{ issue }}</p>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card" style="margin-top:14px;">
+  <h3 class="section-title" style="font-size:1.05rem;margin:0 0 12px;">{{ _('مسار المعاملة') }}</h3>
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr><th>{{ _('الخطوة') }}</th><th>{{ _('المرحلة') }}</th><th>{{ _('القسم') }}</th><th>{{ _('الحالة') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('التفاصيل') }}</th><th></th></tr>
+      </thead>
+      <tbody>
+        {% for item in trace['items'] %}
+        <tr>
+          <td><span class="badge">{{ item.step }}</span></td>
+          <td><strong>{{ item.title }}</strong></td>
+          <td>{{ item.section }}</td>
+          <td>{{ tv(item.status) }}</td>
+          <td>{{ item.date or '—' }}</td>
+          <td style="white-space:normal;max-width:340px">{{ item.detail or '—' }}</td>
+          <td>{% if item.url %}<a class="btn ghost" href="{{ item.url }}">{{ _('فتح') }}</a>{% endif %}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{% if q %}{{ _('لا توجد نتائج لهذا الرقم.') }}{% else %}{{ _('أدخل رقم المعاملة لبدء التتبع.') }}{% endif %}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

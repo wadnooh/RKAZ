@@ -5732,6 +5732,7 @@ def global_search():
                     "label": t["ticket_no"],
                     "detail": f"{t['district'] or ''} — {t['fault_type'] or ''} — {t['status'] or ''}",
                     "url": url_for("ticket_view", ticket_id=t["id"]),
+                    "trace_url": url_for("transaction_trace", q=t["ticket_no"]),
                 }
             )
         for name, mod in MODULES.items():
@@ -5755,10 +5756,202 @@ def global_search():
                         "label": detail[:80],
                         "detail": detail,
                         "url": url_for("module_edit", name=name, row_id=r["id"]),
+                        "trace_url": url_for("transaction_trace", q=str(r[cols[0]] or q)),
                     }
                 )
         conn.close()
     return render_template("search.html", q=q, results=results)
+
+
+def _trace_cols(conn, table):
+    try:
+        return {r["name"] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+    except Exception:
+        return set()
+
+
+def _trace_rows(conn, table, match_cols, q, order_col="id", limit=80):
+    cols = _trace_cols(conn, table)
+    usable = [c for c in match_cols if c in cols]
+    if not usable:
+        return []
+    where = " OR ".join([f"trim(coalesce({c},''))=?" for c in usable])
+    order = order_col if order_col in cols else "id"
+    try:
+        return db.rows_to_dicts(
+            conn.execute(
+                f"SELECT * FROM {table} WHERE {where} ORDER BY {order} DESC LIMIT ?",
+                tuple([q] * len(usable)) + (limit,),
+            ).fetchall()
+        )
+    except Exception:
+        return []
+
+
+def _trace_add(items, *, step, title, section, status="", date="", detail="", url="", severity="ok"):
+    items.append(
+        {
+            "step": step,
+            "title": title,
+            "section": section,
+            "status": status or "—",
+            "date": date or "",
+            "detail": detail or "",
+            "url": url or "",
+            "severity": severity,
+        }
+    )
+
+
+def _transaction_trace_payload(q):
+    q = (q or "").strip()
+    payload = {"q": q, "items": [], "issues": [], "summary": {}, "current": None}
+    if not q:
+        return payload
+    conn = db.connect()
+    items = payload["items"]
+
+    tickets = _trace_rows(conn, "tickets", ("ticket_no", "rekaz_code", "work_order"), q, "id")
+    for r in tickets:
+        _trace_add(
+            items,
+            step="1",
+            title="تم إدخال العطل",
+            section="العمليات والصيانة",
+            status=r.get("status"),
+            date=r.get("receive_date"),
+            detail=f"{r.get('ticket_no') or ''} / {r.get('fault_type') or ''} / {r.get('district') or ''}",
+            url=url_for("ticket_view", ticket_id=r["id"]),
+        )
+
+    primary = _trace_rows(conn, "primary_team_orders", ("work_order", "extract_no"), q, "id")
+    for r in primary:
+        _trace_add(
+            items,
+            step="1",
+            title="أمر عمل فرق أولية",
+            section="العمليات والصيانة",
+            status=r.get("extract_no") or "مدخل",
+            date=r.get("order_date") or r.get("created_at"),
+            detail=f"{r.get('work_order') or ''} / {r.get('amount') or 0} ر.س",
+            url=url_for("ops_primary_teams", q=r.get("work_order") or q),
+        )
+
+    reinforcement = _trace_rows(conn, "reinforcement_works", ("work_no", "ticket_no", "station_no"), q, "id")
+    for r in reinforcement:
+        _trace_add(
+            items,
+            step="1",
+            title="معاملة تعزيز / اسكيمات",
+            section=r.get("department") or "التعزيز",
+            status=r.get("status"),
+            date=r.get("work_date"),
+            detail=f"{r.get('work_no') or ''} / {r.get('work_type') or ''} / {r.get('value') or 0} ر.س",
+            url=url_for("reinforcement_work_view", row_id=r["id"]),
+        )
+
+    for table, title, section, url_builder in (
+        ("construction_works", "معاملة إنشاءات", "الإنشاءات", lambda r: url_for("module_edit", name="construction_works", row_id=r["id"])),
+        ("projects", "مشروع", "المشاريع", lambda r: url_for("module_edit", name="projects", row_id=r["id"])),
+    ):
+        rows = _trace_rows(conn, table, ("work_no", "project_code", "ticket_no"), q, "id")
+        for r in rows:
+            code = r.get("work_no") or r.get("project_code") or r.get("ticket_no") or q
+            _trace_add(
+                items,
+                step="1",
+                title=title,
+                section=section,
+                status=r.get("status"),
+                date=r.get("work_date") or r.get("start_date"),
+                detail=f"{code} / {r.get('work_type') or r.get('project_name') or ''} / {r.get('value') or 0} ر.س",
+                url=url_builder(r),
+            )
+
+    linked_sets = (
+        ("quantities", "بنود وكميات", "الكميات", ("ticket_no",), "id"),
+        ("photos", "صور ومرفقات", "الصور", ("ticket_no",), "id"),
+        ("metering", "اعتماد/تمتير", "التمتير", ("ticket_no",), "id"),
+        ("invoices", "مستخلصات وفوترة", "المتابعات المالية", ("ticket_no", "work_order", "invoice_id", "invoice_no"), "id"),
+        ("warehouse_tx", "حركة مستودع", "المستودعات", ("ticket_no", "rekaz_code", "work_order", "source_ref", "voucher_no"), "id"),
+        ("new_coordinations", "تنسيق جديد", "التنسيقات", ("ticket_no", "project_code", "construction_work_no", "coord_no", "license_no"), "id"),
+        ("issued_licenses", "متابعة تصريح", "التصاريح", ("ticket_no", "project_code", "construction_work_no", "work_order", "license_no", "rtc_no"), "id"),
+        ("quality_clearances", "إخلاء", "الجودة", ("ticket_no", "rekaz_code", "clearance_no"), "id"),
+        ("safety_permits", "تصريح سلامة", "السلامة", ("ticket_no", "work_order", "permit_no"), "id"),
+        ("external_purchases", "مشتريات خارجية", "المشتريات", ("purchase_no", "ticket_no", "received_voucher_no"), "id"),
+        ("custody", "عهدة", "العهد", ("custody_no", "issued_voucher_no", "return_voucher_no"), "id"),
+    )
+    for table, title, section, cols, order in linked_sets:
+        for r in _trace_rows(conn, table, cols, q, order):
+            date = (
+                r.get("tx_date")
+                or r.get("request_date")
+                or r.get("issue_date")
+                or r.get("permit_date")
+                or r.get("purchase_date")
+                or r.get("custody_date")
+                or r.get("submit_date")
+                or r.get("invoice_date")
+            )
+            status = r.get("status") or r.get("tx_type") or r.get("sap_status") or r.get("workflow_status") or "مرتبط"
+            if table == "warehouse_tx":
+                if not (r.get("source_ref") or r.get("ticket_no") or r.get("work_order")):
+                    payload["issues"].append(f"سند مستودع {r.get('voucher_no') or r.get('id')} بدون مرجع واضح للمعاملة.")
+                url = url_for("warehouse_voucher_detail", voucher_no=r["voucher_no"]) if r.get("voucher_no") else url_for("module_edit", name=table, row_id=r["id"])
+                detail = f"{r.get('voucher_no') or ''} / {r.get('item_no') or ''} {r.get('item_name') or ''} / {r.get('qty') or 0}"
+            else:
+                url = url_for("module_edit", name=table, row_id=r["id"])
+                detail = " / ".join(str(x or "") for x in (r.get("ticket_no"), r.get("work_order"), r.get("license_no"), r.get("notes")) if x)[:180]
+            _trace_add(items, step="2", title=title, section=section, status=status, date=date, detail=detail, url=url)
+
+    audits = []
+    try:
+        audits = db.rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM audit_log
+                WHERE details LIKE ? OR entity_id LIKE ?
+                ORDER BY id DESC LIMIT 20
+                """,
+                (f"%{q}%", f"%{q}%"),
+            ).fetchall()
+        )
+    except Exception:
+        audits = []
+    for r in audits:
+        _trace_add(
+            items,
+            step="3",
+            title=f"{r.get('action') or 'نشاط'} - {r.get('entity') or ''}",
+            section="سجل النشاط",
+            status=r.get("user_name") or "مسجل",
+            date=r.get("created_at"),
+            detail=r.get("details") or "",
+            url=url_for("audit_log_page", q=q),
+            severity="audit",
+        )
+    conn.close()
+
+    if not any(i["step"] == "1" for i in items):
+        payload["issues"].append("لم يتم العثور على سجل إدخال رئيسي لهذا الرقم؛ قد يكون الرقم تابعاً لسند أو مرحلة لاحقة فقط.")
+    if items and not any(i["section"] in ("المستودعات", "التنسيقات", "التصاريح", "الجودة", "السلامة", "المتابعات المالية") for i in items):
+        payload["issues"].append("المعاملة موجودة في البداية فقط ولم تظهر لها مراحل لاحقة بعد.")
+    payload["summary"] = {
+        "count": len(items),
+        "issues": len(payload["issues"]),
+        "sections": len({i["section"] for i in items}),
+    }
+    practical_items = [i for i in items if i.get("section") != "سجل النشاط"]
+    payload["current"] = (practical_items[-1] if practical_items else (items[-1] if items else None))
+    return payload
+
+
+@app.route("/trace")
+@login_required
+def transaction_trace():
+    q = (request.args.get("q") or "").strip()
+    trace = _transaction_trace_payload(q)
+    return render_template("transaction_trace.html", q=q, trace=trace)
 
 
 # ---------- Jump ----------

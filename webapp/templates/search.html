@@ -9,6 +9,7 @@
     <form method="get" class="actions">
       <input type="search" name="q" value="{{ q }}" placeholder="{{ _('رقم عطل / مادة / عقد...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
       <button class="btn primary" type="submit">{{ _('بحث') }}</button>
+      {% if q %}<a class="btn ghost" href="{{ url_for('transaction_trace', q=q) }}">{{ _('تتبع المعاملة') }}</a>{% endif %}
     </form>
   </div>
 
@@ -24,7 +25,10 @@
           <td>{{ r.tab }}</td>
           <td>{{ r.label }}</td>
           <td style="white-space:normal;max-width:280px">{{ r.detail }}</td>
-          <td><a class="btn ghost" href="{{ r.url }}">{{ _('فتح') }}</a></td>
+          <td>
+            <a class="btn ghost" href="{{ r.url }}">{{ _('فتح') }}</a>
+            {% if r.trace_url %}<a class="btn ghost" href="{{ r.trace_url }}">{{ _('تتبع') }}</a>{% endif %}
+          </td>
         </tr>
         {% else %}
         <tr><td colspan="5">{% if q %}{{ _('لا توجد نتائج') }}{% else %}{{ _('أدخل كلمة للبحث') }}{% endif %}</td></tr>
