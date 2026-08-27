@@ -347,6 +347,20 @@ def permission_catalog(lang: str = "ar") -> list[dict[str, str]]:
         )
     return rows
 
+
+def permission_pages_catalog(lang: str = "ar") -> list[dict[str, object]]:
+    pages: list[dict[str, object]] = []
+    page_index: dict[str, dict[str, object]] = {}
+    for perm in permission_catalog(lang):
+        title = str(perm["page"])
+        page = page_index.get(title)
+        if page is None:
+            page = {"title": title, "permissions": []}
+            page_index[title] = page
+            pages.append(page)
+        page["permissions"].append(perm)
+    return pages
+
 # وحدات مرتبطة بالعطل: أي إضافة/تعديل/حذف لها يتطلب tickets.write (بالإضافة إلى modules.*)
 TICKET_LINKED_WRITE_MODULES = frozenset({"quantities", "photos", "metering"})
 

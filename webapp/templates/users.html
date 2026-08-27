@@ -138,54 +138,79 @@
               <span>{{ _('إخفاء أو تعطيل الصلاحية لهذا المستخدم حتى لو كان admin.') }}</span>
             </div>
 
-            <div class="permission-page-tabs" data-permission-page-tabs></div>
-
-            <div class="permission-list">
-              {% for perm in perm_catalog %}
-                {% set key = perm.key %}
-                {% set label = perm.label %}
-                {% set group = perm.group %}
-                {% set page = perm.page %}
-                {% set eff = u.perm_overrides.get(key, '') %}
-                {% set in_role = key in u.role_perm_set %}
-              <div class="permission-row"
-                   data-permission-row
-                   data-effect="{{ eff or 'role' }}"
-                   data-group="{{ group }}"
-                   data-page="{{ page }}"
-                   data-search="{{ (key ~ ' ' ~ label ~ ' ' ~ group ~ ' ' ~ page)|lower }}">
-                <div class="permission-main">
-                  <div class="permission-group">{{ group }}</div>
-                  <div class="permission-title">{{ _(label) }}</div>
-                  <code>{{ key }}</code>
-                  <div class="permission-source">
-                    {% if eff == 'allow' %}
-                    <span class="badge ok">{{ _('ممنوحة لهذا المستخدم') }}</span>
-                    {% elif eff == 'deny' %}
-                    <span class="badge danger">{{ _('ممنوعة لهذا المستخدم') }}</span>
-                    {% elif in_role %}
-                    <span class="badge info">{{ _('ممنوحة من الدور') }}</span>
-                    {% else %}
-                    <span class="badge warn">{{ _('غير موجودة في الدور') }}</span>
-                    {% endif %}
-                  </div>
-                </div>
-                <div class="permission-choice" role="radiogroup" aria-label="{{ _(label) }}">
-                  <label class="choice inherit">
-                    <input type="radio" name="perm__{{ key }}" value="" {% if not eff %}checked{% endif %}>
-                    <span>{{ _('حسب الدور') }}</span>
-                  </label>
-                  <label class="choice allow">
-                    <input type="radio" name="perm__{{ key }}" value="allow" {% if eff == 'allow' %}checked{% endif %}>
-                    <span>{{ _('منح') }}</span>
-                  </label>
-                  <label class="choice deny">
-                    <input type="radio" name="perm__{{ key }}" value="deny" {% if eff == 'deny' %}checked{% endif %}>
-                    <span>{{ _('منع') }}</span>
-                  </label>
-                </div>
+            <div class="permission-workspace">
+              <div class="permission-page-tabs" data-permission-page-tabs>
+                <button type="button" class="is-active" data-permission-page="all">
+                  <span>{{ _('كل الصفحات') }}</span>
+                  <strong>{{ perm_catalog|length }}</strong>
+                </button>
+                {% for page in perm_pages %}
+                <button type="button" data-permission-page="{{ page.title }}">
+                  <span>{{ page.title }}</span>
+                  <strong>{{ page.permissions|length }}</strong>
+                </button>
+                {% endfor %}
               </div>
-              {% endfor %}
+
+              <div class="permission-list">
+                {% for page in perm_pages %}
+                <section class="permission-page-section"
+                         data-permission-page-section
+                         data-page-section="{{ page.title }}">
+                  <div class="permission-page-head">
+                    <strong>{{ page.title }}</strong>
+                    <span class="badge info">{{ page.permissions|length }} {{ _('صلاحية') }}</span>
+                  </div>
+                  <div class="permission-page-body">
+                    {% for perm in page.permissions %}
+                      {% set key = perm.key %}
+                      {% set label = perm.label %}
+                      {% set group = perm.group %}
+                      {% set page_title = perm.page %}
+                      {% set eff = u.perm_overrides.get(key, '') %}
+                      {% set in_role = key in u.role_perm_set %}
+                    <div class="permission-row"
+                         data-permission-row
+                         data-effect="{{ eff or 'role' }}"
+                         data-group="{{ group }}"
+                         data-page="{{ page_title }}"
+                         data-search="{{ (key ~ ' ' ~ label ~ ' ' ~ group ~ ' ' ~ page_title)|lower }}">
+                      <div class="permission-main">
+                        <div class="permission-group">{{ group }}</div>
+                        <div class="permission-title">{{ _(label) }}</div>
+                        <code>{{ key }}</code>
+                        <div class="permission-source">
+                          {% if eff == 'allow' %}
+                          <span class="badge ok">{{ _('ممنوحة لهذا المستخدم') }}</span>
+                          {% elif eff == 'deny' %}
+                          <span class="badge danger">{{ _('ممنوعة لهذا المستخدم') }}</span>
+                          {% elif in_role %}
+                          <span class="badge info">{{ _('ممنوحة من الدور') }}</span>
+                          {% else %}
+                          <span class="badge warn">{{ _('غير موجودة في الدور') }}</span>
+                          {% endif %}
+                        </div>
+                      </div>
+                      <div class="permission-choice" role="radiogroup" aria-label="{{ _(label) }}">
+                        <label class="choice inherit">
+                          <input type="radio" name="perm__{{ key }}" value="" {% if not eff %}checked{% endif %}>
+                          <span>{{ _('حسب الدور') }}</span>
+                        </label>
+                        <label class="choice allow">
+                          <input type="radio" name="perm__{{ key }}" value="allow" {% if eff == 'allow' %}checked{% endif %}>
+                          <span>{{ _('منح') }}</span>
+                        </label>
+                        <label class="choice deny">
+                          <input type="radio" name="perm__{{ key }}" value="deny" {% if eff == 'deny' %}checked{% endif %}>
+                          <span>{{ _('منع') }}</span>
+                        </label>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </section>
+                {% endfor %}
+              </div>
             </div>
 
             <div class="permission-savebar">
@@ -226,74 +251,11 @@
 document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
   var search = panel.querySelector("[data-permission-search]");
   var filters = panel.querySelectorAll("[data-permission-filter]");
-  var list = panel.querySelector(".permission-list");
   var pageTabs = panel.querySelector("[data-permission-page-tabs]");
   var rows = panel.querySelectorAll("[data-permission-row]");
   var activeFilter = "all";
   var activePage = "all";
-  var buckets = [];
-
-  function organizeByPage() {
-    if (!list || list.getAttribute("data-grouped") === "1") return;
-    buckets = [];
-    var byPage = {};
-    Array.prototype.forEach.call(rows, function(row) {
-      var page = row.getAttribute("data-page") || row.getAttribute("data-group") || "";
-      if (!byPage[page]) {
-        byPage[page] = {
-          title: page,
-          rows: []
-        };
-        buckets.push(byPage[page]);
-      }
-      byPage[page].rows.push(row);
-    });
-    list.innerHTML = "";
-    buckets.forEach(function(bucket, index) {
-      var section = document.createElement("section");
-      section.className = "permission-page-section";
-      section.setAttribute("data-permission-page-section", "1");
-
-      var summary = document.createElement("div");
-      summary.className = "permission-page-head";
-      var title = document.createElement("strong");
-      title.textContent = bucket.title || {{ _('عام')|tojson }};
-      var count = document.createElement("span");
-      count.className = "badge info";
-      count.textContent = bucket.rows.length + " " + {{ _('صلاحية')|tojson }};
-      summary.appendChild(title);
-      summary.appendChild(count);
-
-      var body = document.createElement("div");
-      body.className = "permission-page-body";
-      bucket.rows.forEach(function(row) { body.appendChild(row); });
-      section.appendChild(summary);
-      section.appendChild(body);
-      list.appendChild(section);
-    });
-    list.setAttribute("data-grouped", "1");
-    renderPageTabs();
-    applyFilters();
-  }
-
-  function renderPageTabs() {
-    if (!pageTabs) return;
-    pageTabs.innerHTML = "";
-    var allBtn = document.createElement("button");
-    allBtn.type = "button";
-    allBtn.className = "is-active";
-    allBtn.setAttribute("data-permission-page", "all");
-    allBtn.textContent = {{ _('كل الصفحات')|tojson }};
-    pageTabs.appendChild(allBtn);
-
-    buckets.forEach(function(bucket) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.setAttribute("data-permission-page", bucket.title || "");
-      btn.innerHTML = "<span>" + (bucket.title || {{ _('عام')|tojson }}) + "</span><strong>" + bucket.rows.length + "</strong>";
-      pageTabs.appendChild(btn);
-    });
-
+  if (pageTabs) {
     pageTabs.addEventListener("click", function(ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest("[data-permission-page]") : null;
       if (!btn) return;
@@ -304,8 +266,6 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
       applyFilters();
     });
   }
-
-  organizeByPage();
 
   function applyFilters() {
     var query = (search && search.value ? search.value : "").trim().toLowerCase();
@@ -327,6 +287,8 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
       if (badge) badge.textContent = visible + " " + {{ _('صلاحية')|tojson }};
     });
   }
+
+  applyFilters();
 
   if (search) search.addEventListener("input", applyFilters);
   filters.forEach(function(btn) {

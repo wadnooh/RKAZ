@@ -2205,31 +2205,43 @@ a.quality-metric.active {
   border-radius: 8px;
   padding: 10px;
 }
+.permission-workspace {
+  display: grid;
+  grid-template-columns: minmax(190px, 240px) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
 .permission-page-tabs {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
-  gap: 8px;
-  overflow: visible;
-  padding: 2px 2px 10px;
-  border-bottom: 1px solid #edf0f3;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  max-height: min(68vh, 720px);
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 8px;
+  border: 1px solid #e8dfd1;
+  border-radius: 8px;
+  background: #fbfaf7;
+  position: sticky;
+  top: 74px;
 }
 .permission-page-tabs button {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
   gap: 8px;
-  min-height: 38px;
+  min-height: 36px;
   width: 100%;
   white-space: normal;
   border: 1px solid var(--border);
   border-radius: 8px;
   background: #fff;
   color: var(--ink);
-  padding: 8px 12px;
+  padding: 8px 10px;
   font: inherit;
   font-weight: 800;
   cursor: pointer;
-  text-align: center;
+  text-align: start;
   line-height: 1.25;
 }
 .permission-page-tabs button strong {
@@ -2255,15 +2267,15 @@ a.quality-metric.active {
   display: grid;
   grid-template-columns: 1fr;
   gap: 12px;
-  max-height: min(72vh, 760px);
+  max-height: min(68vh, 720px);
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 2px 4px 8px;
+  padding: 0 2px 8px;
 }
 .permission-page-section {
   border: 1px solid #e7dfd1;
   border-radius: 8px;
-  background: #fffdf8;
+  background: #fff;
   overflow: hidden;
 }
 .permission-page-section[hidden] {
@@ -2274,8 +2286,9 @@ a.quality-metric.active {
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 11px 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid #eee6d8;
+  background: #fffdf8;
 }
 .permission-page-head strong {
   color: var(--ink);
@@ -2285,7 +2298,7 @@ a.quality-metric.active {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
-  padding: 10px;
+  padding: 12px;
   background: #fff;
 }
 .permission-row {
@@ -2399,6 +2412,14 @@ a.quality-metric.active {
   }
   .permission-list {
     grid-template-columns: 1fr;
+  }
+  .permission-workspace {
+    grid-template-columns: 1fr;
+  }
+  .permission-page-tabs {
+    position: static;
+    grid-template-columns: repeat(auto-fit, minmax(135px, 1fr));
+    max-height: none;
   }
   .permission-page-body {
     grid-template-columns: 1fr;

@@ -5716,6 +5716,7 @@ def users_list():
         rows=rows,
         perm_labels=permissions.PERM_LABELS,
         perm_catalog=permissions.permission_catalog(session.get("lang") or "ar"),
+        perm_pages=permissions.permission_pages_catalog(session.get("lang") or "ar"),
     )
 
 
