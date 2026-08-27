@@ -34,7 +34,7 @@
   {% if saved_ticket %}
   <div class="field-upload__done">
     <strong>{{ _('تم الحفظ') }}</strong>
-    <span>{{ _('رقم العطل أو المعاملة') }}: {{ saved_ticket.ticket_no }}</span>
+    <span>{{ _(saved_ticket.ref_label or 'رقم العطل أو المعاملة') }}: {{ saved_ticket.ticket_no }}</span>
     <span>{{ _('رقم المحطة') }}: {{ saved_ticket.station_no or '—' }}</span>
     <span>{{ _('عدد المرفقات') }}: {{ uploaded_count }}</span>
   </div>
@@ -62,8 +62,9 @@
         <button type="button"
                 data-pick-transaction
                 data-ref="{{ item.ref }}"
-                data-station="{{ item.station_no }}">
-          <strong>{{ item.ref }}</strong>
+                data-station="{{ item.station_no }}"
+                data-ref-label="{{ item.ref_label }}">
+          <strong>{{ _(item.ref_label) }}: {{ item.ref }}</strong>
           <span>{{ item.source }}{% if item.rekaz_code %} · {{ _('رقم ركاز') }} {{ item.rekaz_code }}{% endif %}{% if item.station_no %} · {{ _('محطة') }} {{ item.station_no }}{% endif %}</span>
           <em>{{ item.title }}{% if item.status %} · {{ item.status }}{% endif %}</em>
         </button>
@@ -73,7 +74,7 @@
     </div>
     <div class="field-upload__grid">
       <label class="field-upload__field">
-        <span>{{ _('رقم العطل أو المعاملة') }}</span>
+        <span id="fieldRefLabel">{{ _('رقم العطل أو المعاملة') }}</span>
         <input name="ticket_no" value="{{ form.get('ticket_no', '') }}" required autocomplete="off" inputmode="text">
       </label>
       <label class="field-upload__field">
@@ -149,6 +150,7 @@
   var locationButton = document.getElementById("fieldLocationButton");
   var locationStatus = document.getElementById("fieldLocationStatus");
   var savingStatus = document.getElementById("fieldSavingStatus");
+  var refLabel = document.getElementById("fieldRefLabel");
   var picks = Array.prototype.slice.call(document.querySelectorAll("[data-pick-transaction]"));
   var submitting = false;
 
@@ -311,6 +313,7 @@
       var stationInput = form ? form.querySelector('[name="station_no"]') : null;
       if (refInput) refInput.value = btn.getAttribute("data-ref") || "";
       if (stationInput) stationInput.value = btn.getAttribute("data-station") || "";
+      if (refLabel) refLabel.textContent = btn.getAttribute("data-ref-label") || {{ _('رقم العطل أو المعاملة')|tojson }};
       picks.forEach(function (item) { item.classList.toggle("is-active", item === btn); });
       maybeOpenPicker();
     });

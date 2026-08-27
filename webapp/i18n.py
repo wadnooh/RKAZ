@@ -1221,6 +1221,8 @@ VALUE_EN = {
     'رفع مرفقات ميدانية على معاملات موجودة': 'Upload field attachments to existing transactions',
     'بحث عن معاملة موجودة': 'Search for an existing transaction',
     'رقم العطل أو المعاملة': 'Ticket or transaction number',
+    'رقم أمر العمل': 'Work order number',
+    'رقم المعاملة': 'Transaction number',
     'رقم العطل أو المعاملة أو المحطة': 'Ticket, transaction, or station number',
     'رقم العطل أو المعاملة أو ركاز أو المحطة': 'Ticket, transaction, Rekaz, or station number',
     'عدد المرفقات': 'Attachments count',

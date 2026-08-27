@@ -717,6 +717,8 @@ def _field_upload_search(conn, q: str) -> list[dict]:
     ).fetchall()):
         results.append({
             "ref": row.get("ticket_no") or "",
+            "ref_label": "رقم العطل",
+            "ref_kind": "ticket",
             "rekaz_code": row.get("rekaz_code") or "",
             "station_no": row.get("station_no") or "",
             "title": row.get("fault_type") or row.get("district") or "عطل",
@@ -736,11 +738,36 @@ def _field_upload_search(conn, q: str) -> list[dict]:
         for row in rows:
             results.append({
                 "ref": row.get("work_no") or "",
+                "ref_label": "رقم المعاملة",
+                "ref_kind": "reinforcement",
                 "rekaz_code": "",
                 "station_no": row.get("station_no") or "",
                 "title": row.get("department") or row.get("work_type") or "معاملة",
                 "status": row.get("status") or "",
                 "source": "التعزيز / الصيانة",
+            })
+    except Exception:
+        pass
+    try:
+        rows = db.rows_to_dicts(conn.execute(
+            """
+            SELECT id, work_no, station_no, site, work_type, status, 'construction' AS source
+            FROM construction_works
+            WHERE work_no LIKE ? OR station_no LIKE ? OR site LIKE ? OR work_type LIKE ? OR ticket_no LIKE ?
+            ORDER BY id DESC LIMIT 12
+            """,
+            (like, like, like, like, like),
+        ).fetchall())
+        for row in rows:
+            results.append({
+                "ref": row.get("work_no") or "",
+                "ref_label": "رقم أمر العمل",
+                "ref_kind": "construction",
+                "rekaz_code": "",
+                "station_no": row.get("station_no") or "",
+                "title": row.get("work_type") or row.get("site") or "إنشاءات",
+                "status": row.get("status") or "",
+                "source": "الإنشاءات",
             })
     except Exception:
         pass
@@ -773,7 +800,22 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
             [updates[key] for key in updates] + [ticket["id"]],
         )
         ticket.update(updates)
+        ticket["ref_label"] = "رقم العطل"
+        ticket["ref_kind"] = "ticket"
         return ticket["id"], ticket, False
+    try:
+        construction = conn.execute("SELECT * FROM construction_works WHERE work_no=? LIMIT 1", (ticket_no,)).fetchone()
+    except Exception:
+        construction = None
+    if construction:
+        return int(construction["id"]), {
+            "id": construction["id"],
+            "ticket_no": construction["work_no"],
+            "station_no": station_no or construction["station_no"],
+            "location": location_url or construction["site"],
+            "ref_label": "رقم أمر العمل",
+            "ref_kind": "construction",
+        }, False
     try:
         work = conn.execute("SELECT * FROM reinforcement_works WHERE work_no=? LIMIT 1", (ticket_no,)).fetchone()
     except Exception:
@@ -784,11 +826,15 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
             "ticket_no": work["work_no"],
             "station_no": station_no or work["station_no"],
             "location": location_url or work["location"],
+            "ref_label": "رقم المعاملة",
+            "ref_kind": "reinforcement",
         }, False
     return 0, {
         "ticket_no": ticket_no,
         "station_no": station_no,
         "location": location_url,
+        "ref_label": "رقم المعاملة",
+        "ref_kind": "unknown",
     }, False
 
 
@@ -847,8 +893,9 @@ def field_upload():
             for field, field_files in uploaded_by_field.items():
                 refs = media_svc.photo_refs(photo_data.get(field))
                 for file in field_files:
+                    ref_label = ticket.get("ref_label") or "رقم المعاملة"
                     stamp_lines = [
-                        f"رقم المعاملة: {canonical_ticket_no}",
+                        f"{ref_label}: {canonical_ticket_no}",
                         f"رقم المحطة: {station_no}",
                         f"المستخدم: {current_user_name()}",
                         f"الإحداثيات: {latitude},{longitude}" if latitude and longitude else "",
