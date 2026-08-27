@@ -1461,6 +1461,25 @@ td.col-item-name[title]:hover {
   font-weight: 800;
   font-size: 0.78rem;
 }
+.field-upload__slot-count {
+  position: absolute;
+  top: 8px;
+  inset-inline-start: 8px;
+  z-index: 1;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 7px;
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: #123f69;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+.field-upload__slot-count[hidden] {
+  display: none;
+}
 .field-upload__slot-preview {
   position: absolute;
   inset: 0;

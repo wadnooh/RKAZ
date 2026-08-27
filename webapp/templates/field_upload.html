@@ -98,6 +98,7 @@
           <span class="field-upload__slot-icon">+</span>
           <span class="field-upload__slot-label">{{ label }}</span>
           <small>{{ _('يمكن اختيار أكثر من صورة') }}</small>
+          <b class="field-upload__slot-count" data-file-count>0</b>
         </label>
         {% endfor %}
       </div>
@@ -224,10 +225,40 @@
     panel.classList.toggle("is-ready", requiredReady());
   }
 
+  function fileSignature(file) {
+    return [file.name || "", file.size || 0, file.lastModified || 0].join(":");
+  }
+
+  function appendFiles(input) {
+    if (!input || !input.files || !input.files.length || typeof DataTransfer === "undefined") {
+      return input && input.files ? input.files.length : 0;
+    }
+    var stored = input._storedFiles || [];
+    var seen = {};
+    stored.forEach(function (file) { seen[fileSignature(file)] = true; });
+    Array.prototype.forEach.call(input.files, function (file) {
+      var sig = fileSignature(file);
+      if (!seen[sig]) {
+        stored.push(file);
+        seen[sig] = true;
+      }
+    });
+    var transfer = new DataTransfer();
+    stored.forEach(function (file) { transfer.items.add(file); });
+    input._storedFiles = stored;
+    input.files = transfer.files;
+    return stored.length;
+  }
+
   function renderFile(input) {
     var count = input && input.files ? input.files.length : 0;
     var slot = input ? input.closest(".field-upload__slot") : null;
     if (slot) slot.classList.toggle("has-file", count > 0);
+    var counter = slot ? slot.querySelector("[data-file-count]") : null;
+    if (counter) {
+      counter.textContent = count;
+      counter.hidden = count === 0;
+    }
     var selectedCount = files.reduce(function (total, item) {
       return total + (item.files ? item.files.length : 0);
     }, 0);
@@ -300,7 +331,11 @@
     });
   }
   files.forEach(function (input) {
-    input.addEventListener("change", function () { renderFile(input); });
+    input.addEventListener("change", function () {
+      appendFiles(input);
+      renderFile(input);
+    });
+    renderFile(input);
   });
   if (locationButton) locationButton.addEventListener("click", captureLocation);
   maybeOpenPicker();
