@@ -155,11 +155,55 @@
                 {% else %}
                   {% set group = _('عام') %}
                 {% endif %}
+                {% if key.startswith('button.module.') %}
+                  {% set page = _(label).split(_(' في '))[-1] %}
+                {% elif key.startswith('tab.module.') %}
+                  {% set page = _(label).replace(_('تبويب/قائمة '), '') %}
+                {% elif key.startswith('section.') %}
+                  {% set page = _('الأقسام الرئيسية') %}
+                {% elif key.startswith('tab.ops.') %}
+                  {% set page = _('العمليات والصيانة') %}
+                {% elif key.startswith('tab.warehouse.') %}
+                  {% set page = _('المستودعات') %}
+                {% elif key.startswith('tab.') %}
+                  {% set page = _('التبويبات الرئيسية') %}
+                {% elif key.startswith('button.users.') or key.startswith('users.') %}
+                  {% set page = _('المستخدمون') %}
+                {% elif key.startswith('button.ticket.') or key.startswith('tickets.') %}
+                  {% set page = _('الأعطال') %}
+                {% elif key.startswith('delete.') %}
+                  {% set page = _('تأكيد الحذف') %}
+                {% elif key.startswith('button.quality.') %}
+                  {% set page = _('الجودة والتنسيقات') %}
+                {% elif key.startswith('button.tabs.') or key.startswith('app.tabs.') or key.startswith('ops.tabs.') %}
+                  {% set page = _('إدارة التبويبات') %}
+                {% elif key.startswith('button.warehouse.') %}
+                  {% set page = _('المستودعات') %}
+                {% elif key.startswith('cashflow.') %}
+                  {% set page = _('التدفق النقدي') %}
+                {% elif key.startswith('reports.') %}
+                  {% set page = _('التقارير') %}
+                {% elif key.startswith('notifications.') %}
+                  {% set page = _('الإشعارات') %}
+                {% elif key.startswith('audit.') %}
+                  {% set page = _('سجل النشاط') %}
+                {% elif key.startswith('api.') %}
+                  {% set page = _('API') %}
+                {% elif key.startswith('modules.') %}
+                  {% set page = _('السجلات العامة') %}
+                {% elif key.startswith('teams.') %}
+                  {% set page = _('فرق المهام') %}
+                {% elif key.startswith('search') or key.startswith('button.search') %}
+                  {% set page = _('البحث') %}
+                {% else %}
+                  {% set page = group %}
+                {% endif %}
               <div class="permission-row"
                    data-permission-row
                    data-effect="{{ eff or 'role' }}"
                    data-group="{{ group }}"
-                   data-search="{{ (key ~ ' ' ~ label ~ ' ' ~ group)|lower }}">
+                   data-page="{{ page }}"
+                   data-search="{{ (key ~ ' ' ~ label ~ ' ' ~ group ~ ' ' ~ page)|lower }}">
                 <div class="permission-main">
                   <div class="permission-group">{{ group }}</div>
                   <div class="permission-title">{{ _(label) }}</div>
@@ -232,12 +276,56 @@
 document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
   var search = panel.querySelector("[data-permission-search]");
   var filters = panel.querySelectorAll("[data-permission-filter]");
+  var list = panel.querySelector(".permission-list");
   var rows = panel.querySelectorAll("[data-permission-row]");
   var activeFilter = "all";
 
+  function organizeByPage() {
+    if (!list || list.getAttribute("data-grouped") === "1") return;
+    var buckets = [];
+    var byPage = {};
+    Array.prototype.forEach.call(rows, function(row) {
+      var page = row.getAttribute("data-page") || row.getAttribute("data-group") || "";
+      if (!byPage[page]) {
+        byPage[page] = {
+          title: page,
+          rows: []
+        };
+        buckets.push(byPage[page]);
+      }
+      byPage[page].rows.push(row);
+    });
+    list.innerHTML = "";
+    buckets.forEach(function(bucket, index) {
+      var details = document.createElement("details");
+      details.className = "permission-page-section";
+      details.open = index < 3;
+      details.setAttribute("data-permission-page-section", "1");
+
+      var summary = document.createElement("summary");
+      var title = document.createElement("strong");
+      title.textContent = bucket.title || {{ _('عام')|tojson }};
+      var count = document.createElement("span");
+      count.className = "badge info";
+      count.textContent = bucket.rows.length + " " + {{ _('صلاحية')|tojson }};
+      summary.appendChild(title);
+      summary.appendChild(count);
+
+      var body = document.createElement("div");
+      body.className = "permission-page-body";
+      bucket.rows.forEach(function(row) { body.appendChild(row); });
+      details.appendChild(summary);
+      details.appendChild(body);
+      list.appendChild(details);
+    });
+    list.setAttribute("data-grouped", "1");
+  }
+
+  organizeByPage();
+
   function applyFilters() {
     var query = (search && search.value ? search.value : "").trim().toLowerCase();
-    rows.forEach(function(row) {
+    Array.prototype.forEach.call(rows, function(row) {
       var effect = row.getAttribute("data-effect") || "role";
       var haystack = row.getAttribute("data-search") || "";
       var matchesText = !query || haystack.indexOf(query) !== -1;
@@ -245,6 +333,13 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
         || (activeFilter === "custom" && effect !== "role")
         || effect === activeFilter;
       row.hidden = !(matchesText && matchesFilter);
+    });
+    Array.prototype.forEach.call(panel.querySelectorAll("[data-permission-page-section]"), function(section) {
+      var visible = section.querySelectorAll("[data-permission-row]:not([hidden])").length;
+      section.hidden = visible === 0;
+      var badge = section.querySelector("summary .badge");
+      if (badge) badge.textContent = visible + " " + {{ _('صلاحية')|tojson }};
+      if (query || activeFilter !== "all") section.open = visible > 0;
     });
   }
 
