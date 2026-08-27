@@ -4150,7 +4150,10 @@ def _load_module_list_rows(name, module):
             r["unit"] = db.normalize_warehouse_unit(r.get("unit"))
     if name == "warehouse_items":
         for r in rows:
-            r["balance"] = db.warehouse_balance(r.get("item_no"))
+            detail = db.warehouse_balance_detail(r.get("item_no"))
+            r["balance"] = detail.get("available_balance")
+            r["actual_balance"] = detail.get("balance")
+            r["reserved"] = detail.get("reserved")
     if name == "warehouse_tx" and item_filter:
         rows = [r for r in rows if (r.get("item_no") or "").lower() == item_filter.lower()]
     if name == "warehouse_tx" and source_filter in ("ops", "constructions", "projects", "external", "custody", "contractors", "reinforcement"):
@@ -5408,9 +5411,14 @@ def warehouse_balances():
             hint,
         ),
         _summary_card(
-            _t("المتبقي"),
-            f"{sum(float(r.get('balance') or 0) for r in items):.2f}",
-            _t("الوارد − المنصرف"),
+            _t("محجوز للعهد"),
+            f"{sum(float(r.get('reserved') or 0) for r in items):.2f}",
+            _t("بنود عهد لم تُصرف من المستودع بعد"),
+        ),
+        _summary_card(
+            _t("رصيد ركاز المتاح"),
+            f"{sum(float(r.get('available_balance') if r.get('available_balance') is not None else r.get('balance') or 0) for r in items):.2f}",
+            _t("الرصيد − حجوزات العهد"),
         ),
     ]
     return render_template(

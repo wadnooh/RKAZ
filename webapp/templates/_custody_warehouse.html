@@ -71,7 +71,7 @@
     <div class="custody-ledger-card">
       <span>{{ _('بانتظار المستودع') }}</span>
       <strong>{{ '%.2f'|format(state.unissued_qty) }}</strong>
-      <small>{{ state.unissued }} {{ _('بند غير مصروف بعد') }}</small>
+      <small>{{ state.unissued }} {{ _('بند محجوز من رصيد ركاز ولم يصرف بعد') }}</small>
     </div>
   </div>
   <div class="table-wrap">
@@ -86,6 +86,8 @@
           <th>{{ _('صادر') }}</th>
           <th>{{ _('رصيد العهدة') }}</th>
           <th>{{ _('الرصيد العام') }}</th>
+          <th>{{ _('محجوز للعهد') }}</th>
+          <th>{{ _('رصيد ركاز المتاح') }}</th>
           <th>{{ _('المستودع') }}</th>
           <th>{{ _('المصدر') }}</th>
           {% if can('modules.write') %}<th></th>{% endif %}
@@ -109,6 +111,8 @@
           <td>{{ '%.2f'|format(line_out) }}</td>
           <td style="font-weight:800;">{{ '%.2f'|format(line_balance) }}</td>
           <td>{{ ln.item_balance if ln.item_balance is not none else '—' }}</td>
+          <td>{% if ln.source_type == 'external' %}—{% else %}{{ '%.2f'|format(ln.item_reserved_qty or 0) }}{% endif %}</td>
+          <td>{% if ln.item_available_balance is not none %}<span class="badge ok">{{ '%.2f'|format(ln.item_available_balance) }}</span>{% else %}—{% endif %}</td>
           <td>
             {% if ln.return_warehouse_tx_id %}
             <span class="badge ok">{{ _('مرتجع') }}</span>
@@ -131,7 +135,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="11" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
+        <tr><td colspan="13" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
       {% if lines %}
@@ -141,6 +145,8 @@
           <td style="font-weight:800;">{{ '%.2f'|format(ns.in_qty) }}</td>
           <td style="font-weight:800;">{{ '%.2f'|format(ns.out_qty) }}</td>
           <td style="font-weight:800;">{{ '%.2f'|format(ns.balance_qty) }}</td>
+          <td></td>
+          <td></td>
           <td></td>
           <td>{% if returned %}<span class="badge ok">{{ _('كلها مرتجعة') }}</span>{% elif issued %}<span class="badge ok">{{ _('كلها مصروفة') }}</span>{% endif %}</td>
           <td></td>

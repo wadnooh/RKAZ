@@ -112,6 +112,8 @@
           <th>{{ _('وارد') }}</th>
           <th>{{ _('منصرف') }}</th>
           <th>{{ _('الرصيد') }}</th>
+          <th>{{ _('محجوز للعهد') }}</th>
+          <th>{{ _('رصيد ركاز المتاح') }}</th>
           <th>{{ _('حد أدنى') }}</th>
           <th>{{ _('الحركات') }}</th>
         </tr>
@@ -131,6 +133,15 @@
             <span class="badge ok">{{ r.balance }}</span>
             {% endif %}
           </td>
+          <td><span class="badge warn">{{ r.reserved or 0 }}</span></td>
+          <td>
+            {% set available = r.available_balance if r.available_balance is not none else r.balance %}
+            {% if (available or 0) <= (r.min_qty or 0) %}
+            <span class="badge danger">{{ available }}</span>
+            {% else %}
+            <span class="badge ok">{{ available }}</span>
+            {% endif %}
+          </td>
           <td>{{ r.min_qty or 0 }}</td>
           <td class="actions">
             <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', item_no=r.item_no) }}">{{ _('تتبع') }} ({{ r.tx_count or 0 }})</a>
@@ -142,7 +153,7 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="8" class="meta">{{ _('لا توجد أصناف مرتبطة بالحركات بعد.') }}</td></tr>
+        <tr><td colspan="10" class="meta">{{ _('لا توجد أصناف مرتبطة بالحركات بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>

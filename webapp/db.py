@@ -4184,6 +4184,48 @@ def warehouse_balance(item_no):
     return warehouse_balance_detail(item_no)["balance"]
 
 
+def custody_pending_reservations(item_no: str | None = None, *, exclude_custody_id: int | None = None, conn=None):
+    """كميات عهد محجوزة من المستودع ولم تُصرف بسند بعد."""
+    own = conn is None
+    conn = conn or connect()
+    params: list = []
+    where = """
+        warehouse_tx_id IS NULL
+        AND lower(coalesce(source_type, 'warehouse')) != 'external'
+    """
+    if item_no:
+        where += " AND lower(item_no)=lower(?)"
+        params.append(item_no)
+    if exclude_custody_id:
+        where += " AND custody_id != ?"
+        params.append(exclude_custody_id)
+    try:
+        if item_no:
+            row = conn.execute(
+                f"SELECT COALESCE(SUM(qty), 0) AS reserved FROM custody_lines WHERE {where}",
+                params,
+            ).fetchone()
+            result = float((row["reserved"] if row else 0) or 0)
+        else:
+            result = {
+                r["item_no"]: float(r["reserved"] or 0)
+                for r in conn.execute(
+                    f"""
+                    SELECT item_no, COALESCE(SUM(qty), 0) AS reserved
+                    FROM custody_lines
+                    WHERE {where}
+                    GROUP BY item_no
+                    """,
+                    params,
+                ).fetchall()
+            }
+    except sqlite3.OperationalError:
+        result = 0.0 if item_no else {}
+    if own:
+        conn.close()
+    return result
+
+
 def warehouse_balance_detail(item_no):
     conn = connect()
     rows = conn.execute(
@@ -4197,6 +4239,7 @@ def warehouse_balance_detail(item_no):
         """,
         (item_no or "",),
     ).fetchall()
+    reserved = float(custody_pending_reservations(item_no, conn=conn) or 0)
     conn.close()
     inbound = outbound = 0.0
     tickets = set()
@@ -4222,6 +4265,8 @@ def warehouse_balance_detail(item_no):
         "balance": inbound - outbound,
         "inbound": inbound,
         "outbound": outbound,
+        "reserved": reserved,
+        "available_balance": (inbound - outbound) - reserved,
         "tx_count": len(rows),
         "tickets": sorted(tickets),
         "movements": movements,
@@ -4746,7 +4791,15 @@ def list_custody_lines(custody_id: int, conn=None) -> list[dict]:
         row["custody_in_qty"] = qty
         row["custody_out_qty"] = out_qty
         row["custody_balance_qty"] = max(qty - out_qty, 0.0)
-        row["item_balance"] = warehouse_balance(row.get("item_no") or "") if row.get("item_no") else None
+        if row.get("item_no"):
+            detail = warehouse_balance_detail(row.get("item_no") or "")
+            row["item_balance"] = detail.get("balance")
+            row["item_reserved_qty"] = detail.get("reserved") or 0
+            row["item_available_balance"] = detail.get("available_balance")
+        else:
+            row["item_balance"] = None
+            row["item_reserved_qty"] = 0
+            row["item_available_balance"] = None
     if own:
         conn.close()
     return rows
@@ -4836,6 +4889,14 @@ def add_custody_line(
         if own:
             conn.close()
         raise ValueError("أدخل كمية صحيحة")
+    if source_type != "external":
+        actual_balance = float(warehouse_balance(item["item_no"]) or 0)
+        reserved = float(custody_pending_reservations(item["item_no"], conn=conn) or 0)
+        available = actual_balance - reserved
+        if q > available:
+            if own:
+                conn.close()
+            raise ValueError(f"رصيد ركاز المتاح للمادة {item['item_no']} غير كافٍ. المطلوب: {q:.2f}، المتاح بعد حجوزات العهد: {available:.2f}")
     cur = conn.execute(
         """
         INSERT INTO custody_lines(custody_id, custody_no, item_no, item_name, unit, qty, source_type, notes)
@@ -4920,9 +4981,11 @@ def issue_custody_to_warehouse(custody_id: int, conn=None) -> dict:
             if (ln.get("source_type") or "warehouse").strip().lower() != "external":
                 required_by_no[canonical] = required_by_no.get(canonical, 0.0) + qty
         for item_no, required in required_by_no.items():
-            available = float(warehouse_balance(item_no) or 0)
+            available = float(warehouse_balance(item_no) or 0) - float(
+                custody_pending_reservations(item_no, exclude_custody_id=custody_id, conn=conn) or 0
+            )
             if available < required:
-                raise ValueError(f"رصيد المادة {item_no} غير كافٍ. المطلوب: {required:.2f}، المتاح: {available:.2f}")
+                raise ValueError(f"رصيد ركاز المتاح للمادة {item_no} غير كافٍ. المطلوب: {required:.2f}، المتاح بعد حجوزات العهد: {available:.2f}")
         custody_no = (row.get("custody_no") or "").strip() or next_series_code("cu", conn)
         tx_date = (row.get("custody_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
         voucher = next_warehouse_voucher_no(conn)
