@@ -28,9 +28,9 @@ body {
   /* الاتجاه يأتي من html[dir] (ar=rtl / en=ltr) — لا تفرض rtl هنا */
 }
 
-body.standard-view div.meta,
-body.standard-view p.meta,
-body.standard-view span.meta:not(.app-user-chip) {
+body.standard-view div.meta:not(.app-runtime-message),
+body.standard-view p.meta:not(.app-runtime-message),
+body.standard-view span.meta:not(.app-user-chip):not(.app-runtime-message) {
   display: none !important;
 }
 body.standard-view input::placeholder,

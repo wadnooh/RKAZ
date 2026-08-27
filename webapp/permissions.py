@@ -168,6 +168,8 @@ PERM_LABELS = {
     'button.warehouse.issue': 'زر صرف مستودع',
     'cashflow.read': 'عرض التدفق النقدي',
     'cashflow.write': 'تعديل التدفق النقدي',
+    'delete.email_code': 'تأكيد الحذف بكود البريد',
+    'delete.static_password': 'تأكيد الحذف بكلمة مرور ثابتة',
     'export': 'تصدير Excel',
     'modules.delete': 'حذف السجلات',
     'modules.read': 'عرض سجلات الأقسام',

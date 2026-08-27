@@ -250,16 +250,38 @@
   })();
   </script>
   {% endif %}
-  <div id="deletePasswordModal" class="delete-pw-backdrop" hidden>
+  {% set delete_methods = delete_confirm_methods() %}
+  <div id="deletePasswordModal" class="delete-pw-backdrop" hidden data-can-email="{{ 1 if delete_methods.email else 0 }}" data-can-static="{{ 1 if delete_methods.static else 0 }}" data-static-ready="{{ 1 if delete_methods.static_ready else 0 }}">
     <div class="delete-pw-dialog" role="dialog" aria-modal="true" aria-labelledby="deletePasswordTitle">
       <h3 id="deletePasswordTitle" class="section-title" style="font-size:1.1rem;margin:0 0 8px;">{{ _('تأكيد الحذف') }}</h3>
-      <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">{{ _('اضغط تأكيد لإرسال كود الحذف إلى بريد حسابات admin، ثم أدخل الكود لإتمام الحذف.') }}</p>
+      <p class="meta" id="deletePasswordHint" style="margin:0 0 12px;">
+        {% if delete_methods.email and delete_methods.static %}
+        {{ _('اختر تأكيد الحذف بكود البريد أو بكلمة المرور الثابتة حسب الصلاحية الممنوحة.') }}
+        {% elif delete_methods.static %}
+        {{ _('أدخل كلمة مرور الحذف الثابتة لإتمام الحذف.') }}
+        {% elif delete_methods.email %}
+        {{ _('اضغط تأكيد لإرسال كود الحذف إلى بريد حسابات admin، ثم أدخل الكود لإتمام الحذف.') }}
+        {% else %}
+        {{ _('لا توجد طريقة تأكيد حذف ممنوحة لهذا المستخدم.') }}
+        {% endif %}
+      </p>
       <div id="deletePasswordForm" style="margin:0;">
-        <label class="field" style="display:block;margin-bottom:12px;" for="deletePasswordInput">
-          <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كود تأكيد الحذف') }}</span>
-          <input type="text" id="deletePasswordInput" name="delete_code_ui" autocomplete="one-time-code" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="numeric" dir="ltr" maxlength="6" placeholder="000000" tabindex="1" style="text-align:left;width:100%;padding:12px 14px;border:2px solid #8a7349;border-radius:10px;font-size:1.15rem;letter-spacing:0.2em;box-sizing:border-box;">
+        {% if delete_methods.email and delete_methods.static %}
+        <label class="field" style="display:block;margin-bottom:12px;" for="deleteAuthMode">
+          <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('طريقة التأكيد') }}</span>
+          <select id="deleteAuthMode" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
+            <option value="email">{{ _('كود البريد') }}</option>
+            <option value="static">{{ _('كلمة مرور ثابتة') }}</option>
+          </select>
         </label>
-        <p class="meta" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
+        {% else %}
+        <input type="hidden" id="deleteAuthMode" value="{% if delete_methods.static %}static{% else %}email{% endif %}">
+        {% endif %}
+        <label class="field" style="display:block;margin-bottom:12px;" for="deletePasswordInput">
+          <span id="deletePasswordLabel" style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كود / كلمة تأكيد الحذف') }}</span>
+          <input type="text" id="deletePasswordInput" name="delete_code_ui" autocomplete="one-time-code" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" dir="ltr" placeholder="{% if delete_methods.static and not delete_methods.email %}{{ _('كلمة المرور') }}{% else %}000000{% endif %}" tabindex="1" style="text-align:left;width:100%;padding:12px 14px;border:2px solid #8a7349;border-radius:10px;font-size:1.15rem;box-sizing:border-box;">
+        </label>
+        <p class="meta app-runtime-message" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
         <div class="actions" style="justify-content:flex-end;gap:8px;">
           <button type="button" class="btn ghost" id="deletePasswordCancel" tabindex="3">{{ _('إلغاء') }}</button>
           <button type="button" class="btn danger" id="deletePasswordConfirm" tabindex="2">{{ _('إرسال / تأكيد الحذف') }}</button>
@@ -286,10 +308,14 @@
   (function () {
     var modal = document.getElementById("deletePasswordModal");
     var input = document.getElementById("deletePasswordInput");
+    var authMode = document.getElementById("deleteAuthMode");
+    var inputLabel = document.getElementById("deletePasswordLabel");
     var hint = document.getElementById("deletePasswordHint");
     var err = document.getElementById("deletePasswordError");
     var pendingForm = null;
     var emptyMsg = {{ _('اضغط تأكيد لإرسال كود الحذف إلى بريد حسابات admin، ثم أدخل الكود لإتمام الحذف.')|tojson }};
+    var emailMsg = {{ _('اضغط تأكيد لإرسال كود الحذف إلى بريد حسابات admin، ثم أدخل الكود لإتمام الحذف.')|tojson }};
+    var staticMsg = {{ _('أدخل كلمة مرور الحذف الثابتة لإتمام الحذف.')|tojson }};
     var focusTimer = null;
     var submitting = false;
 
@@ -310,6 +336,17 @@
       return field;
     }
 
+    function ensureAuthModeField(form) {
+      var field = form.querySelector('input[name="delete_auth_mode"]');
+      if (!field) {
+        field = document.createElement("input");
+        field.type = "hidden";
+        field.name = "delete_auth_mode";
+        form.appendChild(field);
+      }
+      return field;
+    }
+
     function showError(msg) {
       if (!err) return;
       err.textContent = msg || emptyMsg;
@@ -318,7 +355,34 @@
 
     function normalizeDeleteMessage(message) {
       var msg = String(message || emptyMsg);
-      return msg.replace(/كلمة سر الحذف/g, {{ _('كود تأكيد الحذف')|tojson }});
+      return msg.replace(/كلمة سر الحذف/g, {{ _('كود أو كلمة تأكيد الحذف')|tojson }});
+    }
+
+    function currentAuthMode() {
+      return authMode ? String(authMode.value || "email") : "email";
+    }
+
+    function syncDeleteAuthUi(baseMessage) {
+      var mode = currentAuthMode();
+      if (inputLabel) {
+        inputLabel.textContent = mode === "static"
+          ? {{ _('كلمة مرور الحذف الثابتة')|tojson }}
+          : {{ _('كود تأكيد الحذف')|tojson }};
+      }
+      if (input) {
+        input.value = "";
+        input.inputMode = mode === "static" ? "text" : "numeric";
+        if (mode === "static") {
+          input.removeAttribute("maxlength");
+          input.style.letterSpacing = "0";
+        } else {
+          input.setAttribute("maxlength", "6");
+          input.style.letterSpacing = "0.2em";
+        }
+      }
+      if (hint) {
+        hint.textContent = mode === "static" ? staticMsg : normalizeDeleteMessage(baseMessage || emailMsg);
+      }
     }
 
     function lockBody(lock) {
@@ -350,12 +414,12 @@
     function openModal(form, message) {
       if (!form || submitting) return;
       pendingForm = form;
-      if (hint) hint.textContent = normalizeDeleteMessage(message);
       if (input) {
         input.value = "";
         input.readOnly = false;
         input.disabled = false;
       }
+      syncDeleteAuthUi(message);
       if (err) { err.style.display = "none"; err.textContent = ""; }
       mountModalTop();
       if (modal) {
@@ -372,6 +436,8 @@
       var form = pendingForm;
       if (!form) return false;
       var field = ensurePasswordField(form);
+      var modeField = ensureAuthModeField(form);
+      modeField.value = currentAuthMode();
       field.value = code;
       form.setAttribute("data-delete-ready", "1");
       pendingForm = null;
@@ -403,6 +469,10 @@
       }
       if (!input) return false;
       var p = String(input.value || "").trim();
+      if (!p && currentAuthMode() === "static") {
+        showError(staticMsg);
+        return false;
+      }
       if (!p) {
         return submitPendingForm("");
       }
@@ -454,6 +524,13 @@
 
     var confirmBtn = document.getElementById("deletePasswordConfirm");
     var cancelBtn = document.getElementById("deletePasswordCancel");
+    if (authMode) {
+      authMode.addEventListener("change", function () {
+        syncDeleteAuthUi(hint ? hint.textContent : emptyMsg);
+        if (err) { err.style.display = "none"; err.textContent = ""; }
+        activateInput();
+      });
+    }
     if (confirmBtn) {
       confirmBtn.addEventListener("click", function (ev) {
         ev.preventDefault();

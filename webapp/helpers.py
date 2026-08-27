@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import io
+import os
 import secrets
 import time
 from datetime import datetime, timedelta
@@ -27,7 +28,7 @@ from webapp.modules_config import MODULES, SECTION_META, modules_for_section
 from webapp import permissions
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "delete-email-code-1"
+_LAYOUT_ASSET_TAG = "delete-auth-methods-1"
 DELETE_CODE_TTL_SECONDS = 10 * 60
 
 
@@ -79,6 +80,23 @@ def _delete_scope() -> str:
 
 def _hash_delete_code(code: str) -> str:
     return hashlib.sha256((code or "").strip().encode("utf-8")).hexdigest()
+
+
+def _static_delete_password() -> str:
+    raw = (
+        os.environ.get("REKAZ_DELETE_PASSWORD")
+        or os.environ.get("DELETE_PASSWORD")
+        or str((g.get("settings") or db.get_settings()).get("delete_static_password") or "")
+    )
+    return raw.strip()
+
+
+def delete_confirm_methods() -> dict:
+    return {
+        "email": permissions.can("delete.email_code"),
+        "static": permissions.can("delete.static_password"),
+        "static_ready": bool(_static_delete_password()),
+    }
 
 
 def _admin_delete_code_recipients() -> list[dict]:
@@ -153,22 +171,46 @@ def _send_delete_code(scope: str) -> bool:
 
 
 def delete_password_ok() -> bool:
-    """يتحقق من كود حذف مرسل لبريد admin، مع ربط الكود بعملية الحذف الحالية."""
+    """يتحقق من طريقة تأكيد الحذف الممنوحة للمستخدم."""
     code = (request.form.get("delete_code") or request.form.get("delete_password") or "").strip()
     if not session.get("user_id"):
         return False
+    methods = delete_confirm_methods()
+    if not methods["email"] and not methods["static"]:
+        g.delete_confirm_message = t("لا تملك صلاحية طريقة تأكيد الحذف. اطلب منح صلاحية كود البريد أو كلمة المرور الثابتة.")
+        return False
+    static_password = _static_delete_password()
+    if code and methods["static"]:
+        if static_password and secrets.compare_digest(code, static_password):
+            return True
+        if not methods["email"]:
+            if not static_password:
+                g.delete_confirm_message = t("كلمة مرور الحذف الثابتة غير مضبوطة على السيرفر.")
+            else:
+                g.delete_confirm_message = t("كلمة مرور الحذف غير صحيحة.")
+            return False
     scope = _delete_scope()
     record = session.get("delete_email_confirm") or {}
     if code:
         expires_at = float(record.get("expires_at") or 0)
-        if (
+        if methods["email"] and (
             record.get("scope") == scope
             and expires_at >= time.time()
             and record.get("code_hash") == _hash_delete_code(code)
         ):
             session.pop("delete_email_confirm", None)
             return True
-        g.delete_confirm_message = t("كود تأكيد الحذف غير صحيح أو منتهي. اطلب كوداً جديداً ثم أعد المحاولة.")
+        g.delete_confirm_message = t("بيانات تأكيد الحذف غير صحيحة أو منتهية. تحقق من كلمة المرور أو اطلب كوداً جديداً.")
+        return False
+    mode = (request.form.get("delete_auth_mode") or "").strip().lower()
+    if mode == "static" or (methods["static"] and not methods["email"]):
+        if not static_password:
+            g.delete_confirm_message = t("كلمة مرور الحذف الثابتة غير مضبوطة على السيرفر.")
+        else:
+            g.delete_confirm_message = t("أدخل كلمة مرور الحذف الثابتة لإتمام العملية.")
+        return False
+    if not methods["email"]:
+        g.delete_confirm_message = t("لا تملك صلاحية إرسال كود الحذف بالبريد.")
         return False
     return _send_delete_code(scope)
 

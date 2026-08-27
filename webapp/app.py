@@ -428,6 +428,7 @@ def inject_globals():
         "asset_v": static_asset_version(),
         "csrf_token": _csrf_token,
         "idle_timeout_seconds": IDLE_TIMEOUT_SECONDS,
+        "delete_confirm_methods": helpers.delete_confirm_methods,
     }
     ctx.update(prog_guard.template_context())
     return ctx
