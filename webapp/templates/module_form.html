@@ -102,6 +102,13 @@
     {% endif %}
     {% endif %}
     {% for key, label, ftype in module.fields %}
+    {% if name == 'custody' and key in ['item_no','item_name','unit','qty'] %}
+    <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
+    {% elif name == 'custody' and key in ['issued_voucher_no','return_voucher_no'] %}
+    <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
+    {% elif name == 'custody' and key == 'return_date' and mode == 'new' %}
+    <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">
+    {% else %}
     {% if name == 'warehouse_tx' and key == 'source_ref' %}
     <input type="hidden" name="source_ref" value="{{ row[key] or '' }}">
     {% else %}
@@ -257,6 +264,7 @@
       {% endif %}
     </div>
     {% endif %}
+    {% endif %}
     {% endfor %}
     {% if upload.enabled %}
     <p class="photo-storage-hint" style="grid-column:1/-1">
@@ -280,6 +288,8 @@
       <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('إلغاء') }}</a>
       {% elif name == 'primary_team_orders' %}
       <a class="btn ghost" href="{{ url_for('ops_primary_teams') }}">{{ _('إلغاء') }}</a>
+      {% elif name == 'custody' %}
+      <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('إلغاء') }}</a>
       {% else %}
       <a class="btn ghost" href="{{ url_for('module_list', name=name) }}">{{ _('إلغاء') }}</a>
       {% endif %}

@@ -4616,6 +4616,8 @@ def module_new(name):
         _after_data_change()
         if name == "external_purchases":
             return redirect(url_for("module_edit", name=name, row_id=new_id))
+        if name == "custody":
+            return redirect(url_for("module_edit", name=name, row_id=new_id))
         if name == "contractor_supplies":
             if not (data.get("supply_no") or "").strip():
                 # تأكد من رقم توريد بعد الإدراج إن كان فارغاً

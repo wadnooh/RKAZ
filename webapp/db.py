@@ -4732,6 +4732,8 @@ def list_custody_lines(custody_id: int, conn=None) -> list[dict]:
             (custody_id,),
         ).fetchall()
     )
+    for row in rows:
+        row["item_balance"] = warehouse_balance(row.get("item_no") or "") if row.get("item_no") else None
     if own:
         conn.close()
     return rows

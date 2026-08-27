@@ -45,6 +45,7 @@
           <th>{{ _('اسم المادة') }}</th>
           <th>{{ _('الوحدة') }}</th>
           <th>{{ _('الكمية') }}</th>
+          <th>{{ _('الرصيد العام') }}</th>
           <th>{{ _('المستودع') }}</th>
           {% if not issued and can('modules.write') %}<th></th>{% endif %}
         </tr>
@@ -59,6 +60,7 @@
           <td>{{ ln.item_name or '—' }}</td>
           <td>{{ ln.unit or '—' }}</td>
           <td>{{ ln.qty if ln.qty is not none else '—' }}</td>
+          <td>{{ ln.item_balance if ln.item_balance is not none else '—' }}</td>
           <td>
             {% if ln.return_warehouse_tx_id %}
             <span class="badge ok">{{ _('مرتجع') }}</span>
@@ -78,7 +80,7 @@
           {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
+        <tr><td colspan="8" class="meta">{{ _('لا توجد بنود عهدة مرتبطة بهذا السجل بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
       {% if lines %}
@@ -86,6 +88,7 @@
         <tr>
           <td colspan="4" style="text-align:left;font-weight:800;">{{ _('إجمالي الكميات') }}</td>
           <td style="font-weight:800;">{{ '%.2f'|format(ns.qty) }}</td>
+          <td></td>
           <td>{% if returned %}<span class="badge ok">{{ _('كلها مرتجعة') }}</span>{% elif issued %}<span class="badge ok">{{ _('كلها مصروفة') }}</span>{% endif %}</td>
           {% if not issued and can('modules.write') %}<td></td>{% endif %}
         </tr>
