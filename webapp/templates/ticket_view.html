@@ -377,11 +377,14 @@
             {% if refs %}
               <div class="attachment-list is-compact">
                 {% for ref in refs[:3] %}
+                  <span class="attachment-compact-item">
                   {% if is_pdf_ref(ref) %}
                   <a class="photo-pdf-chip" href="{{ ref }}" target="_blank" rel="noopener">PDF</a>
                   {% else %}
                   <a href="{{ ref }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ ref }}" alt="{{ label }}"></a>
                   {% endif %}
+                  <a class="attachment-download attachment-download--mini" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
+                  </span>
                 {% endfor %}
                 {% if refs|length > 3 %}<span class="badge">+{{ refs|length - 3 }}</span>{% endif %}
               </div>

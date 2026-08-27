@@ -158,6 +158,7 @@
           {% if refs %}
             <div class="attachment-list attachment-list--gallery">
               {% for ref in refs %}
+              <div class="attachment-item">
                 {% if is_pdf_ref(ref) %}
                 <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener">
                   <span>PDF</span>
@@ -168,6 +169,8 @@
                   <img src="{{ ref }}" alt="{{ label }}">
                 </a>
                 {% endif %}
+                <a class="attachment-download" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
+              </div>
               {% endfor %}
             </div>
             <input type="hidden" name="{{ key }}" value="{{ row[key] }}">
@@ -195,6 +198,7 @@
           {% if refs %}
           <div class="attachment-list attachment-list--gallery">
             {% for ref in refs %}
+            <div class="attachment-item">
               {% if is_image_ref(ref) %}
               <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener">
                 <img src="{{ ref }}" alt="{{ label }}">
@@ -210,6 +214,8 @@
                 <em>{{ media_filename(ref) }}</em>
               </a>
               {% endif %}
+              <a class="attachment-download" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
+            </div>
             {% endfor %}
           </div>
           <input type="hidden" name="{{ key }}" value="{{ row[key] or '' }}">

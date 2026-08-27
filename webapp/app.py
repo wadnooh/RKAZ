@@ -402,6 +402,13 @@ def inject_globals():
     def can(*perms):
         return permissions.can(*perms)
 
+    def media_download_url(ref):
+        ref = str(ref or "")
+        if not media_svc.is_media_ref(ref):
+            return ref
+        sep = "&" if "?" in ref else "?"
+        return f"{ref}{sep}download=1"
+
     tabs_by_section = app_custom_tabs_by_section(lang) if session.get("user_id") else {}
     ctx = {
         "settings": g.get("settings") or db.get_settings(),
@@ -421,6 +428,7 @@ def inject_globals():
         "attachment_refs": media_svc.attachment_refs,
         "photo_refs": media_svc.photo_refs,
         "media_filename": media_svc.media_filename,
+        "media_download_url": media_download_url,
         "nav_sections": permissions.nav_sections_for_role() if session.get("user_id") else [],
         "ops_custom_tabs": tabs_by_section.get("ops") or [],
         "app_custom_tabs_by_section": tabs_by_section,
@@ -4069,7 +4077,8 @@ def media_serve(storage, key):
         abort(403)
     except Exception:
         abort(404)
-    return send_file(stream, mimetype=mime, download_name=filename, as_attachment=False)
+    as_download = (request.args.get("download") or "").strip().lower() in {"1", "true", "yes"}
+    return send_file(stream, mimetype=mime, download_name=filename, as_attachment=as_download)
 
 @app.route("/module/<name>")
 @login_required

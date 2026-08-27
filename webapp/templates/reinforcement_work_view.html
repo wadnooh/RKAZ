@@ -88,19 +88,25 @@
     <div class="attachment-list attachment-list--gallery">
       {% for field_value in [p.before_shot, p.during_shot, p.after_shot, p.quantities_shot, p.location_shot] %}
         {% for ref in photo_refs(field_value) %}
+          <div class="attachment-item">
           {% if is_image_ref(ref) %}
           <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
           {% elif is_pdf_ref(ref) %}
           <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>PDF</span><em>{{ media_filename(ref) }}</em></a>
           {% endif %}
+          <a class="attachment-download" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
+          </div>
         {% endfor %}
       {% endfor %}
       {% for ref in attachment_refs(p.attachments) %}
+        <div class="attachment-item">
         {% if is_image_ref(ref) %}
         <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
         {% else %}
         <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>{{ media_filename(ref).split('.')[-1]|upper }}</span><em>{{ media_filename(ref) }}</em></a>
         {% endif %}
+        <a class="attachment-download" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
+        </div>
       {% endfor %}
     </div>
     <div class="actions" style="margin-top:10px;">

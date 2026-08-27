@@ -1072,6 +1072,16 @@ td.col-item-name[title]:hover {
 .attachment-list.is-compact {
   gap: 6px;
 }
+.attachment-compact-item,
+.attachment-item {
+  display: inline-grid;
+  gap: 5px;
+  align-items: center;
+}
+.attachment-item {
+  display: grid;
+  min-width: 0;
+}
 .attachment-chip {
   display: inline-flex;
   align-items: center;
@@ -1154,6 +1164,29 @@ td.col-item-name[title]:hover {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.attachment-download {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 5px 10px;
+  border: 1px solid #d8cbb4;
+  border-radius: 8px;
+  background: #fffdf8;
+  color: #5c4a2d;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-decoration: none;
+}
+.attachment-download:hover {
+  border-color: var(--accent);
+  background: #fff7ea;
+}
+.attachment-download--mini {
+  min-height: 24px;
+  padding: 3px 7px;
+  font-size: 0.72rem;
 }
 .attachment-empty {
   display: flex;
