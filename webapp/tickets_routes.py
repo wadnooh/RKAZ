@@ -370,12 +370,11 @@ def delete(ticket_id):
     if not helpers.delete_password_ok():
         return helpers.reject_bad_delete_password(url_for(".view", ticket_id=ticket_id, edit=1))
     conn = db.connect()
-    row = conn.execute("SELECT ticket_no FROM tickets WHERE id=?", (ticket_id,)).fetchone()
-    conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
+    ok, ticket_no = db.delete_ticket(ticket_id, conn=conn)
     conn.commit()
     conn.close()
-    db.log_audit(helpers.current_user_name(), "حذف", "عطل", ticket_id, row["ticket_no"] if row else "")
-    flash(helpers.t("تم حذف العطل"), "ok")
+    db.log_audit(helpers.current_user_name(), "حذف", "عطل", ticket_id, ticket_no or "")
+    flash(helpers.t("تم حذف العطل وجميع السجلات المرتبطة به"), "ok")
     helpers.after_data_change()
     return redirect(url_for(".list_all"))
 

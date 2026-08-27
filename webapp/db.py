@@ -755,6 +755,10 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "invoices" in existing or "invoices" in created:
             if _ensure_column(conn, "invoices", "work_order"):
                 created.append("invoices.work_order")
+        if "photos" in existing or "photos" in created:
+            n_photos = cleanup_orphan_photos(conn)
+            if n_photos:
+                created.append(f"photos.orphan_cleanup:{n_photos}")
         # إصلاح مضاعفة نسبة الطوارئ على بنود العقد (مرة واحدة في القيمة النهائية فقط)
         if "ticket_boq_lines" in existing or "ticket_boq_lines" in created:
             n_boq = repair_boq_emergency_double_count(conn)
@@ -1852,6 +1856,154 @@ def resolve_ticket_ref(ref: str, conn=None) -> dict | None:
     if own:
         conn.close()
     return dict(row) if row else None
+
+
+def delete_ticket(ticket_id: int, conn=None) -> tuple[bool, str]:
+    """
+    يحذف العطل وجميع السجلات المرتبطة به في الفروع والأقسام (حذف تتابعي):
+    - سجلات الصور (photos)
+    - بنود الكميات والتمتير التابعة للعطل (ticket_boq_lines, quantities, metering)
+    - التنسيقات وإخلاءات الجودة (coordination, quality_clearances)
+    - التنسيقات والرخص والتصاريح الخاصة بالعطل (new_coordinations, issued_licenses, safety_permits)
+    - فك ارتباط حركات المستودع المرتبطة بالعطل
+    - حذف سجل العطل من tickets
+    """
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+        if not row:
+            return False, ""
+        ticket = dict(row)
+        tno = (ticket.get("ticket_no") or "").strip()
+        rekaz_code = (ticket.get("rekaz_code") or "").strip()
+
+        # 1. حذف سجلات الصور التابعة للعطل
+        if tno:
+            conn.execute("DELETE FROM photos WHERE ticket_no=? OR lower(ticket_no)=lower(?)", (tno, tno))
+        if rekaz_code:
+            conn.execute("DELETE FROM photos WHERE lower(ticket_no)=lower(?)", (rekaz_code,))
+
+        # 2. حذف بنود الكميات التابعة للعطل
+        conn.execute("DELETE FROM ticket_boq_lines WHERE ticket_id=?", (ticket_id,))
+        if tno:
+            conn.execute("DELETE FROM ticket_boq_lines WHERE ticket_no=?", (tno,))
+
+        # 3. حذف الكميات والتمتير والتنسيقات المرتبطة
+        if tno:
+            conn.execute("DELETE FROM quantities WHERE ticket_no=?", (tno,))
+            conn.execute("DELETE FROM metering WHERE ticket_no=?", (tno,))
+            conn.execute("DELETE FROM coordination WHERE ticket_no=?", (tno,))
+            conn.execute("DELETE FROM quality_clearances WHERE ticket_no=?", (tno,))
+
+        # 4. حذف سجلات الجودة والرخص المنشأة خصيصاً لهذا العطل
+        if tno:
+            conn.execute("DELETE FROM new_coordinations WHERE ticket_no=? AND (linked_section='ops' OR linked_section='العمليات والصيانة' OR linked_section IS NULL)", (tno,))
+            conn.execute("DELETE FROM issued_licenses WHERE ticket_no=? AND (linked_section='ops' OR linked_section='العمليات والصيانة' OR linked_section IS NULL)", (tno,))
+            conn.execute("DELETE FROM safety_permits WHERE ticket_no=?", (tno,))
+
+        # 5. فك ارتباط المستودع
+        if tno:
+            conn.execute("UPDATE warehouse_tx SET ticket_no='' WHERE ticket_no=?", (tno,))
+        if rekaz_code:
+            conn.execute("UPDATE warehouse_tx SET rekaz_code='' WHERE lower(rekaz_code)=lower(?)", (rekaz_code,))
+
+        # 6. حذف العطل الرئيسي
+        conn.execute("DELETE FROM tickets WHERE id=?", (ticket_id,))
+
+        if own:
+            conn.commit()
+        return True, tno
+    finally:
+        if own:
+            conn.close()
+
+
+def delete_construction_work(work_id: int, conn=None) -> tuple[bool, str]:
+    """يحذف أمر العمل الإنشائي وجميع السجلات الملحقة به."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = conn.execute("SELECT * FROM construction_works WHERE id=?", (work_id,)).fetchone()
+        if not row:
+            return False, ""
+        work = dict(row)
+        wno = (work.get("work_no") or "").strip()
+        tno = (work.get("ticket_no") or "").strip()
+        if wno:
+            conn.execute("DELETE FROM photos WHERE ticket_no=?", (wno,))
+            conn.execute("DELETE FROM new_coordinations WHERE (work_order=? OR construction_work_no=? OR ticket_no=?) AND (linked_section='constructions' OR linked_section='الإنشاءات')", (wno, wno, wno))
+            conn.execute("DELETE FROM issued_licenses WHERE (work_order=? OR construction_work_no=? OR ticket_no=?) AND (linked_section='constructions' OR linked_section='الإنشاءات')", (wno, wno, wno))
+            conn.execute("DELETE FROM safety_permits WHERE work_order=? OR ticket_no=?", (wno, wno))
+        if tno and tno != wno:
+            conn.execute("DELETE FROM photos WHERE ticket_no=?", (tno,))
+            conn.execute("DELETE FROM safety_permits WHERE ticket_no=?", (tno,))
+        conn.execute("DELETE FROM construction_works WHERE id=?", (work_id,))
+        if own:
+            conn.commit()
+        return True, wno or tno
+    finally:
+        if own:
+            conn.close()
+
+
+def delete_reinforcement_work(work_id: int, conn=None) -> tuple[bool, str]:
+    """يحذف معاملة التعزيز وجميع السجلات الملحقة بها."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = conn.execute("SELECT * FROM reinforcement_works WHERE id=?", (work_id,)).fetchone()
+        if not row:
+            return False, ""
+        work = dict(row)
+        wno = (work.get("work_no") or "").strip()
+        if wno:
+            conn.execute("DELETE FROM photos WHERE ticket_no=?", (wno,))
+            conn.execute("DELETE FROM new_coordinations WHERE ticket_no=? AND (linked_section='reinforcement' OR linked_section='التعزيز')", (wno,))
+            conn.execute("DELETE FROM issued_licenses WHERE ticket_no=? AND (linked_section='reinforcement' OR linked_section='التعزيز')", (wno,))
+            conn.execute("DELETE FROM safety_permits WHERE ticket_no=? OR work_order=?", (wno, wno))
+        conn.execute("DELETE FROM reinforcement_works WHERE id=?", (work_id,))
+        if own:
+            conn.commit()
+        return True, wno
+    finally:
+        if own:
+            conn.close()
+
+
+def cleanup_orphan_photos(conn=None) -> int:
+    """
+    يحذف سجلات الصور المعلقة/اليتيمة التي لا ينتمي رقم العطل/المعاملة الخاص بها إلى أي عطل أو أمر عمل أو معاملة رئيسية موجودة.
+    """
+    own = conn is None
+    conn = conn or connect()
+    try:
+        cur = conn.execute(
+            """
+            DELETE FROM photos
+            WHERE ticket_no IS NULL
+               OR trim(ticket_no) = ''
+               OR (
+                   ticket_no NOT IN (SELECT ticket_no FROM tickets WHERE ticket_no IS NOT NULL AND trim(ticket_no) <> '')
+                   AND lower(ticket_no) NOT IN (SELECT lower(rekaz_code) FROM tickets WHERE rekaz_code IS NOT NULL AND trim(rekaz_code) <> '')
+                   AND ticket_no NOT IN (SELECT work_no FROM construction_works WHERE work_no IS NOT NULL AND trim(work_no) <> '')
+                   AND ticket_no NOT IN (SELECT coalesce(ticket_no, '') FROM construction_works WHERE ticket_no IS NOT NULL AND trim(ticket_no) <> '')
+                   AND ticket_no NOT IN (SELECT work_no FROM reinforcement_works WHERE work_no IS NOT NULL AND trim(work_no) <> '')
+                   AND ticket_no NOT IN (SELECT coalesce(ticket_no, '') FROM new_coordinations WHERE ticket_no IS NOT NULL AND trim(ticket_no) <> '')
+                   AND ticket_no NOT IN (SELECT coalesce(coord_no, '') FROM new_coordinations WHERE coord_no IS NOT NULL AND trim(coord_no) <> '')
+                   AND ticket_no NOT IN (SELECT coalesce(license_no, '') FROM new_coordinations WHERE license_no IS NOT NULL AND trim(license_no) <> '')
+               )
+            """
+        )
+        deleted = cur.rowcount if cur.rowcount > 0 else 0
+        if own:
+            conn.commit()
+        return deleted
+    except Exception:
+        return 0
+    finally:
+        if own:
+            conn.close()
 
 
 def enrich_warehouse_tx_codes(data: dict, conn=None) -> dict:

@@ -4118,6 +4118,8 @@ def module_list(name):
             return redirect(url_for("warehouses_home"))
     if name == "safety_permits":
         db.ensure_excavation_safety_permits()
+    if name == "photos":
+        db.cleanup_orphan_photos()
     packed = _load_module_list_rows(name, module)
     rows = packed["rows"]
     money_keys = packed["money_keys"]
@@ -5131,11 +5133,19 @@ def module_delete(name, row_id):
         )
         return _reject_bad_delete_password(fallback)
     conn = db.connect()
-    conn.execute(f"DELETE FROM {module['table']} WHERE id=?", (row_id,))
+    deleted_ref = ""
+    if name == "tickets":
+        _, deleted_ref = db.delete_ticket(row_id, conn=conn)
+    elif name == "construction_works":
+        _, deleted_ref = db.delete_construction_work(row_id, conn=conn)
+    elif name == "reinforcement_works":
+        _, deleted_ref = db.delete_reinforcement_work(row_id, conn=conn)
+    else:
+        conn.execute(f"DELETE FROM {module['table']} WHERE id=?", (row_id,))
     conn.commit()
     conn.close()
-    db.log_audit(current_user_name(), "حذف", module["title"], row_id)
-    flash(_t("تم الحذف"), "ok")
+    db.log_audit(current_user_name(), "حذف", module["title"], row_id, deleted_ref)
+    flash(_t("تم الحذف وجميع السجلات المرتبطة"), "ok")
     _after_data_change()
     if name == "warehouse_items":
         return redirect(url_for("warehouse_balances", view="items"))
