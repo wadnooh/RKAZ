@@ -254,6 +254,99 @@ PERM_LABELS = {
 
 ALL_PERMS = set(PERM_LABELS)
 
+_PERMISSION_PAGE_OVERRIDES = {
+    "api.access": "API",
+    "app.tabs.manage": "إدارة التبويبات",
+    "audit.read": "سجل النشاط",
+    "button.financial.amounts": "المبالغ والإجماليات المالية",
+    "button.logout": "الجلسة",
+    "button.quick_jump": "القفز السريع",
+    "button.quality.transfer": "الجودة والتنسيقات",
+    "button.quality.workflow": "الجودة والتنسيقات",
+    "button.search": "البحث",
+    "button.tabs.add": "إدارة التبويبات",
+    "button.tabs.delete": "إدارة التبويبات",
+    "button.tabs.edit": "إدارة التبويبات",
+    "button.tabs.open": "إدارة التبويبات",
+    "button.ticket.export": "الأعطال",
+    "button.ticket.new": "الأعطال",
+    "button.users.add": "المستخدمون",
+    "button.users.delete": "المستخدمون",
+    "button.users.edit": "المستخدمون",
+    "button.users.toggle": "المستخدمون",
+    "button.warehouse.issue": "المستودعات",
+    "cashflow.read": "التدفق النقدي",
+    "cashflow.write": "التدفق النقدي",
+    "delete.email_code": "إعدادات الحذف",
+    "delete.static_password": "إعدادات الحذف",
+    "export": "التصدير العام",
+    "modules.delete": "السجلات العامة",
+    "modules.read": "السجلات العامة",
+    "modules.write": "السجلات العامة",
+    "notifications.manage": "الإشعارات",
+    "notifications.read": "الإشعارات",
+    "ops.tabs.manage": "إدارة التبويبات",
+    "reports.view": "التقارير",
+    "search": "البحث",
+    "tab.audit": "سجل النشاط",
+    "tab.contracts.manage_tabs": "إدارة التبويبات",
+    "tab.users": "المستخدمون",
+    "teams.write": "فرق المهام",
+    "tickets.delete": "الأعطال",
+    "tickets.read": "الأعطال",
+    "tickets.write": "الأعطال",
+    "users.manage": "المستخدمون",
+}
+
+
+def permission_group_label(key: str) -> str:
+    if key.startswith("tab."):
+        return "التبويبات"
+    if key.startswith("button."):
+        return "الأزرار"
+    if key.startswith("section."):
+        return "الأقسام"
+    if key.startswith(("modules.", "tickets.", "cashflow.", "teams.")):
+        return "السجلات والعمل"
+    if key.startswith(("users.", "audit.", "app.", "ops.tabs.", "api.", "notifications.", "reports.", "delete.")):
+        return "الإدارة"
+    return "عام"
+
+
+def permission_page_label(key: str, label: str | None = None) -> str:
+    if key in _PERMISSION_PAGE_OVERRIDES:
+        return _PERMISSION_PAGE_OVERRIDES[key]
+    label = label or PERM_LABELS.get(key, key)
+    if key.startswith("button.module."):
+        return label.split(" في ")[-1]
+    if key.startswith("tab.module."):
+        return label.replace("تبويب/قائمة ", "")
+    if key.startswith("section."):
+        return label
+    if key.startswith("tab.ops."):
+        return "العمليات والصيانة"
+    if key.startswith("tab.warehouse."):
+        return "المستودعات"
+    if key.startswith("tab."):
+        return label.replace("تبويب ", "")
+    return permission_group_label(key)
+
+
+def permission_catalog(lang: str = "ar") -> list[dict[str, str]]:
+    rows: list[dict[str, str]] = []
+    for key, label in PERM_LABELS.items():
+        group = permission_group_label(key)
+        page = permission_page_label(key, label)
+        rows.append(
+            {
+                "key": key,
+                "label": label,
+                "group": i18n_phrase(lang, group),
+                "page": i18n_phrase(lang, page),
+            }
+        )
+    return rows
+
 # وحدات مرتبطة بالعطل: أي إضافة/تعديل/حذف لها يتطلب tickets.write (بالإضافة إلى modules.*)
 TICKET_LINKED_WRITE_MODULES = frozenset({"quantities", "photos", "metering"})
 

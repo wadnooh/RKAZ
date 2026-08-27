@@ -141,65 +141,13 @@
             <div class="permission-page-tabs" data-permission-page-tabs></div>
 
             <div class="permission-list">
-              {% for key, label in perm_labels.items() %}
+              {% for perm in perm_catalog %}
+                {% set key = perm.key %}
+                {% set label = perm.label %}
+                {% set group = perm.group %}
+                {% set page = perm.page %}
                 {% set eff = u.perm_overrides.get(key, '') %}
                 {% set in_role = key in u.role_perm_set %}
-                {% if key.startswith('tab.') %}
-                  {% set group = _('التبويبات') %}
-                {% elif key.startswith('button.') %}
-                  {% set group = _('الأزرار') %}
-                {% elif key.startswith('section.') %}
-                  {% set group = _('الأقسام') %}
-                {% elif key.startswith('modules.') or key.startswith('tickets.') or key.startswith('cashflow.') or key.startswith('teams.') %}
-                  {% set group = _('السجلات والعمل') %}
-                {% elif key.startswith('users.') or key.startswith('audit.') or key.startswith('app.') or key.startswith('ops.tabs.') or key.startswith('api.') %}
-                  {% set group = _('الإدارة') %}
-                {% else %}
-                  {% set group = _('عام') %}
-                {% endif %}
-                {% if key.startswith('button.module.') %}
-                  {% set page = _(label).split(_(' في '))[-1] %}
-                {% elif key.startswith('tab.module.') %}
-                  {% set page = _(label).replace(_('تبويب/قائمة '), '') %}
-                {% elif key.startswith('section.') %}
-                  {% set page = _('الأقسام الرئيسية') %}
-                {% elif key.startswith('tab.ops.') %}
-                  {% set page = _('العمليات والصيانة') %}
-                {% elif key.startswith('tab.warehouse.') %}
-                  {% set page = _('المستودعات') %}
-                {% elif key.startswith('tab.') %}
-                  {% set page = _('التبويبات الرئيسية') %}
-                {% elif key.startswith('button.users.') or key.startswith('users.') %}
-                  {% set page = _('المستخدمون') %}
-                {% elif key.startswith('button.ticket.') or key.startswith('tickets.') %}
-                  {% set page = _('الأعطال') %}
-                {% elif key.startswith('delete.') %}
-                  {% set page = _('تأكيد الحذف') %}
-                {% elif key.startswith('button.quality.') %}
-                  {% set page = _('الجودة والتنسيقات') %}
-                {% elif key.startswith('button.tabs.') or key.startswith('app.tabs.') or key.startswith('ops.tabs.') %}
-                  {% set page = _('إدارة التبويبات') %}
-                {% elif key.startswith('button.warehouse.') %}
-                  {% set page = _('المستودعات') %}
-                {% elif key.startswith('cashflow.') %}
-                  {% set page = _('التدفق النقدي') %}
-                {% elif key.startswith('reports.') %}
-                  {% set page = _('التقارير') %}
-                {% elif key.startswith('notifications.') %}
-                  {% set page = _('الإشعارات') %}
-                {% elif key.startswith('audit.') %}
-                  {% set page = _('سجل النشاط') %}
-                {% elif key.startswith('api.') %}
-                  {% set page = _('API') %}
-                {% elif key.startswith('modules.') %}
-                  {% set page = _('السجلات العامة') %}
-                {% elif key.startswith('teams.') %}
-                  {% set page = _('فرق المهام') %}
-                {% elif key.startswith('search') or key.startswith('button.search') %}
-                  {% set page = _('البحث') %}
-                {% else %}
-                  {% set page = group %}
-                {% endif %}
               <div class="permission-row"
                    data-permission-row
                    data-effect="{{ eff or 'role' }}"
