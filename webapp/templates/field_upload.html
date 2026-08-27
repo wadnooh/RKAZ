@@ -48,6 +48,8 @@
     <input type="hidden" name="latitude" id="fieldLatitude" value="{{ form.get('latitude', '') }}">
     <input type="hidden" name="longitude" id="fieldLongitude" value="{{ form.get('longitude', '') }}">
     <input type="hidden" name="accuracy" id="fieldAccuracy" value="{{ form.get('accuracy', '') }}">
+    <input type="hidden" name="ref_kind" id="fieldRefKind" value="{{ form.get('ref_kind', '') }}">
+    <input type="hidden" name="work_order" id="fieldWorkOrder" value="{{ form.get('work_order', '') }}">
     <div class="field-upload__search">
       <label class="field-upload__field">
         <span>{{ _('بحث عن معاملة موجودة') }}</span>
@@ -63,9 +65,11 @@
                 data-pick-transaction
                 data-ref="{{ item.ref }}"
                 data-station="{{ item.station_no }}"
-                data-ref-label="{{ item.ref_label }}">
+                data-ref-label="{{ item.ref_label }}"
+                data-ref-kind="{{ item.ref_kind }}"
+                data-work-order="{{ item.work_order }}">
           <strong>{{ _(item.ref_label) }}: {{ item.ref }}</strong>
-          <span>{{ item.source }}{% if item.rekaz_code %} · {{ _('رقم ركاز') }} {{ item.rekaz_code }}{% endif %}{% if item.station_no %} · {{ _('محطة') }} {{ item.station_no }}{% endif %}</span>
+          <span>{{ item.source }}{% if item.rekaz_code %} · {{ _('رقم ركاز') }} {{ item.rekaz_code }}{% endif %}{% if item.work_order and item.ref_kind == 'ticket' %} · {{ _('رقم أمر العمل') }} {{ item.work_order }}{% endif %}{% if item.station_no %} · {{ _('محطة') }} {{ item.station_no }}{% endif %}</span>
           <em>{{ item.title }}{% if item.status %} · {{ item.status }}{% endif %}</em>
         </button>
         {% endfor %}
@@ -151,6 +155,8 @@
   var locationStatus = document.getElementById("fieldLocationStatus");
   var savingStatus = document.getElementById("fieldSavingStatus");
   var refLabel = document.getElementById("fieldRefLabel");
+  var refKind = document.getElementById("fieldRefKind");
+  var workOrder = document.getElementById("fieldWorkOrder");
   var picks = Array.prototype.slice.call(document.querySelectorAll("[data-pick-transaction]"));
   var submitting = false;
 
@@ -314,6 +320,8 @@
       if (refInput) refInput.value = btn.getAttribute("data-ref") || "";
       if (stationInput) stationInput.value = btn.getAttribute("data-station") || "";
       if (refLabel) refLabel.textContent = btn.getAttribute("data-ref-label") || {{ _('رقم العطل أو المعاملة')|tojson }};
+      if (refKind) refKind.value = btn.getAttribute("data-ref-kind") || "";
+      if (workOrder) workOrder.value = btn.getAttribute("data-work-order") || "";
       picks.forEach(function (item) { item.classList.toggle("is-active", item === btn); });
       maybeOpenPicker();
     });

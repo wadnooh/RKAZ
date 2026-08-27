@@ -708,7 +708,7 @@ def _field_upload_search(conn, q: str) -> list[dict]:
     results: list[dict] = []
     for row in db.rows_to_dicts(conn.execute(
         """
-        SELECT id, ticket_no, rekaz_code, station_no, district, fault_type, status, 'ticket' AS source
+        SELECT id, ticket_no, rekaz_code, work_order, station_no, district, fault_type, status, 'ticket' AS source
         FROM tickets
         WHERE ticket_no LIKE ? OR rekaz_code LIKE ? OR station_no LIKE ? OR district LIKE ? OR fault_type LIKE ? OR work_order LIKE ?
         ORDER BY id DESC LIMIT 12
@@ -720,6 +720,7 @@ def _field_upload_search(conn, q: str) -> list[dict]:
             "ref_label": "رقم العطل",
             "ref_kind": "ticket",
             "rekaz_code": row.get("rekaz_code") or "",
+            "work_order": row.get("work_order") or "",
             "station_no": row.get("station_no") or "",
             "title": row.get("fault_type") or row.get("district") or "عطل",
             "status": row.get("status") or "",
@@ -741,6 +742,7 @@ def _field_upload_search(conn, q: str) -> list[dict]:
                 "ref_label": "رقم المعاملة",
                 "ref_kind": "reinforcement",
                 "rekaz_code": "",
+                "work_order": "",
                 "station_no": row.get("station_no") or "",
                 "title": row.get("department") or row.get("work_type") or "معاملة",
                 "status": row.get("status") or "",
@@ -764,6 +766,7 @@ def _field_upload_search(conn, q: str) -> list[dict]:
                 "ref_label": "رقم أمر العمل",
                 "ref_kind": "construction",
                 "rekaz_code": "",
+                "work_order": row.get("work_no") or "",
                 "station_no": row.get("station_no") or "",
                 "title": row.get("work_type") or row.get("site") or "إنشاءات",
                 "status": row.get("status") or "",
@@ -802,6 +805,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
         ticket.update(updates)
         ticket["ref_label"] = "رقم العطل"
         ticket["ref_kind"] = "ticket"
+        ticket["work_order"] = ticket.get("work_order") or ""
         return ticket["id"], ticket, False
     try:
         construction = conn.execute("SELECT * FROM construction_works WHERE work_no=? LIMIT 1", (ticket_no,)).fetchone()
@@ -815,6 +819,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
             "location": location_url or construction["site"],
             "ref_label": "رقم أمر العمل",
             "ref_kind": "construction",
+            "work_order": construction["work_no"],
         }, False
     try:
         work = conn.execute("SELECT * FROM reinforcement_works WHERE work_no=? LIMIT 1", (ticket_no,)).fetchone()
@@ -828,6 +833,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
             "location": location_url or work["location"],
             "ref_label": "رقم المعاملة",
             "ref_kind": "reinforcement",
+            "work_order": "",
         }, False
     return 0, {
         "ticket_no": ticket_no,
@@ -835,6 +841,7 @@ def _field_upload_ticket(conn, *, ticket_no: str, station_no: str, work_kind: st
         "location": location_url,
         "ref_label": "رقم المعاملة",
         "ref_kind": "unknown",
+        "work_order": "",
     }, False
 
 
@@ -851,6 +858,8 @@ def field_upload():
     if request.method == "POST":
         ticket_no = (request.form.get("ticket_no") or "").strip()
         station_no = (request.form.get("station_no") or "").strip()
+        selected_ref_kind = (request.form.get("ref_kind") or "").strip()
+        selected_work_order = (request.form.get("work_order") or "").strip()
         work_kind = (request.form.get("work_kind") or "").strip()
         latitude = (request.form.get("latitude") or "").strip()
         longitude = (request.form.get("longitude") or "").strip()
@@ -896,8 +905,9 @@ def field_upload():
                     ref_label = ticket.get("ref_label") or "رقم المعاملة"
                     stamp_lines = [
                         f"{ref_label}: {canonical_ticket_no}",
+                        f"رقم أمر العمل: {selected_work_order or ticket.get('work_order')}" if (selected_ref_kind == "ticket" or ticket.get("ref_kind") == "ticket") and (selected_work_order or ticket.get("work_order")) else "",
                         f"رقم المحطة: {station_no}",
-                        f"المستخدم: {current_user_name()}",
+                        f"الاسم الكامل: {current_user_name()}",
                         f"الإحداثيات: {latitude},{longitude}" if latitude and longitude else "",
                     ]
                     refs.append(media_svc.save_photo(file, field=field, ticket_no=canonical_ticket_no, stamp_lines=stamp_lines))
