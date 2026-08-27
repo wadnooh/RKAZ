@@ -50,8 +50,8 @@
 
   <div class="user-cards">
     {% for u in rows %}
-    <section class="user-permission-card card" data-user-card>
-      <div class="user-card-head">
+    <details class="user-permission-card card" data-user-card>
+      <summary class="user-card-head">
         <div class="user-identity">
           <div class="user-avatar">{{ (u.full_name or u.username or '?')[:1] }}</div>
           <div>
@@ -70,13 +70,14 @@
           <span class="badge info">{{ tv(u.role) }}</span>
           {% if u.active %}<span class="badge ok">{{ _('نشط') }}</span>{% else %}<span class="badge danger">{{ _('موقوف') }}</span>{% endif %}
         </div>
-      </div>
+      </summary>
 
+      <div class="user-card-body">
       <div class="permission-summary">
         <div class="summary-tile"><span>{{ _('الفعالة') }}</span><strong>{{ u.perm_count }}</strong></div>
         <div class="summary-tile allow"><span>{{ _('منح خاص') }}</span><strong>{{ u.perm_allow_count }}</strong></div>
         <div class="summary-tile deny"><span>{{ _('منع خاص') }}</span><strong>{{ u.perm_deny_count }}</strong></div>
-        <div class="summary-tile"><span>{{ _('ملاحظات') }}</span><strong>{{ u.notes or '—' }}</strong></div>
+        <div class="summary-tile"><span>{{ _('صلاحيات الدور المعروضة') }}</span><strong>{{ u.perm_catalog|length }}</strong></div>
       </div>
 
       <div class="user-actions-row">
@@ -142,9 +143,9 @@
               <div class="permission-page-tabs" data-permission-page-tabs>
                 <button type="button" class="is-active" data-permission-page="all">
                   <span>{{ _('كل الصفحات') }}</span>
-                  <strong>{{ perm_catalog|length }}</strong>
+                  <strong>{{ u.perm_catalog|length }}</strong>
                 </button>
-                {% for page in perm_pages %}
+                {% for page in u.perm_pages %}
                 <button type="button" data-permission-page="{{ page.title }}">
                   <span>{{ page.title }}</span>
                   <strong>{{ page.permissions|length }}</strong>
@@ -153,7 +154,7 @@
               </div>
 
               <div class="permission-list">
-                {% for page in perm_pages %}
+                {% for page in u.perm_pages %}
                 <section class="permission-page-section"
                          data-permission-page-section
                          data-page-section="{{ page.title }}">
@@ -239,7 +240,8 @@
           {% if can('button.users.delete') %}<button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>{% endif %}
         </form>
       </div>
-    </section>
+      </div>
+    </details>
     {% else %}
     <div class="card"><div class="meta">{{ _('لا يوجد مستخدمون') }}</div></div>
     {% endfor %}

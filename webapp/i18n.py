@@ -1227,6 +1227,7 @@ VALUE_EN = {
     'أكمل رقم العطل أو المعاملة ورقم المحطة.': 'Enter the ticket/transaction number and station number.',
     'لا يمكن إنشاء معاملة جديدة من الرفع الميداني. اختر معاملة موجودة من البحث ثم ارفع المرفقات.': 'Field upload cannot create a new transaction. Choose an existing transaction from search, then upload attachments.',
     'تم رفع المرفقات وربطها بالمعاملة الموجودة.': 'Attachments were uploaded and linked to the existing transaction.',
+    'صلاحيات الدور المعروضة': 'Displayed role permissions',
     'إدارة تبويبات العمليات': 'Manage Operations tabs',
     'أضف تبويبات يدوية تحت العمليات والصيانة للعمل المستقبلي — تظهر بنفس أسلوب الشريط الفرعي. اترك المسار فارغاً لصفحة نائبة يمكن ربطها لاحقاً.': 'Add manual tabs under Operations & Maintenance for future work — they appear in the same subnav style. Leave the path empty for a placeholder page you can wire later.',
     'العنوان (عربي)': 'Title (Arabic)',

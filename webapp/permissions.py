@@ -334,9 +334,11 @@ def permission_page_label(key: str, label: str | None = None) -> str:
     return permission_group_label(key)
 
 
-def permission_catalog(lang: str = "ar") -> list[dict[str, str]]:
+def permission_catalog(lang: str = "ar", allowed: set[str] | None = None) -> list[dict[str, str]]:
     rows: list[dict[str, str]] = []
     for key, label in PERM_LABELS.items():
+        if allowed is not None and key not in allowed:
+            continue
         group = permission_group_label(key)
         page = permission_page_label(key, label)
         rows.append(
@@ -350,10 +352,10 @@ def permission_catalog(lang: str = "ar") -> list[dict[str, str]]:
     return rows
 
 
-def permission_pages_catalog(lang: str = "ar") -> list[dict[str, object]]:
+def permission_pages_catalog(lang: str = "ar", allowed: set[str] | None = None) -> list[dict[str, object]]:
     pages: list[dict[str, object]] = []
     page_index: dict[str, dict[str, object]] = {}
-    for perm in permission_catalog(lang):
+    for perm in permission_catalog(lang, allowed):
         title = str(perm["page"])
         page = page_index.get(title)
         if page is None:

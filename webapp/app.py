@@ -5669,9 +5669,12 @@ def users_list():
             if db.user_is_hidden(target):
                 flash(_t("تعذر تحديث صلاحيات هذا المستخدم"), "danger")
             else:
+                editable_perms = permissions.perms_for_role(target["role"])
+                if permissions.normalize_role(target["role"]) == "admin":
+                    editable_perms = set(permissions.ALL_PERMS)
                 db.ensure_user_permission_overrides_table(conn)
-                conn.execute("DELETE FROM user_permission_overrides WHERE user_id=?", (uid,))
-                for perm in permissions.PERM_LABELS:
+                for perm in editable_perms:
+                    conn.execute("DELETE FROM user_permission_overrides WHERE user_id=? AND perm=?", (uid, perm))
                     effect = (request.form.get("perm__" + perm) or "").strip()
                     if effect in {"allow", "deny"}:
                         conn.execute(
@@ -5757,6 +5760,8 @@ def users_list():
         row["role_perm_set"] = permissions.perms_for_role(row["role"])
         if row["role"] == "admin":
             row["role_perm_set"] = set(permissions.ALL_PERMS)
+        row["perm_catalog"] = permissions.permission_catalog(session.get("lang") or "ar", row["role_perm_set"])
+        row["perm_pages"] = permissions.permission_pages_catalog(session.get("lang") or "ar", row["role_perm_set"])
         row["perm_count"] = len(permissions.effective_perms_for_user(row))
         row["perm_allow_count"] = sum(1 for effect in row["perm_overrides"].values() if effect == "allow")
         row["perm_deny_count"] = sum(1 for effect in row["perm_overrides"].values() if effect == "deny")

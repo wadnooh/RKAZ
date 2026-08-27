@@ -2115,19 +2115,34 @@ a.quality-metric.active {
 }
 .user-cards {
   display: grid;
-  gap: 14px;
+  gap: 8px;
 }
 .user-permission-card {
   display: grid;
-  gap: 14px;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
 }
 .user-card-head {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 14px;
-  padding-bottom: 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  list-style: none;
+}
+.user-card-head::-webkit-details-marker {
+  display: none;
+}
+.user-permission-card[open] .user-card-head {
   border-bottom: 1px solid var(--border);
+  background: #fffdf8;
+}
+.user-card-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
 }
 .user-identity {
   display: flex;
