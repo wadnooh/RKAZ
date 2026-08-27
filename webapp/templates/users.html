@@ -138,6 +138,8 @@
               <span>{{ _('إخفاء أو تعطيل الصلاحية لهذا المستخدم حتى لو كان admin.') }}</span>
             </div>
 
+            <div class="permission-page-tabs" data-permission-page-tabs></div>
+
             <div class="permission-list">
               {% for key, label in perm_labels.items() %}
                 {% set eff = u.perm_overrides.get(key, '') %}
@@ -277,12 +279,15 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
   var search = panel.querySelector("[data-permission-search]");
   var filters = panel.querySelectorAll("[data-permission-filter]");
   var list = panel.querySelector(".permission-list");
+  var pageTabs = panel.querySelector("[data-permission-page-tabs]");
   var rows = panel.querySelectorAll("[data-permission-row]");
   var activeFilter = "all";
+  var activePage = "all";
+  var buckets = [];
 
   function organizeByPage() {
     if (!list || list.getAttribute("data-grouped") === "1") return;
-    var buckets = [];
+    buckets = [];
     var byPage = {};
     Array.prototype.forEach.call(rows, function(row) {
       var page = row.getAttribute("data-page") || row.getAttribute("data-group") || "";
@@ -319,6 +324,36 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
       list.appendChild(details);
     });
     list.setAttribute("data-grouped", "1");
+    renderPageTabs();
+  }
+
+  function renderPageTabs() {
+    if (!pageTabs) return;
+    pageTabs.innerHTML = "";
+    var allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "is-active";
+    allBtn.setAttribute("data-permission-page", "all");
+    allBtn.textContent = {{ _('كل الصفحات')|tojson }};
+    pageTabs.appendChild(allBtn);
+
+    buckets.forEach(function(bucket) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.setAttribute("data-permission-page", bucket.title || "");
+      btn.innerHTML = "<span>" + (bucket.title || {{ _('عام')|tojson }}) + "</span><strong>" + bucket.rows.length + "</strong>";
+      pageTabs.appendChild(btn);
+    });
+
+    pageTabs.addEventListener("click", function(ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest("[data-permission-page]") : null;
+      if (!btn) return;
+      activePage = btn.getAttribute("data-permission-page") || "all";
+      Array.prototype.forEach.call(pageTabs.querySelectorAll("[data-permission-page]"), function(item) {
+        item.classList.toggle("is-active", item === btn);
+      });
+      applyFilters();
+    });
   }
 
   organizeByPage();
@@ -327,19 +362,21 @@ document.querySelectorAll("[data-permission-panel]").forEach(function(panel) {
     var query = (search && search.value ? search.value : "").trim().toLowerCase();
     Array.prototype.forEach.call(rows, function(row) {
       var effect = row.getAttribute("data-effect") || "role";
+      var page = row.getAttribute("data-page") || "";
       var haystack = row.getAttribute("data-search") || "";
       var matchesText = !query || haystack.indexOf(query) !== -1;
       var matchesFilter = activeFilter === "all"
         || (activeFilter === "custom" && effect !== "role")
         || effect === activeFilter;
-      row.hidden = !(matchesText && matchesFilter);
+      var matchesPage = activePage === "all" || page === activePage;
+      row.hidden = !(matchesText && matchesFilter && matchesPage);
     });
     Array.prototype.forEach.call(panel.querySelectorAll("[data-permission-page-section]"), function(section) {
       var visible = section.querySelectorAll("[data-permission-row]:not([hidden])").length;
       section.hidden = visible === 0;
       var badge = section.querySelector("summary .badge");
       if (badge) badge.textContent = visible + " " + {{ _('صلاحية')|tojson }};
-      if (query || activeFilter !== "all") section.open = visible > 0;
+      if (activePage !== "all" || query || activeFilter !== "all") section.open = visible > 0;
     });
   }
 

@@ -2205,6 +2205,49 @@ a.quality-metric.active {
   border-radius: 8px;
   padding: 10px;
 }
+.permission-page-tabs {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 2px 8px;
+  border-bottom: 1px solid #edf0f3;
+  scroll-snap-type: x proximity;
+}
+.permission-page-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 8px 12px;
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+  scroll-snap-align: start;
+}
+.permission-page-tabs button strong {
+  min-width: 24px;
+  height: 24px;
+  display: grid;
+  place-items: center;
+  border-radius: 6px;
+  background: #f7f9fb;
+  color: #576575;
+  font-size: 0.78rem;
+}
+.permission-page-tabs button.is-active {
+  background: #806f49;
+  border-color: #806f49;
+  color: #fff;
+}
+.permission-page-tabs button.is-active strong {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
 .permission-list {
   display: grid;
   grid-template-columns: 1fr;
