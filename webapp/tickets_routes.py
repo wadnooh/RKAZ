@@ -18,6 +18,7 @@ from webapp import permissions
 from webapp import tickets_excel
 from webapp import media as media_svc
 from webapp import helpers
+from webapp import whatsapp
 
 tickets_bp = Blueprint(
     "tickets", __name__, url_prefix="/tickets", template_folder="templates"
@@ -315,12 +316,14 @@ def view(ticket_id):
     raw_step = (request.args.get("step") or "data").strip()
     edit_step = raw_step if raw_step in step_keys else (step_keys[0] if step_keys else "data")
     next_step = _next_step(edit_step) if edit_mode else None
+    whatsapp_share_url = whatsapp.ticket_whatsapp_url(ticket, request.host_url)
     return render_template(
         "ticket_view.html", ticket=ticket, related=related, quality_workflow=quality_workflow,
         has_boq_catalog=has_boq, boq_file=boq_file,
         emergency_ratio=float(settings.get("emergency_ratio") or 0),
         edit_mode=edit_mode, can_mutate=can_mutate, wizard_steps=wizard_steps,
         edit_step=edit_step, next_step=next_step, step_labels=dict(wizard_steps),
+        whatsapp_share_url=whatsapp_share_url,
     )
 
 @tickets_bp.route("/<int:ticket_id>/edit", methods=["GET", "POST"])
@@ -526,12 +529,14 @@ def print_view(ticket_id):
         quantities = legacy_qty
         for q in quantities:
             q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
+    whatsapp_url = whatsapp.ticket_whatsapp_url(ticket, request.host_url)
     return render_template(
         "ticket_print.html", ticket=ticket, quantities=quantities, photos=photos,
         coordination=coordination, metering=metering,
         printed_at=datetime.now().strftime("%d-%m-%Y %H:%M:%S"),
         emergency_ratio_applied=emergency_applied if boq_lines else settings_ratio,
         boq_base_total=boq_base,
+        whatsapp_url=whatsapp_url,
     )
 
 @tickets_bp.route("/export.xlsx")

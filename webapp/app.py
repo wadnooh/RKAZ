@@ -40,6 +40,7 @@ from webapp import mailer
 from webapp import programmer_guard as prog_guard
 from webapp import reports as reports_svc
 from webapp import helpers
+from webapp import whatsapp
 
 _t = helpers.t
 _lang = helpers.lang
@@ -1801,6 +1802,7 @@ def reinforcement_work_view(row_id):
     for q in related["quantities"]:
         qty_total += float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
     conn.close()
+    whatsapp_share_url = whatsapp.reinforcement_whatsapp_url(work, request.host_url)
     return render_template(
         "reinforcement_work_view.html",
         work=work,
@@ -1813,6 +1815,7 @@ def reinforcement_work_view(row_id):
         section="reinforcement",
         section_meta=_smeta(SECTION_META.get("reinforcement")),
         section_modules=modules_for_section("reinforcement"),
+        whatsapp_share_url=whatsapp_share_url,
     )
 
 
