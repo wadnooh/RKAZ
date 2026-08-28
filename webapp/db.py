@@ -719,6 +719,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 WHERE coord_kind IS NULL OR trim(coord_kind)=''
                 """
             )
+        if "tickets" in existing or "tickets" in created:
+            if _ensure_column(conn, "tickets", "has_excavation"):
+                created.append("tickets.has_excavation")
         # ربط معاملات الحفر بالتنسيقات لبدء إجراءات الإخلاء
         n_exc = link_excavation_transactions_to_coordination(conn)
         if n_exc:
@@ -959,6 +962,7 @@ def init_db():
             photographed TEXT,
             quantities_done TEXT,
             asphalt_clearance TEXT,
+            has_excavation TEXT,
             metering_status TEXT,
             consultant_approval TEXT,
             invoice_status TEXT,
@@ -2760,10 +2764,16 @@ def collect_excavation_ticket_nos(conn=None) -> list[str]:
         SELECT ticket_no FROM tickets
         WHERE ticket_no IS NOT NULL AND trim(ticket_no) != ''
           AND (
-            IFNULL(asphalt_clearance,'') = 'نعم'
-            OR IFNULL(fault_type,'') LIKE '%حفر%'
-            OR IFNULL(notes,'') LIKE '%حفر%'
-            OR IFNULL(location,'') LIKE '%حفر%'
+            IFNULL(has_excavation,'') = 'نعم'
+            OR (
+                IFNULL(has_excavation,'') != 'لا'
+                AND (
+                    IFNULL(asphalt_clearance,'') = 'نعم'
+                    OR IFNULL(fault_type,'') LIKE '%حفر%'
+                    OR IFNULL(notes,'') LIKE '%حفر%'
+                    OR IFNULL(location,'') LIKE '%حفر%'
+                )
+            )
           )
         """
     ).fetchall():
@@ -2791,6 +2801,16 @@ def collect_excavation_ticket_nos(conn=None) -> list[str]:
     ).fetchall():
         _add(row["ticket_no"])
 
+    # استبعاد أي تذكرة محددة صراحة كـ "لا" (بدون حفر)
+    explicit_no = {
+        row["ticket_no"]
+        for row in conn.execute(
+            "SELECT ticket_no FROM tickets WHERE IFNULL(has_excavation,'') = 'لا'"
+        ).fetchall()
+        if row["ticket_no"]
+    }
+    found = found - explicit_no
+
     if own:
         conn.close()
     return sorted(found)
@@ -2805,16 +2825,27 @@ def ticket_has_excavation(ticket_no: str, conn=None) -> bool:
     hit = False
     row = conn.execute(
         """
-        SELECT asphalt_clearance, fault_type, notes, location
+        SELECT has_excavation, asphalt_clearance, fault_type, notes, location
         FROM tickets WHERE ticket_no=? LIMIT 1
         """,
         (tno,),
     ).fetchone()
-    if row and (
-        (row["asphalt_clearance"] or "") == "نعم"
-        or is_excavation_text(row["fault_type"], row["notes"], row["location"])
-    ):
-        hit = True
+    if row:
+        val = str(row["has_excavation"] or "").strip()
+        if val == "نعم":
+            if own:
+                conn.close()
+            return True
+        elif val == "لا":
+            if own:
+                conn.close()
+            return False
+
+        if (
+            (row["asphalt_clearance"] or "") == "نعم"
+            or is_excavation_text(row["fault_type"], row["notes"], row["location"])
+        ):
+            hit = True
     if not hit:
         hit = bool(
             conn.execute(

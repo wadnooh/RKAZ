@@ -55,7 +55,7 @@
     </div>
   </div>
 
-  {% if can('section.quality') %}
+  {% if can('section.quality') and ticket.has_excavation %}
   <div class="qflow-card card">
     {% set ticket_no = ticket.ticket_no %}
     {% set linked_section = 'ops' %}
@@ -141,6 +141,14 @@
       <select name="asphalt_clearance"><option value="">—</option>{% for x in lists.yes_no %}<option value="{{ x }}" {% if ticket.asphalt_clearance==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
     <div class="field">
+      <label>{{ _('معاملة بها حفر') }}</label>
+      <select name="has_excavation">
+        <option value="">{{ _('تلقائي (حسب نوع العمل والبنود)') }}</option>
+        <option value="نعم" {% if ticket.has_excavation_raw == 'نعم' %}selected{% endif %}>{{ tv('نعم') }}</option>
+        <option value="لا" {% if ticket.has_excavation_raw == 'لا' %}selected{% endif %}>{{ tv('لا') }}</option>
+      </select>
+    </div>
+    <div class="field">
       <label>{{ _('حالة التمتير') }}</label>
       <select name="metering_status"><option value="">—</option>{% for x in lists.metering_status %}<option value="{{ x }}" {% if ticket.metering_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
@@ -188,6 +196,7 @@
     <div class="meta-item"><div class="k">{{ _('تم التصوير') }}</div><div class="v">{{ tv(ticket.photographed) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الكميات مكتملة') }}</div><div class="v">{{ tv(ticket.quantities_done) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('حالة التمتير') }}</div><div class="v">{{ tv(ticket.metering_status) or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('معاملة بها حفر') }}</div><div class="v">{% if ticket.has_excavation %}<span class="badge ok">{{ tv('نعم') }}</span>{% else %}<span class="badge">{{ tv('لا') }}</span>{% endif %}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ ticket.notes or '—' }}</div></div>
   </div>
@@ -557,7 +566,7 @@
     </div>
   </div>
   {% endif %}
-  {% if editing and can('tickets.write') and can('modules.write') %}
+  {% if editing and can('tickets.write') and can('modules.write') and ticket.has_excavation %}
   <div class="toolbar" {% if step!='done' %}style="margin:0"{% endif %}>
     <div>
       <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('ربط بأقسام أخرى') }}</h3>

@@ -275,14 +275,14 @@
             {% if can_mod_write and name == 'new_coordinations' and r.transferred_license_id %}
             <a class="btn ghost" href="{{ url_for('module_edit', name='issued_licenses', row_id=r.transferred_license_id) }}">{{ _('الرخصة') }}</a>
             {% endif %}
-            {% if can('button.quality.workflow') and name == 'construction_works' and r.work_no %}
+            {% if can('button.quality.workflow') and name == 'construction_works' and r.work_no and ('حفر' in (r.work_type or '') or 'حفر' in (r.notes or '') or 'حفر' in (r.site or '') or r.ticket_no) %}
             <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
               <a href="{{ url_for('quality_workflow_go', stage='coords', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions', district=r.district or r.site or none, location=r.site or none, work_desc=r.work_type or none) }}">1 {{ _('تنسيق') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='permits', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">2 {{ _('تصريح') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='evacuations', construction_work_no=r.work_no, ticket_no=r.ticket_no or none, linked_section='constructions') }}">3 {{ _('إخلاء') }}</a>
             </span>
             {% endif %}
-            {% if can('button.quality.workflow') and name == 'projects' and r.project_code %}
+            {% if can('button.quality.workflow') and name == 'projects' and r.project_code and ('حفر' in (r.project_name or '') or 'حفر' in (r.notes or '') or 'حفر' in (r.site or '') or 'حفر' in (r.project_type or '') or r.ticket_no) %}
             <span class="qflow-mini" title="{{ _('مسار الجودة') }}">
               <a href="{{ url_for('quality_workflow_go', stage='coords', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects', work_desc=r.project_name or none) }}">1 {{ _('تنسيق') }}</a>
               <a href="{{ url_for('quality_workflow_go', stage='permits', project_code=r.project_code, ticket_no=r.ticket_no or none, linked_section='projects') }}">2 {{ _('تصريح') }}</a>

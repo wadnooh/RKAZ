@@ -69,7 +69,7 @@
   </div>
   {% endif %}
 
-  {% if mode == 'edit' and name == 'construction_works' and can('section.quality') %}
+  {% if mode == 'edit' and name == 'construction_works' and can('section.quality') and quality_workflow %}
   <div class="qflow-card">
     {% set ticket_no = row.ticket_no or '' %}
     {% set construction_work_no = row.work_no or '' %}
@@ -79,7 +79,7 @@
     {% set work_desc = row.work_type or '' %}
     {% include "_quality_workflow_actions.html" %}
   </div>
-  {% elif mode == 'edit' and name == 'projects' and can('section.quality') %}
+  {% elif mode == 'edit' and name == 'projects' and can('section.quality') and quality_workflow %}
   <div class="qflow-card">
     {% set ticket_no = row.ticket_no or '' %}
     {% set project_code = row.project_code or '' %}

@@ -27,7 +27,7 @@ TICKET_FIELDS = [
     "ticket_no", "rekaz_code", "receive_date", "district", "receive_time", "agent",
     "station_no", "feeder_no", "location", "fault_type", "classification", "team",
     "dispatch_time", "arrival_time", "status", "execution_date", "photographed",
-    "quantities_done", "asphalt_clearance", "metering_status", "consultant_approval",
+    "quantities_done", "asphalt_clearance", "has_excavation", "metering_status", "consultant_approval",
     "invoice_status", "work_order", "invoice_no", "sap_status", "items_value", "notes",
 ]
 
@@ -267,10 +267,10 @@ def view(ticket_id):
             conn.execute("SELECT * FROM issued_licenses WHERE ticket_no=? ORDER BY id DESC", (tno,)).fetchall()
         ),
     }
-    quality_workflow = db.quality_workflow_for_ref(ticket_no=tno, linked_section="ops", conn=conn)
     boq_file = db.active_contract_boq_file(conn)
     has_boq = db.has_boq_catalog(conn)
     has_excavation = db.ticket_has_excavation(tno, conn)
+    quality_workflow = db.quality_workflow_for_ref(ticket_no=tno, linked_section="ops", conn=conn) if has_excavation else None
     excavation_link = None
     if has_excavation:
         excavation_link = db.ensure_excavation_coordination(
@@ -280,7 +280,8 @@ def view(ticket_id):
         related["coordination"] = db.rows_to_dicts(conn.execute("SELECT * FROM coordination WHERE ticket_no=?", (tno,)).fetchall())
         related["clearances"] = db.rows_to_dicts(conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall())
     else:
-        related["clearances"] = db.rows_to_dicts(conn.execute("SELECT * FROM quality_clearances WHERE ticket_no=?", (tno,)).fetchall())
+        related["coordination"] = []
+        related["clearances"] = []
     conn.commit()
     conn.close()
     for q in related["quantities"]:
@@ -302,6 +303,7 @@ def view(ticket_id):
     ticket["final_value"] = helpers.final_value(base_for_final, ratio=emergency_applied)
     ticket["boq_final_total"] = ticket["final_value"]
     ticket["has_excavation"] = has_excavation
+    ticket["has_excavation_raw"] = row["has_excavation"] if "has_excavation" in row.keys() else ""
     can_mutate = permissions.can("tickets.write")
     wants_edit = request.args.get("edit") == "1"
     if wants_edit and not can_mutate:

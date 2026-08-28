@@ -607,6 +607,7 @@ PHRASE_EN = {
     'عرض الكل': 'Show all',
     'معاملات الحفر المرتبطة بالتنسيق / الإخلاء': 'Excavation transactions linked to coordination / clearance',
     'معاملة بها حفر': 'Transaction with excavation',
+    'تلقائي (حسب نوع العمل والبنود)': 'Auto (based on work type & items)',
     'تم ربطها بالتنسيقات لبدء إجراءات إخلاء الأسفلت.': 'Linked to coordination to start asphalt clearance procedures.',
     'فتح التنسيق': 'Open coordination',
     'متابعة الإخلاء': 'Follow clearance',

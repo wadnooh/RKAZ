@@ -5063,19 +5063,30 @@ def module_edit(name, row_id):
     custody_lines = []
     supply_lines = []
     if name == "construction_works":
-        quality_workflow = db.quality_workflow_for_ref(
-            ticket_no=data.get("ticket_no"),
-            construction_work_no=data.get("work_no"),
-            linked_section="constructions",
-            conn=conn,
+        has_excav = (
+            db.is_excavation_work_type(data.get("work_type"))
+            or db.is_excavation_text(data.get("work_type"), data.get("notes"), data.get("site"))
+            or (data.get("ticket_no") and db.ticket_has_excavation(data.get("ticket_no"), conn))
         )
+        if has_excav:
+            quality_workflow = db.quality_workflow_for_ref(
+                ticket_no=data.get("ticket_no"),
+                construction_work_no=data.get("work_no"),
+                linked_section="constructions",
+                conn=conn,
+            )
     elif name == "projects":
-        quality_workflow = db.quality_workflow_for_ref(
-            ticket_no=data.get("ticket_no"),
-            project_code=data.get("project_code"),
-            linked_section="projects",
-            conn=conn,
+        has_excav = (
+            db.is_excavation_text(data.get("project_name"), data.get("notes"), data.get("site"), data.get("project_type"))
+            or (data.get("ticket_no") and db.ticket_has_excavation(data.get("ticket_no"), conn))
         )
+        if has_excav:
+            quality_workflow = db.quality_workflow_for_ref(
+                ticket_no=data.get("ticket_no"),
+                project_code=data.get("project_code"),
+                linked_section="projects",
+                conn=conn,
+            )
     elif name == "external_purchases":
         purchase_lines = db.list_purchase_lines(row_id, conn=conn)
     elif name == "custody":
