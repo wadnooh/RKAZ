@@ -4375,12 +4375,35 @@ def module_export_excel(name):
     stamp = datetime.now().strftime("%Y%m%d")
     suffix = "-بدون-مبلغ" if packed["missing_amount"] else ""
     title = _t(module.get("title") or name)
+    sec_meta = SECTION_META.get(module.get("section", "ops"), {})
+    filters = [
+        f"التبويب: {_t(sec_meta.get('title') or 'العمليات والصيانة')}",
+        f"التبويب الفرعي: {title}",
+    ]
+    if packed["dept_filter"]:
+        filters.append(f"القسم: {packed['dept_filter']}")
+    if packed["source_filter"]:
+        filters.append(f"التخصص / المصدر: {packed['source_filter']}")
+    if packed["ticket_filter"]:
+        filters.append(f"رقم العطل: {packed['ticket_filter']}")
+    if packed["item_filter"]:
+        filters.append(f"المادة: {packed['item_filter']}")
+    if packed["date_from"] or packed["date_to"]:
+        filters.append(f"الفترة: {packed['date_from'] or '—'} إلى {packed['date_to'] or '—'}")
+    if packed["excavation_filter"]:
+        filters.append("حفر فقط")
+    if packed["linked_section_filter"]:
+        filters.append(f"مرتبط بتبويب: {_linked_section_label(packed['linked_section_filter'])}")
+    if packed["missing_amount"]:
+        filters.append("بدون مبلغ")
+
     return _simple_xlsx_export(
-        title,
-        headers,
-        rows,
-        list_cols,
-        f"{name}{suffix}-{stamp}.xlsx",
+        title=f"{_t(sec_meta.get('title') or 'العمليات والصيانة')} - {title}",
+        headers=headers,
+        rows=rows,
+        field_keys=list_cols,
+        download_name=f"{name}{suffix}-{stamp}.xlsx",
+        filters=filters,
     )
 
 

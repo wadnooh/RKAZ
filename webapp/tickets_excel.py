@@ -353,7 +353,7 @@ def build_tickets_template() -> bytes:
     return brand.save_workbook_bytes(wb)
 
 
-def export_tickets(rows: list[dict] | None = None) -> bytes:
+def export_tickets(rows: list[dict] | None = None, title: str | None = None, filters: list[str] | None = None) -> bytes:
     """تصدير الأعطال بترويسة احترافية وشعار — أعمدة مطابقة للقالب."""
     if rows is None:
         conn = db.connect()
@@ -365,10 +365,39 @@ def export_tickets(rows: list[dict] | None = None) -> bytes:
     ws.title = "الأعطال"
     ncol = len(EXPORT_HEADERS)
 
+    now_dt = datetime.now()
+    year_val = str(now_dt.year)
+    header_title = title or f"العمليات والصيانة - الشمال - الأعطال - {year_val}"
+
+    # حساب إجمالي المبالغ
+    total_amt = 0.0
+    for r in rows:
+        val = r.get("final_value") or r.get("items_value") or 0
+        try:
+            total_amt += float(str(val).replace(",", "").strip() or 0)
+        except Exception:
+            pass
+
+    meta_lines = [
+        "التبويب: العمليات والصيانة",
+        "التبويب الفرعي: الأعطال",
+    ]
+    if filters:
+        for f in filters:
+            if f:
+                meta_lines.append(str(f))
+
+    summary_lines = [
+        f"إجمالي المبلغ: {total_amt:,.2f} ر.س",
+        f"عدد السجلات: {len(rows)}",
+    ]
+
     header_row = brand.apply_brand_header(
         ws,
-        title="تصدير الأعطال",
+        title=header_title,
         ncol=ncol,
+        meta_lines=meta_lines,
+        summary_lines=summary_lines,
     )
     brand.write_header_row(ws, EXPORT_HEADERS, header_row, widths=_COL_WIDTHS)
 

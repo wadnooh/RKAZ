@@ -373,8 +373,8 @@ def xlsx_sheet_title(title, fallback="Export"):
     return raw[:31]
 
 
-def simple_xlsx_export(title, headers, rows, field_keys, download_name):
-    """تصدير Excel بسيط للصفوف المفلترة."""
+def simple_xlsx_export(title, headers, rows, field_keys, download_name, filters=None, summary_lines=None):
+    """تصدير Excel احترافي للصفوف المفلترة بترويسة وهوية كاملة."""
     from openpyxl import Workbook
     from webapp import excel_brand as brand
 
@@ -382,7 +382,34 @@ def simple_xlsx_export(title, headers, rows, field_keys, download_name):
     ws = wb.active
     ws.title = xlsx_sheet_title(title)
     ncol = len(headers)
-    header_row = brand.apply_brand_header(ws, title=title, ncol=ncol)
+
+    # حساب إجمالي المبالغ إن وجدت حقول مبالغ
+    money_keys = [k for k in field_keys if k in ("final_value", "items_value", "value", "amount", "total", "price", "unit_price", "boq_base_total")]
+    total_amt = 0.0
+    for r in rows or []:
+        if isinstance(r, dict):
+            for mk in money_keys:
+                v = r.get(mk)
+                if v not in (None, ""):
+                    try:
+                        total_amt += float(str(v).replace(",", "").strip() or 0)
+                        break
+                    except Exception:
+                        pass
+
+    if summary_lines is None:
+        summary_lines = []
+        if total_amt > 0:
+            summary_lines.append(f"إجمالي المبلغ: {total_amt:,.2f} ر.س")
+        summary_lines.append(f"عدد السجلات: {len(rows or [])}")
+
+    header_row = brand.apply_brand_header(
+        ws,
+        title=title,
+        ncol=ncol,
+        meta_lines=filters,
+        summary_lines=summary_lines,
+    )
     brand.write_header_row(ws, headers, header_row)
     start = header_row + 1
     for offset, row in enumerate(rows or []):

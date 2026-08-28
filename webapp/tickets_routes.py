@@ -553,7 +553,19 @@ def export_excel():
     rows, _missing = _load_filtered_tickets(
         q=q, status=status, date_from=date_from, date_to=date_to, missing_amount=missing_amount, classification=classification,
     )
-    data = tickets_excel.export_tickets(rows)
+    filters = []
+    if classification:
+        filters.append(f"المنطقة: {classification}")
+    if status:
+        filters.append(f"الحالة: {status}")
+    if date_from or date_to:
+        filters.append(f"الفترة: {date_from or '—'} إلى {date_to or '—'}")
+    if q:
+        filters.append(f"بحث: {q}")
+    if missing_amount:
+        filters.append("بدون مبلغ")
+
+    data = tickets_excel.export_tickets(rows, filters=filters)
     stamp = datetime.now().strftime("%Y%m%d")
     suffix = "-بدون-مبلغ" if missing_amount else ""
     return send_file(
