@@ -1555,15 +1555,15 @@ def required_perm_for_request() -> str | None:
     if ep in {"audit_log_home", "audit_log_page"}:
         return None if has_perm("audit.read") else "audit.read"
 
-    if ep in {"export_tickets_excel", "tickets.export_pdf"}:
-        return None if has_perm("export") else "export"
+    if ep in {"export_tickets_excel", "tickets.export_pdf", "tickets.report_view"}:
+        return None if has_perm("export") or has_perm("tickets.read") else "tickets.read"
 
-    if ep in {"module_export_excel", "module_export_pdf"}:
+    if ep in {"module_export_excel", "module_export_pdf", "module_report_view"}:
         mod_name = args.get("name")
         button_perm = f"button.module.{mod_name}.export"
-        if not has_perm(button_perm):
+        if not has_perm(button_perm) and not has_perm("modules.read"):
             return button_perm
-        return None if has_perm("export") else "export"
+        return None if has_perm("export") or has_perm("modules.read") else "modules.read"
 
     if ep in {"export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf"}:
         return None if has_perm("export") else "export"

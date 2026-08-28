@@ -10,6 +10,7 @@ from flask import (
     render_template,
     request,
     send_file,
+    session,
     url_for,
 )
 
@@ -19,6 +20,7 @@ from webapp import tickets_excel
 from webapp import media as media_svc
 from webapp import helpers
 from webapp import whatsapp
+from webapp import reports as reports_svc
 
 tickets_bp = Blueprint(
     "tickets", __name__, url_prefix="/tickets", template_folder="templates"
@@ -624,4 +626,88 @@ def export_pdf():
         as_attachment=True,
         download_name=f"الأعطال{suffix}-{stamp}.pdf",
         mimetype="application/pdf",
+    )
+
+
+@tickets_bp.route("/report")
+@permissions.require_perm("tickets.read")
+def report_view():
+    q = (request.args.get("q") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    date_from = (request.args.get("date_from") or "").strip()
+    date_to = (request.args.get("date_to") or "").strip()
+    classification = (request.args.get("classification") or "").strip()
+    missing_amount = bool((request.args.get("missing_amount") or "").strip())
+    rows, _missing = _load_filtered_tickets(
+        q=q,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        missing_amount=missing_amount,
+        classification=classification,
+    )
+    headers = [
+        helpers.t("رقم العطل"),
+        helpers.t("كود ER"),
+        helpers.t("أمر العمل"),
+        helpers.t("التاريخ"),
+        helpers.t("المحطة"),
+        helpers.t("الفرقة"),
+        helpers.t("المندوب"),
+        helpers.t("الحي"),
+        helpers.t("نوع العطل"),
+        helpers.t("حالة الحفر"),
+        helpers.t("الحالة"),
+        helpers.t("القيمة النهائية"),
+    ]
+    fields = [
+        "ticket_no", "rekaz_code", "work_order", "receive_date", "station_no",
+        "team", "agent", "district", "fault_type", "has_excavation", "status", "final_value",
+    ]
+    # enrich formatted values for display
+    enriched_rows = []
+    for r in rows:
+        row_dict = dict(r)
+        if row_dict.get("has_excavation") is True or str(row_dict.get("has_excavation")).strip() in ("1", "نعم"):
+            row_dict["has_excavation"] = helpers.t("نعم")
+        elif row_dict.get("has_excavation") is False or str(row_dict.get("has_excavation")).strip() in ("0", "لا"):
+            row_dict["has_excavation"] = helpers.t("لا")
+        else:
+            row_dict["has_excavation"] = helpers.t("لا")
+        enriched_rows.append(row_dict)
+
+    analysis = reports_svc.analyze_report_rows(rows, amount_keys=["final_value"])
+    now_dt = datetime.now()
+    year_val = str(now_dt.year)
+    month_val = reports_svc.ARABIC_MONTHS.get(now_dt.month, str(now_dt.month))
+
+    period_text = f"سنة {year_val} - {month_val}"
+    if date_from or date_to:
+        period_text = f"من {date_from or 'البداية'} إلى {date_to or 'اليوم'}"
+
+    # WhatsApp share URL for report
+    wa_msg = f"📊 *تقرير الأعطال — شركة ركاز الإنجاز*\n▫️ عدد السجلات: {len(rows)}\n▫️ إجمالي المبلغ: {analysis['total_amount']:,.2f} ر.س\n▫️ الفترة: {period_text}\n🔗 عرض التقرير: {request.base_url}"
+    whatsapp_share_url = f"https://wa.me/?text={reports_svc.quote(wa_msg)}"
+
+    return render_template(
+        "report_export_print.html",
+        title_text=helpers.t("تقرير الأعطال"),
+        section_title=helpers.t("العمليات والصيانة"),
+        tab_title=helpers.t("الأعطال"),
+        area_title=classification or (f"{helpers.t('بحث')}: {q}" if q else helpers.t("الكل")),
+        period_text=period_text,
+        issued_at=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        printed_by_name=session.get("full_name") or session.get("username") or "مدير النظام",
+        printed_by_username=session.get("username") or "admin",
+        report_number=str(len(rows)) + now_dt.strftime("%d%H"),
+        year_val=year_val,
+        month_val=month_val,
+        total_amount=analysis["total_amount"],
+        unique_ref_count=analysis["unique_ref_count"],
+        months_distribution=analysis["months_distribution"],
+        headers=headers,
+        field_keys=fields,
+        rows=enriched_rows,
+        whatsapp_share_url=whatsapp_share_url,
+        pdf_download_url=url_for(".export_pdf") + (f"?{request.query_string.decode('utf-8')}" if request.query_string else ""),
     )

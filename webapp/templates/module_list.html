@@ -61,7 +61,9 @@
     </div>
     <div class="actions">
       {% set can_mod_write = can('modules.write') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
-      {% set can_mod_delete = can('modules.delete') and (name not in ['quantities','photos','metering'] or can('tickets.write')) %}
+      {% if can('button.module.' ~ name ~ '.export') or can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_report_view', name=name, ticket_no=ticket_filter or none, item_no=item_filter or none, source=source_filter or none, department=department_filter or none, date_from=date_from or none, date_to=date_to or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none, missing_amount=1 if missing_amount else none) }}" target="_blank" style="font-weight:700;">{{ _('عرض التقرير') }}</a>
+      {% endif %}
       {% if export_href and can('button.module.' ~ name ~ '.export') %}
       <a class="btn ghost" href="{{ export_href }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>
       {% endif %}

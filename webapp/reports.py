@@ -41,6 +41,92 @@ def pct(value) -> str:
     return f"{_num(value):.1f}%"
 
 
+ARABIC_MONTHS = {
+    1: "يناير", 2: "فبراير", 3: "مارس", 4: "أبريل", 5: "مايو", 6: "يونيو",
+    7: "يوليو", 8: "أغسطس", 9: "سبتمبر", 10: "أكتوبر", 11: "نوفمبر", 12: "ديسمبر",
+}
+
+
+def analyze_report_rows(
+    rows: list[dict],
+    amount_keys: list[str] | None = None,
+    ref_keys: list[str] | None = None,
+    date_keys: list[str] | None = None,
+) -> dict:
+    if amount_keys is None:
+        amount_keys = ["final_value", "items_value", "value", "amount", "total", "price", "unit_price", "boq_base_total"]
+    if ref_keys is None:
+        ref_keys = ["ticket_no", "work_order", "rekaz_code", "work_no", "project_code", "license_no", "voucher_no", "item_no", "id"]
+    if date_keys is None:
+        date_keys = ["receive_date", "work_date", "execution_date", "tx_date", "date", "created_at"]
+
+    total_amount = 0.0
+    unique_refs = set()
+    months_map: dict[str, dict[str, Any]] = {}
+
+    for r in rows:
+        # Amount calculation
+        for ak in amount_keys:
+            if ak in r and r[ak] not in (None, ""):
+                try:
+                    val_clean = str(r[ak]).replace(",", "").strip()
+                    if val_clean:
+                        total_amount += float(val_clean)
+                        break
+                except (ValueError, TypeError):
+                    pass
+
+        # Reference unique calculation
+        for rk in ref_keys:
+            if rk in r and r[rk] not in (None, ""):
+                val_ref = str(r[rk]).strip()
+                if val_ref:
+                    unique_refs.add(val_ref)
+                    break
+
+        # Date and monthly grouping
+        d_val = ""
+        for dk in date_keys:
+            if dk in r and r[dk] not in (None, ""):
+                d_val = str(r[dk]).strip()
+                break
+
+        m_name = ""
+        if d_val:
+            try:
+                parts = d_val.split(" ")[0].split("T")[0].split("-")
+                if len(parts) >= 2:
+                    m_num = int(parts[1])
+                    m_name = ARABIC_MONTHS.get(m_num, f"شهر {m_num}")
+            except Exception:
+                m_name = ""
+        if not m_name:
+            now_m = datetime.now().month
+            m_name = ARABIC_MONTHS.get(now_m, str(now_m))
+
+        if m_name not in months_map:
+            months_map[m_name] = {"month": m_name, "count": 0, "total": 0.0}
+        months_map[m_name]["count"] += 1
+
+        row_amt = 0.0
+        for ak in amount_keys:
+            if ak in r and r[ak] not in (None, ""):
+                try:
+                    val_clean = str(r[ak]).replace(",", "").strip()
+                    if val_clean:
+                        row_amt = float(val_clean)
+                        break
+                except Exception:
+                    pass
+        months_map[m_name]["total"] += row_amt
+
+    return {
+        "total_amount": total_amount,
+        "unique_ref_count": len(unique_refs) if unique_refs else len(rows),
+        "months_distribution": list(months_map.values()),
+    }
+
+
 def _setting_ratio(settings: dict, key: str) -> float:
     return max(0.0, min(100.0, _num((settings or {}).get(key))))
 

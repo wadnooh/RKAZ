@@ -4447,6 +4447,63 @@ def module_export_pdf(name):
     )
 
 
+@app.route("/module/<name>/report")
+@login_required
+def module_report_view(name):
+    module = MODULES.get(name)
+    if not module:
+        flash(_t("القسم غير موجود"), "danger")
+        return redirect(url_for("ops_home"))
+    packed = _load_module_list_rows(name, module)
+    rows = packed["rows"]
+    list_cols = list(module.get("list_cols") or [f[0] for f in module.get("fields") or []])
+    label_map = {f[0]: f[1] for f in module.get("fields") or []}
+    headers = [_t(label_map.get(k, k)) for k in list_cols]
+
+    money_keys = _module_money_keys(name, module)
+    analysis = reports_svc.analyze_report_rows(rows, amount_keys=money_keys)
+
+    now_dt = datetime.now()
+    year_val = str(now_dt.year)
+    month_val = reports_svc.ARABIC_MONTHS.get(now_dt.month, str(now_dt.month))
+    date_from = packed.get("date_from") or ""
+    date_to = packed.get("date_to") or ""
+    period_text = f"سنة {year_val} - {month_val}"
+    if date_from or date_to:
+        period_text = f"من {date_from or 'البداية'} إلى {date_to or 'اليوم'}"
+
+    sec_meta = SECTION_META.get(module.get("section", "ops"), {})
+    sec_title = _t(sec_meta.get("title") or "العمليات والصيانة")
+    tab_title = _t(module.get("title") or name)
+    area_title = packed.get("dept_filter") or packed.get("source_filter") or _t("الكل")
+
+    wa_msg = f"📊 *تقرير {tab_title} — شركة ركاز الإنجاز*\n▫️ عدد السجلات: {len(rows)}\n▫️ إجمالي المبلغ: {analysis['total_amount']:,.2f} ر.س\n▫️ الفترة: {period_text}\n🔗 عرض التقرير: {request.base_url}"
+    whatsapp_share_url = f"https://wa.me/?text={reports_svc.quote(wa_msg)}"
+
+    return render_template(
+        "report_export_print.html",
+        title_text=f"{_t('تقرير')} {tab_title}",
+        section_title=sec_title,
+        tab_title=tab_title,
+        area_title=area_title,
+        period_text=period_text,
+        issued_at=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
+        printed_by_name=session.get("full_name") or session.get("username") or "مدير النظام",
+        printed_by_username=session.get("username") or "admin",
+        report_number=str(len(rows)) + now_dt.strftime("%d%H"),
+        year_val=year_val,
+        month_val=month_val,
+        total_amount=analysis["total_amount"],
+        unique_ref_count=analysis["unique_ref_count"],
+        months_distribution=analysis["months_distribution"],
+        headers=headers,
+        field_keys=list_cols,
+        rows=rows,
+        whatsapp_share_url=whatsapp_share_url,
+        pdf_download_url=url_for("module_export_pdf", name=name) + (f"?{request.query_string.decode('utf-8')}" if request.query_string else ""),
+    )
+
+
 @app.route("/module/<name>/new", methods=["GET", "POST"])
 @login_required
 def module_new(name):

@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>{{ title_text }} — {{ (settings.company_name if settings is defined and settings else (g.settings.company_name if g is defined and g.settings is defined else 'شركة ركاز الإنجاز للمقاولات')) }}</title>
+    :root {
+      --bg-page: #EEF2F6;
+      --bg-card: #FFFFFF;
+      --navy-dark: #1F4E79;
+      --navy-light: #2C5E8A;
+      --navy-gradient: linear-gradient(135deg, #1C4872 0%, #2A5D8A 55%, #3B75A6 100%);
+      --gold-border: #E8D39E;
+      --gold-bg: #FFFDF8;
+      --gold-text: #8C6D1F;
+      --gold-amount: #5E460E;
+      --card-gray: #F4F7FA;
+      --border-gray: #E2E8F0;
+      --text-main: #1A202C;
+      --text-muted: #718096;
+      --accent-blue: #2B6CB0;
+      --btn-blue: #2B6CB0;
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg-page);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Tahoma, Arial, sans-serif;
+      color: var(--text-main);
+      direction: rtl;
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    /* Top Action Bar */
+    .top-actions-bar {
+      background: #FFFFFF;
+      border-bottom: 1px solid var(--border-gray);
+      padding: 10px 24px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .top-actions-bar .buttons {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    .btn {
+      padding: 8px 16px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--border-gray);
+      background: #FFFFFF;
+      color: #2D3748;
+      transition: all 0.15s ease;
+    }
+    .btn:hover {
+      background: #F7FAFC;
+    }
+    .btn-primary {
+      background: var(--btn-blue);
+      color: #FFFFFF;
+      border-color: var(--btn-blue);
+    }
+    .btn-primary:hover {
+      background: #24578E;
+    }
+    .btn-whatsapp {
+      color: #128C7E;
+      border-color: #CBD5E0;
+    }
+    .btn-whatsapp:hover {
+      background: #E6FFFA;
+      border-color: #38B2AC;
+    }
+    .top-info-badge {
+      background: #F7FAFC;
+      border: 1px solid var(--border-gray);
+      border-radius: 8px;
+      padding: 6px 14px;
+      font-size: 12px;
+      color: #4A5568;
+      font-weight: 500;
+    }
+
+    /* Main Wrap */
+    .report-wrap {
+      max-width: 1380px;
+      margin: 20px auto;
+      padding: 0 16px 40px;
+    }
+    .report-sheet {
+      background: #FFFFFF;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+      border: 1px solid var(--border-gray);
+      overflow: hidden;
+    }
+
+    /* Hero Header */
+    .hero-banner {
+      background: var(--navy-gradient);
+      padding: 24px 28px;
+      display: grid;
+      grid-template-columns: 140px 1fr 140px;
+      align-items: center;
+      gap: 16px;
+      color: #FFFFFF;
+    }
+    .hero-banner .logo-box {
+      background: rgba(255,255,255,0.96);
+      border-radius: 12px;
+      padding: 6px 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 56px;
+    }
+    .hero-banner .logo-box img {
+      max-height: 44px;
+      max-width: 120px;
+      object-fit: contain;
+    }
+    .hero-banner .center-text {
+      text-align: center;
+    }
+    .hero-banner h1 {
+      margin: 0 0 4px;
+      font-size: 24px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .hero-banner .company-title {
+      font-size: 14px;
+      opacity: 0.95;
+      margin-bottom: 4px;
+    }
+    .hero-banner .scope-breadcrumb {
+      font-size: 12px;
+      opacity: 0.85;
+    }
+
+    /* Body */
+    .report-body {
+      padding: 24px 28px;
+    }
+
+    /* Section Header */
+    .section-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin: 22px 0 12px;
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+    .section-head:first-child {
+      margin-top: 0;
+    }
+    .section-head .bar {
+      width: 4px;
+      height: 18px;
+      background: var(--accent-blue);
+      border-radius: 2px;
+    }
+
+    /* Meta Grid 3x3 */
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+    }
+    .meta-card {
+      background: var(--card-gray);
+      border: 1px solid var(--border-gray);
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+    .meta-card .k {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 3px;
+    }
+    .meta-card .v {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-main);
+    }
+
+    /* Gold Total Card */
+    .total-gold-card {
+      background: var(--gold-bg);
+      border: 1.5px solid var(--gold-border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      margin: 20px 0;
+    }
+    .total-gold-card .label {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gold-text);
+      margin-bottom: 6px;
+    }
+    .total-gold-card .amount {
+      font-size: 34px;
+      font-weight: 900;
+      color: var(--gold-amount);
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+    .total-gold-card .sub {
+      font-size: 12px;
+      color: var(--gold-text);
+      font-weight: 500;
+    }
+
+    /* Executive Summary 2 Cards */
+    .exec-summary-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      border: 1px solid #D6E8D8;
+      background: #F9FCF9;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 20px;
+    }
+    .exec-item {
+      text-align: center;
+    }
+    .exec-item:first-child {
+      border-left: 1px solid #E2E8F0;
+    }
+    .exec-item .title {
+      font-size: 12px;
+      color: #4A5568;
+      margin-bottom: 4px;
+    }
+    .exec-item .num {
+      font-size: 26px;
+      font-weight: 800;
+      color: #1A365D;
+    }
+    .exec-item .desc {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Table custom */
+    .table-custom {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-gray);
+    }
+    .table-custom thead tr {
+      background: var(--navy-dark);
+      color: #FFFFFF;
+    }
+    .table-custom th {
+      padding: 10px 14px;
+      font-weight: 700;
+      font-size: 12px;
+      text-align: center;
+    }
+    .table-custom td {
+      padding: 10px 14px;
+      font-size: 12px;
+      border-bottom: 1px solid var(--border-gray);
+      text-align: center;
+    }
+    .table-custom tbody tr:nth-child(even) {
+      background: #F7FAFC;
+    }
+
+    /* Detailed Data Table */
+    .detailed-table-wrap {
+      overflow-x: auto;
+      margin-top: 10px;
+      border: 1px solid var(--border-gray);
+      border-radius: 8px;
+    }
+    .detailed-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .detailed-table thead tr {
+      background: var(--navy-dark);
+      color: #FFFFFF;
+      position: sticky;
+      top: 0;
+    }
+    .detailed-table th {
+      padding: 9px 12px;
+      font-weight: 700;
+      text-align: center;
+      white-space: nowrap;
+      border: 1px solid #1A4064;
+    }
+    .detailed-table td {
+      padding: 8px 12px;
+      border: 1px solid var(--border-gray);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .detailed-table tbody tr:nth-child(even) {
+      background: #F8FAFC;
+    }
+    .detailed-table tbody tr:hover {
+      background: #EDF2F7;
+    }
+
+    /* Print media rules */
+    @page {
+      size: A4 landscape;
+      margin: 8mm;
+    }
+    @media print {
+      body, html {
+        background: #FFFFFF !important;
+        font-size: 10px !important;
+      }
+      .no-print {
+        display: none !important;
+      }
+      .report-wrap {
+        max-width: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+      }
+      .report-sheet {
+        box-shadow: none !important;
+        border: none !important;
+        border-radius: 0 !important;
+      }
+      .hero-banner {
+        padding: 12px 16px !important;
+      }
+      .hero-banner h1 {
+        font-size: 18px !important;
+      }
+      .total-gold-card {
+        padding: 12px !important;
+        margin: 12px 0 !important;
+      }
+      .total-gold-card .amount {
+        font-size: 24px !important;
+      }
+      .exec-summary-grid {
+        padding: 10px !important;
+        margin-bottom: 12px !important;
+      }
+      .exec-item .num {
+        font-size: 18px !important;
+      }
+      .detailed-table th, .detailed-table td {
+        padding: 5px 6px !important;
+        font-size: 9px !important;
+      }
+      tr {
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Action Toolbar -->
+  <div class="top-actions-bar no-print">
+    <div class="buttons">
+      <button class="btn btn-primary" type="button" onclick="window.print()">{{ _('طباعة التقرير') }}</button>
+      <a class="btn" href="{{ pdf_download_url or '#' }}" download>{{ _('تصدير PDF') }}</a>
+      {% if whatsapp_share_url %}
+      <a class="btn btn-whatsapp" href="{{ whatsapp_share_url }}" target="_blank" rel="noopener">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        {{ _('إرسال عبر واتساب') }}
+      </a>
+      {% endif %}
+      <button class="btn" type="button" onclick="window.history.length > 1 ? window.history.back() : window.close()">{{ _('إغلاق') }}</button>
+    </div>
+    <div class="top-info-badge">
+      {{ _('مقاس الطباعة: A4 عرضي — العرض يُضبط على الورقة، والمحتوى يمتد على عدة صفحات حسب الحاجة — {cols} أعمدة / {rows} صف', cols=headers|length, rows=rows|length) }}
+    </div>
+  </div>
+
+  <div class="report-wrap">
+    <div class="report-sheet">
+      <!-- Hero Banner -->
+      <div class="hero-banner">
+        <div class="logo-box">
+          <img src="{{ logo_sec if logo_sec is defined and logo_sec else '/static/brand/sec.jpg' }}" alt="SEC">
+        </div>
+        <div class="center-text">
+          <h1>{{ title_text }}</h1>
+          <div class="company-title">{{ _('التقرير العام لمؤسسة {company}', company=(settings.company_name if settings is defined and settings else (g.settings.company_name if g is defined and g.settings is defined else 'شركة ركاز الإنجاز للمقاولات'))) }}</div>
+          <div class="scope-breadcrumb">{{ section_title }} | {{ tab_title }} | {{ area_title }} | {{ period_text }}</div>
+        </div>
+        <div class="logo-box">
+          <img src="{{ logo_rekaz if logo_rekaz is defined and logo_rekaz else '/static/brand/rekaz.png' }}" alt="{{ (settings.company_name if settings is defined and settings else (g.settings.company_name if g is defined and g.settings is defined else 'شركة ركاز')) }}">
+        </div>
+      </div>
+
+      <div class="report-body">
+        <!-- 1. بيانات التقرير -->
+        <div class="section-head">
+          <div class="bar"></div>
+          <span>{{ _('بيانات التقرير') }}</span>
+        </div>
+        <div class="meta-grid">
+          <div class="meta-card">
+            <div class="k">{{ _('القسم') }}</div>
+            <div class="v">{{ section_title }}</div>
+          </div>
+          <div class="meta-card">
+            <div class="k">{{ _('المنطقة / التبويبة') }}</div>
+            <div class="v">{{ area_title }}</div>
+          </div>
+          <div class="meta-card">
+            <div class="k">{{ _('الفترة') }}</div>
+            <div class="v">{{ period_text }}</div>
+          </div>
+
+          <div class="meta-card">
+            <div class="k">{{ _('تاريخ الإصدار') }}</div>
+            <div class="v" dir="ltr" style="text-align:right">{{ issued_at }}</div>
+          </div>
+          <div class="meta-card">
+            <div class="k">{{ _('أمر الطباعة بواسطة') }}</div>
+            <div class="v">{{ printed_by_name }}</div>
+          </div>
+          <div class="meta-card">
+            <div class="k">{{ _('اسم المستخدم') }}</div>
+            <div class="v" dir="ltr" style="text-align:right">{{ printed_by_username }}</div>
+          </div>
+
+          <div class="meta-card">
+            <div class="k">{{ _('رقم التقرير') }}</div>
+            <div class="v">{{ report_number }}</div>
+          </div>
+          <div class="meta-card">
+            <div class="k">{{ _('السنة') }}</div>
+            <div class="v">{{ year_val }}</div>
+          </div>
+          <div class="meta-card">
+            <div class="k">{{ _('الشهر') }}</div>
+            <div class="v">{{ month_val }}</div>
+          </div>
+        </div>
+
+        <!-- 2. إجمالي المبلغ -->
+        <div class="total-gold-card">
+          <div class="label">{{ _('إجمالي المبلغ') }}</div>
+          <div class="amount">{{ "{:,.2f}".format(total_amount|float) }}</div>
+          <div class="sub">{{ _('ريال سعودي — عدد السجلات: {count}', count=rows|length) }}</div>
+        </div>
+
+        <!-- 3. ملخص تنفيذي -->
+        <div class="section-head">
+          <div class="bar"></div>
+          <span>{{ _('ملخص تنفيذي') }}</span>
+        </div>
+        <div class="exec-summary-grid">
+          <div class="exec-item">
+            <div class="title">{{ _('معاملات مميزة') }}</div>
+            <div class="num">{{ unique_ref_count }}</div>
+            <div class="desc">{{ _('عدد القيم الفريدة في الحقل المرجعي') }}</div>
+          </div>
+          <div class="exec-item">
+            <div class="title">{{ _('عدد السجلات') }}</div>
+            <div class="num">{{ rows|length }}</div>
+            <div class="desc">{{ _('إجمالي الصفوف ضمن نطاق التقرير') }}</div>
+          </div>
+        </div>
+
+        <!-- 4. توزيع حسب الشهر -->
+        {% if months_distribution and months_distribution|length > 0 %}
+        <div class="section-head">
+          <div class="bar"></div>
+          <span>{{ _('توزيع حسب الشهر') }}</span>
+        </div>
+        <table class="table-custom">
+          <thead>
+            <tr>
+              <th>{{ _('الشهر') }}</th>
+              <th>{{ _('عدد السجلات') }}</th>
+              <th>{{ _('إجمالي المبلغ') }}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for m in months_distribution %}
+            <tr>
+              <td><strong>{{ m.month }}</strong></td>
+              <td>{{ m.count }}</td>
+              <td><strong>{{ "{:,.2f}".format(m.total|float) }}</strong></td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
+
+        <!-- 5. جدول البيانات التفصيلي -->
+        <div class="section-head" style="margin-top:24px;">
+          <div class="bar"></div>
+          <span>{{ _('سجلات التقرير التفصيلية') }}</span>
+        </div>
+        <div class="detailed-table-wrap">
+          <table class="detailed-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                {% for h in headers %}
+                <th>{{ h }}</th>
+                {% endfor %}
+              </tr>
+            </thead>
+            <tbody>
+              {% for r in rows %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                {% for k in field_keys %}
+                <td>
+                  {% set val = r[k] if k in r else (r.get(k) if r.get is defined else '') %}
+                  {% if val is none or val == '' %}
+                    —
+                  {% elif k in ['final_value', 'items_value', 'value', 'amount', 'total', 'price', 'unit_price', 'boq_base_total'] and (val|string)|replace(',','')|float(0) > 0 %}
+                    {{ "{:,.2f}".format(val|string|replace(',','')|float) }}
+                  {% else %}
+                    {{ tv(val|string) if tv is defined else val }}
+                  {% endif %}
+                </td>
+                {% endfor %}
+              </tr>
+              {% else %}
+              <tr>
+                <td colspan="{{ headers|length + 1 }}">{{ _('لا توجد بيانات مطابقة') }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>
