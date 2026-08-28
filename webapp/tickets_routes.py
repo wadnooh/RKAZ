@@ -205,6 +205,13 @@ def new():
                 f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
             )
             new_id = cur.lastrowid
+            try:
+                from webapp import whatsapp
+                data_copy = dict(data)
+                data_copy["id"] = new_id
+                whatsapp.notify_ticket_created(data_copy, request.host_url)
+            except Exception:
+                pass
             flash(helpers.t("تم إنشاء العطل بنجاح — كود ركاز {code}", code=data.get("rekaz_code")), "ok")
             helpers.after_data_change()
             return _edit_redirect(new_id, "data")
@@ -360,6 +367,16 @@ def edit(ticket_id):
         if link_res and (link_res.get("created_coord") or link_res.get("created_clearance")):
             conn.commit()
         conn.close()
+        old_status = dict(row).get("status")
+        new_status = data.get("status")
+        if new_status and old_status != new_status:
+            try:
+                from webapp import whatsapp
+                data_copy = dict(data)
+                data_copy["id"] = ticket_id
+                whatsapp.notify_ticket_status_change(data_copy, new_status, request.host_url)
+            except Exception:
+                pass
         db.log_audit(helpers.current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
         flash(helpers.t("تم حفظ المعاملة"), "ok")
         helpers.flash_excavation_link(link_res)

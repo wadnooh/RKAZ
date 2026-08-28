@@ -1474,6 +1474,9 @@ def required_perm_for_request() -> str | None:
         "maintenance_home": "section.maintenance",
         "hr_home": "section.hr",
         "contracts_admin_home": "section.contracts",
+        "contracts_whatsapp": "section.contracts",
+        "contracts_whatsapp_save": "section.contracts",
+        "contracts_whatsapp_test": "section.contracts",
         "reinforcement_home": "section.reinforcement",
     }
     if ep in section_endpoints:

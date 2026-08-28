@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active_tab = 'whatsapp' %}
+{% include "_section_subnav.html" %}
+
+<div class="card" style="margin-bottom:16px;">
+  <div class="toolbar">
+    <div>
+      <h2 class="section-title">{{ _('ربط واتساب ويب والإرسال التلقائي') }}</h2>
+      <div class="meta">{{ _('إدارة ربط رقم الواتساب وضبط قنوات الإرسال التلقائي للمعاملات والمستودع والتنبيهات') }}</div>
+    </div>
+    <div class="actions">
+      {% if conn_status.is_connected %}
+      <span class="badge ok" style="font-size:0.95rem;padding:6px 12px;">🟢 {{ conn_status.status_label }}</span>
+      {% else %}
+      <span class="badge danger" style="font-size:0.95rem;padding:6px 12px;">🔴 {{ conn_status.status_label }}</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(240px, 1fr));gap:12px;margin-top:14px;">
+    <div style="background:var(--bg-subtle, #f8fafc);border:1px solid var(--border, #e2e8f0);border-radius:8px;padding:14px;">
+      <div style="font-size:0.85rem;color:var(--text-muted);font-weight:600;">{{ _('حالة الاتصال بالويب') }}</div>
+      <div style="font-size:1.15rem;font-weight:800;color:var(--primary);margin-top:4px;">
+        {% if conn_status.is_connected %}
+        <span style="color:#16a34a;">● {{ _('متصل ونشط') }}</span>
+        {% else %}
+        <span style="color:#dc2626;">● {{ _('غير متصل') }}</span>
+        {% endif %}
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">{{ _('المزود') }}: {{ cfg.provider }}</div>
+    </div>
+
+    <div style="background:var(--bg-subtle, #f8fafc);border:1px solid var(--border, #e2e8f0);border-radius:8px;padding:14px;">
+      <div style="font-size:0.85rem;color:var(--text-muted);font-weight:600;">{{ _('الرقم المربوط للإرسال') }}</div>
+      <div style="font-size:1.15rem;font-weight:800;color:var(--primary);margin-top:4px;" dir="ltr">
+        {{ cfg.phone_number or cfg.admin_phone or '—' }}
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">{{ _('رقم الحساب المعتمد') }}</div>
+    </div>
+
+    <div style="background:var(--bg-subtle, #f8fafc);border:1px solid var(--border, #e2e8f0);border-radius:8px;padding:14px;">
+      <div style="font-size:0.85rem;color:var(--text-muted);font-weight:600;">{{ _('الإرسال التلقائي') }}</div>
+      <div style="font-size:1.15rem;font-weight:800;margin-top:4px;">
+        {% if cfg.enabled == '1' %}
+        <span style="color:#16a34a;">✓ {{ _('مفعل بالكامل') }}</span>
+        {% else %}
+        <span style="color:#64748b;">✕ {{ _('معطل') }}</span>
+        {% endif %}
+      </div>
+      <div style="font-size:0.8rem;color:var(--text-muted);margin-top:4px;">{{ _('إرسال فوري عند حدوث الإجراءات') }}</div>
+    </div>
+  </div>
+</div>
+
+<div class="grid-2" style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px;">
+  <!-- نموذج إعدادات البوابة -->
+  <div class="card">
+    <div class="toolbar">
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">⚙️ {{ _('إعدادات ربط رقم الواتساب') }}</h3>
+    </div>
+    
+    <form method="post" action="{{ url_for('contracts_whatsapp_save') }}" class="form-grid" style="margin-top:10px;">
+      <div class="field full">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:700;">
+          <input type="checkbox" name="whatsapp_enabled" value="1" {% if cfg.enabled == '1' %}checked{% endif %}>
+          <span>{{ _('تفعيل خدمة الإرسال التلقائي عبر واتساب') }}</span>
+        </label>
+      </div>
+
+      <div class="field full">
+        <label>{{ _('نوع البوابة / المزود') }}</label>
+        <select name="whatsapp_provider" class="input">
+          <option value="web_gateway" {% if cfg.provider == 'web_gateway' or cfg.provider == 'ultramsg' %}selected{% endif %}>WhatsApp Web Gateway / UltraMsg (مستحسن للويب)</option>
+          <option value="cloud_api" {% if cfg.provider == 'cloud_api' %}selected{% endif %}>Meta WhatsApp Cloud API (الرسمي)</option>
+        </select>
+      </div>
+
+      <div class="field">
+        <label>{{ _('رقم الواتساب المربوط (المرسل)') }}</label>
+        <input type="text" name="whatsapp_phone_number" value="{{ cfg.phone_number }}" placeholder="966500000000" class="input" dir="ltr">
+      </div>
+
+      <div class="field">
+        <label>{{ _('رابط البوابة (Gateway URL)') }}</label>
+        <input type="text" name="whatsapp_gateway_url" value="{{ cfg.gateway_url }}" placeholder="https://api.ultramsg.com" class="input" dir="ltr">
+      </div>
+
+      <div class="field">
+        <label>{{ _('معرف الجلسة / الـ Instance ID') }}</label>
+        <input type="text" name="whatsapp_instance_id" value="{{ cfg.instance_id }}" placeholder="instance12345" class="input" dir="ltr">
+      </div>
+
+      <div class="field">
+        <label>{{ _('مفتاح الوصول / الـ Token / API Key') }}</label>
+        <input type="password" name="whatsapp_api_key" value="{{ cfg.api_key or cfg.token }}" placeholder="••••••••••••••••" class="input" dir="ltr">
+      </div>
+
+      <div class="field full">
+        <label>{{ _('أرقام المستلمين الافتراضية للإشعارات التلقائية (مفصولة بفواصل)') }}</label>
+        <textarea name="whatsapp_auto_recipients" rows="2" class="input" placeholder="966500000001, 966500000002" dir="ltr">{{ cfg.auto_recipients }}</textarea>
+        <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('سيتم إرسال التنبيهات التلقائية لهذه الأرقام بالإضافة لمندوب/مشرف المعاملة.') }}</div>
+      </div>
+
+      <div class="field full" style="border-top:1px solid var(--border,#e2e8f0);padding-top:10px;margin-top:6px;">
+        <div style="font-weight:700;margin-bottom:8px;">🎯 {{ _('أحداث الإرسال التلقائي:') }}</div>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" name="whatsapp_auto_ticket_create" value="1" {% if cfg.auto_ticket_create == '1' %}checked{% endif %}>
+            <span>{{ _('إرسال إشعار تلقائي فور تسجيل عطل جديد') }}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" name="whatsapp_auto_ticket_close" value="1" {% if cfg.auto_ticket_close == '1' %}checked{% endif %}>
+            <span>{{ _('إرسال إشعار تلقائي عند إغلاق أو إنجاز العطل') }}</span>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+            <input type="checkbox" name="whatsapp_auto_warehouse_tx" value="1" {% if cfg.auto_warehouse_tx == '1' %}checked{% endif %}>
+            <span>{{ _('إرسال إشعار تلقائي بحركات المستودع (الوارد والمنصرف)') }}</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="field full actions" style="margin-top:12px;">
+        <button class="btn primary" type="submit">💾 {{ _('حفظ الإعدادات وتحديث الاتصال') }}</button>
+      </div>
+    </form>
+  </div>
+
+  <!-- وحدة الإرسال التجريبي المباشر -->
+  <div class="card">
+    <div class="toolbar">
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">🧪 {{ _('فحص وإرسال رسالة تجريبية') }}</h3>
+    </div>
+    <div class="meta" style="margin-bottom:12px;">{{ _('يمكنك تجربة إرسال رسالة واتساب حية للتأكد من ربط الرقم وعمل البوابة بنجاح.') }}</div>
+
+    <form method="post" action="{{ url_for('contracts_whatsapp_test') }}" class="form-grid">
+      <div class="field full">
+        <label>{{ _('رقم الجوال المستلم للتجربة') }}</label>
+        <input type="text" name="test_phone" class="input" placeholder="0500000000 أو 966500000000" required dir="ltr">
+      </div>
+
+      <div class="field full">
+        <label>{{ _('نص الرسالة التجريبية') }}</label>
+        <textarea name="test_message" rows="4" class="input" required>{{ _('⚡ تجربة إرسال واتساب تلقائي من نظام ركاز — الاتصال يعمل بنجاح!') }}</textarea>
+      </div>
+
+      <div class="field full actions" style="margin-top:10px;">
+        <button class="btn primary" type="submit" style="background:#16a34a;border-color:#16a34a;">
+          📲 {{ _('إرسال الرسالة التجريبية الآن') }}
+        </button>
+      </div>
+    </form>
+
+    <div style="margin-top:20px;padding:12px;background:var(--bg-subtle,#f8fafc);border-radius:8px;border:1px dashed var(--border,#cbd5e1);">
+      <div style="font-weight:700;font-size:0.9rem;color:var(--primary);margin-bottom:4px;">💡 {{ _('كيف يعمل الإرسال التلقائي بعد الربط؟') }}</div>
+      <ul style="font-size:0.85rem;color:var(--text-muted);margin:0;padding-right:20px;line-height:1.6;">
+        <li>{{ _('يتم إرسال التنبيهات في الخلفية تلقائياً دون الحاجة لفتح واتساب ويب يدوياً.') }}</li>
+        <li>{{ _('عند تسجيل عطل جديد، يستلم المشرف والمندوب تفاصيل العطل والموقع ورابط المعاملة.') }}</li>
+        <li>{{ _('تسجل جميع الرسائل المرسلة مع حالتها ووقتها في سجل الرسائل أدناه.') }}</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- سجل الرسائل المرسلة تلقائياً -->
+<div class="card">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">📋 {{ _('سجل رسائل الواتساب المرسلة تلقائياً') }}</h3>
+      <div class="meta">{{ _('آخر الرسائل الصادرة من النظام وحالتها') }}</div>
+    </div>
+  </div>
+
+  <div class="table-wrap" style="margin-top:10px;">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>#</th>
+          <th>{{ _('التاريخ والوقت') }}</th>
+          <th>{{ _('المستلم') }}</th>
+          <th>{{ _('نوع الإشعار') }}</th>
+          <th>{{ _('نص الرسالة') }}</th>
+          <th>{{ _('الحالة') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for log in logs %}
+        <tr>
+          <td>{{ log.id }}</td>
+          <td style="white-space:nowrap;font-size:0.85rem;">{{ log.created_at }}</td>
+          <td dir="ltr" style="font-weight:600;">{{ log.recipient }}</td>
+          <td>
+            {% if log.source_type == 'ticket_new' %}
+            <span class="badge" style="background:#dbeafe;color:#1e40af;">{{ _('عطل جديد') }}</span>
+            {% elif log.source_type == 'ticket_status' %}
+            <span class="badge" style="background:#dcfce7;color:#166534;">{{ _('تحديث عطل') }}</span>
+            {% elif log.source_type == 'warehouse_tx' %}
+            <span class="badge" style="background:#fef3c7;color:#92400e;">{{ _('مستودع') }}</span>
+            {% elif log.source_type == 'otp' %}
+            <span class="badge" style="background:#f3e8ff;color:#6b21a8;">{{ _('رمز OTP') }}</span>
+            {% else %}
+            <span class="badge ghost">{{ log.source_type or 'عام' }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:0.85rem;max-width:350px;white-space:pre-wrap;">{{ log.message }}</td>
+          <td>
+            {% if log.status == 'sent' %}
+            <span class="badge ok">✓ {{ _('تم الإرسال') }}</span>
+            {% else %}
+            <span class="badge danger" title="{{ log.error_msg }}">✕ {{ _('فشل') }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="6" class="meta" style="text-align:center;padding:24px;">{{ _('لا توجد رسائل مرسلة بعد.') }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

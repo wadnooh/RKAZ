@@ -2933,6 +2933,12 @@ def warehouse_tx_multi():
                     + (f" / {_t('{n} نسخ صفري', n=mirrored)}" if mirrored else ""),
                 )
                 conn.close()
+                try:
+                    from webapp import whatsapp
+                    for r in prepared_rows:
+                        whatsapp.notify_warehouse_movement(r, request.host_url)
+                except Exception:
+                    pass
                 if mirrored:
                     flash(
                         _t(
@@ -3507,6 +3513,70 @@ def contract_boq_activate(file_id):
     flash(_t("تم تفعيل دليل بنود العقد"), "ok")
     _after_data_change()
     return redirect(url_for("contracts_admin_home"))
+
+
+@app.route("/contracts-admin/whatsapp", methods=["GET"])
+@login_required
+def contracts_whatsapp():
+    if not (permissions.can("section.contracts") or permissions.can("settings.read") or permissions.can("modules.read")):
+        return permissions.deny_redirect()
+    from webapp import whatsapp
+    cfg = whatsapp.get_whatsapp_config()
+    conn_status = whatsapp.get_connection_status()
+    logs = db.list_whatsapp_logs(limit=50)
+    return render_template(
+        "contracts_whatsapp.html",
+        title=_t("ربط واتساب ويب والإرسال التلقائي"),
+        cfg=cfg,
+        conn_status=conn_status,
+        logs=logs,
+        section="contracts",
+        section_modules=modules_for_section("contracts"),
+        section_meta=_smeta(SECTION_META["contracts"]),
+    )
+
+
+@app.route("/contracts-admin/whatsapp/save", methods=["POST"])
+@login_required
+def contracts_whatsapp_save():
+    if not (permissions.can("section.contracts") or permissions.can("settings.write")):
+        return permissions.deny_redirect()
+    from webapp import whatsapp
+    updates = {
+        "whatsapp_enabled": "1" if request.form.get("whatsapp_enabled") else "0",
+        "whatsapp_provider": (request.form.get("whatsapp_provider") or "web_gateway").strip(),
+        "whatsapp_phone_number": (request.form.get("whatsapp_phone_number") or "").strip(),
+        "whatsapp_gateway_url": (request.form.get("whatsapp_gateway_url") or "").strip(),
+        "whatsapp_instance_id": (request.form.get("whatsapp_instance_id") or "").strip(),
+        "whatsapp_api_key": (request.form.get("whatsapp_api_key") or "").strip(),
+        "whatsapp_auto_recipients": (request.form.get("whatsapp_auto_recipients") or "").strip(),
+        "whatsapp_auto_ticket_create": "1" if request.form.get("whatsapp_auto_ticket_create") else "0",
+        "whatsapp_auto_ticket_close": "1" if request.form.get("whatsapp_auto_ticket_close") else "0",
+        "whatsapp_auto_warehouse_tx": "1" if request.form.get("whatsapp_auto_warehouse_tx") else "0",
+    }
+    whatsapp.save_whatsapp_config(updates)
+    flash(_t("تم حفظ إعدادات الواتساب وتحديث حالة الربط بنجاح"), "ok")
+    return redirect(url_for("contracts_whatsapp"))
+
+
+@app.route("/contracts-admin/whatsapp/test", methods=["POST"])
+@login_required
+def contracts_whatsapp_test():
+    if not (permissions.can("section.contracts") or permissions.can("settings.write")):
+        return permissions.deny_redirect()
+    from webapp import whatsapp
+    phone = (request.form.get("test_phone") or "").strip()
+    msg = (request.form.get("test_message") or "").strip()
+    if not phone or not msg:
+        flash(_t("يرجى إدخال رقم الجوال ونص الرسالة"), "danger")
+        return redirect(url_for("contracts_whatsapp"))
+    
+    ok, res = whatsapp.send_text(to_phone=phone, body=msg, source_type="test", source_id="test_ui")
+    if ok:
+        flash(_t(f"تم إرسال الرسالة التجريبية بنجاح إلى {phone}"), "ok")
+    else:
+        flash(_t(f"تعذر الإرسال: {res}"), "danger")
+    return redirect(url_for("contracts_whatsapp"))
 
 
 @app.route("/users")

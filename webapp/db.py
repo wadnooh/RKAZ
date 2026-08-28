@@ -1259,6 +1259,16 @@ def init_db():
             details TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP
         );
+        CREATE TABLE IF NOT EXISTS whatsapp_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            recipient TEXT,
+            message TEXT,
+            status TEXT,
+            error_msg TEXT,
+            source_type TEXT,
+            source_id TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        );
         CREATE TABLE IF NOT EXISTS followups (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             title TEXT,
@@ -5764,3 +5774,45 @@ def consume_programmer_approve_code(
     finally:
         if own:
             conn.close()
+
+
+def log_whatsapp_message(recipient: str, message: str, status: str, error_msg: str = "", source_type: str = "", source_id: str = "") -> int:
+    """تسجيل رسائل الواتساب المرسلة في السجل."""
+    conn = connect()
+    try:
+        cur = conn.execute(
+            """
+            INSERT INTO whatsapp_logs(recipient, message, status, error_msg, source_type, source_id, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                str(recipient or ""),
+                str(message or ""),
+                str(status or "sent"),
+                str(error_msg or ""),
+                str(source_type or ""),
+                str(source_id or ""),
+                datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            ),
+        )
+        conn.commit()
+        return cur.lastrowid
+    except Exception:
+        return 0
+    finally:
+        conn.close()
+
+
+def list_whatsapp_logs(limit: int = 50) -> list[dict]:
+    """جلب سجل رسائل الواتساب الأخيرة."""
+    conn = connect()
+    try:
+        rows = conn.execute(
+            "SELECT * FROM whatsapp_logs ORDER BY id DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return rows_to_dicts(rows)
+    except Exception:
+        return []
+    finally:
+        conn.close()
