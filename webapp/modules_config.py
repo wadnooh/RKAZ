@@ -358,6 +358,7 @@ MODULES = {
             ("item_name", "اسم المادة", "text"),
             ("unit", "الوحدة", "text"),
             ("category", "التصنيف", "list:warehouse_categories"),
+            ("opening_qty", "رصيد افتتاحي", "number"),
             ("min_qty", "حد أدنى", "number"),
             ("notes", "ملاحظات", "textarea"),
         ],

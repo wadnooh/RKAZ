@@ -702,6 +702,9 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "contractor_supplies" in existing or "contractor_supplies" in created:
             if _ensure_column(conn, "contractor_supplies", "received_voucher_no"):
                 created.append("contractor_supplies.received_voucher_no")
+        if "warehouse_items" in existing or "warehouse_items" in created:
+            if _ensure_column(conn, "warehouse_items", "opening_qty", "REAL DEFAULT 0"):
+                created.append("warehouse_items.opening_qty")
         if "reinforcement_departments" in existing or "reinforcement_departments" in created:
             seeded = seed_reinforcement_departments(conn)
             if seeded:
@@ -5816,3 +5819,101 @@ def list_whatsapp_logs(limit: int = 50) -> list[dict]:
         return []
     finally:
         conn.close()
+
+
+def create_or_update_warehouse_item(
+    item_no: str,
+    item_name: str,
+    unit: str = "عدد",
+    category: str = "مواد كهربائية",
+    min_qty: float = 0,
+    notes: str = "",
+    opening_qty: float = 0,
+    conn=None,
+) -> dict:
+    """إضافة أو تحديث صنف مستودع مع تسجيل رصيد افتتاحي إن وُجد."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        item_no = str(item_no or "").strip()
+        item_name = str(item_name or "").strip() or item_no
+        unit = normalize_warehouse_unit(unit or "عدد")
+        category = str(category or "").strip() or "مواد كهربائية"
+        try:
+            min_qty = float(min_qty or 0)
+        except Exception:
+            min_qty = 0.0
+        notes = str(notes or "").strip()
+        try:
+            opening_qty = float(opening_qty or 0)
+        except Exception:
+            opening_qty = 0.0
+        today = datetime.now().strftime("%Y-%m-%d")
+
+        existing = conn.execute(
+            "SELECT id FROM warehouse_items WHERE lower(item_no)=lower(?)",
+            (item_no,),
+        ).fetchone()
+
+        if existing:
+            conn.execute(
+                """
+                UPDATE warehouse_items
+                SET item_name=?, unit=?, category=?, min_qty=?, notes=?, opening_qty=?
+                WHERE id=?
+                """,
+                (item_name, unit, category, min_qty, notes, opening_qty, existing["id"]),
+            )
+            item_id = existing["id"]
+            action = "updated"
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO warehouse_items(item_no, item_name, unit, category, min_qty, notes, opening_qty)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (item_no, item_name, unit, category, min_qty, notes, opening_qty),
+            )
+            item_id = cur.lastrowid
+            action = "created"
+
+        created_tx = False
+        if opening_qty and opening_qty > 0:
+            already = conn.execute(
+                """
+                SELECT id FROM warehouse_tx
+                WHERE lower(item_no)=lower(?) AND (lower(notes) LIKE '%افتتاحي%' OR voucher_no LIKE 'OPEN-%')
+                """,
+                (item_no,),
+            ).fetchone()
+            if not already:
+                conn.execute(
+                    """
+                    INSERT INTO warehouse_tx(
+                        voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+                        recipient, sender, ticket_no, work_order, region, notes
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        f"OPEN-{today}-{item_no}",
+                        today,
+                        "وارد من الكهرباء",
+                        item_no,
+                        item_name,
+                        unit,
+                        opening_qty,
+                        "المستودع الرئيسي",
+                        "رصيد افتتاحي",
+                        "",
+                        "",
+                        "",
+                        "رصيد افتتاحي تأسيسي",
+                    ),
+                )
+                created_tx = True
+
+        conn.commit()
+        return {"ok": True, "id": item_id, "action": action, "opening_tx": created_tx}
+    finally:
+        if own:
+            conn.close()

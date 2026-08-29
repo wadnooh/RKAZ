@@ -4888,6 +4888,37 @@ def module_new(name):
         transfer_res = None
         if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
             transfer_res = db.transfer_new_coordination_to_license(cur.lastrowid, conn=conn)
+        if name == "warehouse_items":
+            op_qty = 0.0
+            try:
+                op_qty = float(data.get("opening_qty") or 0)
+            except Exception:
+                op_qty = 0.0
+            if op_qty > 0:
+                today = datetime.now().strftime("%Y-%m-%d")
+                conn.execute(
+                    """
+                    INSERT INTO warehouse_tx(
+                        voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+                        recipient, sender, ticket_no, work_order, region, notes
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    """,
+                    (
+                        f"OPEN-{today}-{data.get('item_no')}",
+                        today,
+                        "وارد من الكهرباء",
+                        data.get("item_no"),
+                        data.get("item_name") or data.get("item_no"),
+                        data.get("unit") or "عدد",
+                        op_qty,
+                        "المستودع الرئيسي",
+                        "رصيد افتتاحي",
+                        "",
+                        "",
+                        "",
+                        "رصيد افتتاحي تأسيسي",
+                    ),
+                )
         conn.commit()
         new_id = cur.lastrowid
         conn.close()
@@ -5748,6 +5779,55 @@ def warehouse_balances():
         warehouse_active="balances",
         summary_cards=summary_cards,
     )
+
+
+@app.route("/warehouses/items/add", methods=["POST"])
+@login_required
+def warehouse_item_quick_add():
+    if not (permissions.can("modules.write") or permissions.can("section.warehouses")):
+        return permissions.deny_redirect()
+    
+    item_no = (request.form.get("item_no") or "").strip()
+    item_name = (request.form.get("item_name") or "").strip()
+    unit = (request.form.get("unit") or "عدد").strip()
+    category = (request.form.get("category") or "مواد كهربائية").strip()
+    min_qty = request.form.get("min_qty") or 0
+    opening_qty = request.form.get("opening_qty") or 0
+    notes = (request.form.get("notes") or "").strip()
+    view = (request.form.get("view") or "balances").strip()
+
+    if not item_no and not item_name:
+        flash(_t("يرجى إدخال رقم أو اسم المادة"), "danger")
+        return redirect(url_for("warehouse_balances", view=view))
+
+    if not item_no:
+        item_no = f"M-{datetime.now().strftime('%y%m%d%H%M%S')}"
+
+    res = db.create_or_update_warehouse_item(
+        item_no=item_no,
+        item_name=item_name or item_no,
+        unit=unit,
+        category=category,
+        min_qty=min_qty,
+        notes=notes,
+        opening_qty=opening_qty,
+    )
+    
+    db.log_audit(
+        current_user_name(),
+        "إضافة صنف" if res.get("action") == "created" else "تعديل صنف",
+        "أصناف المستودع",
+        res.get("id"),
+        f"{item_no} / {item_name}" + (f" / رصيد افتتاحي: {opening_qty}" if float(opening_qty or 0) > 0 else ""),
+    )
+    
+    msg = _t("تمت إضافة الصنف {name} بنجاح", name=item_name or item_no)
+    if float(opening_qty or 0) > 0:
+        msg += " " + _t("مع تسجيل رصيد افتتاحي {qty} {unit}", qty=opening_qty, unit=unit)
+    flash(msg, "ok")
+    _after_data_change()
+    
+    return redirect(url_for("warehouse_balances", view=view))
 
 
 @app.route("/warehouses/items/template.xlsx")

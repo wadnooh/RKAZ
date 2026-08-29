@@ -1457,6 +1457,7 @@ def required_perm_for_request() -> str | None:
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
         "warehouse_balances": "section.warehouses",
+        "warehouse_item_quick_add": "section.warehouses",
         "warehouse_movements_summary": "section.warehouses",
         "external_purchases_home": "section.external",
         "purchase_line_add": "section.external",

@@ -9,7 +9,7 @@
       <h2 class="section-title">{% if view == 'items' %}{{ _('أصناف المستودع') }}{% else %}{{ _('أرصدة المواد') }}{% endif %}</h2>
       <div class="meta">
         {% if view == 'items' %}
-        {{ _('عرض قائمة المواد المستخدمة في الحركات والأرصدة') }}
+        {{ _('عرض وإدارة قائمة المواد المستخدمة في الحركات والأرصدة') }}
         {% else %}
         {{ _('الرصيد يتحدث تلقائياً من حركات الإنشاءات والعمليات والمشاريع') }}
         {% endif %}
@@ -21,17 +21,32 @@
     </div>
   </div>
 
-  {% if view == 'items' %}
-  <div class="actions" style="margin-bottom:12px;flex-wrap:wrap;">
+  <div class="actions" style="margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    {% if can('modules.write') or can('section.warehouses') %}
+    <button class="btn primary" type="button" onclick="document.getElementById('quick-add-item-modal').style.display='flex'" style="font-weight:700;">
+      ➕ {{ _('إضافة صنف / رصيد جديد') }}
+    </button>
+    {% endif %}
     {% if can('modules.write') %}
-    <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">{{ _('قالب Excel') }}</a>
+    <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">📥 {{ _('قالب Excel للأصناف') }}</a>
+    {% endif %}
+    {% if view != 'items' and can('modules.write') %}
+    <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لمسح الأرصدة') }}" style="display:inline-flex;gap:6px;align-items:center;">
+      <input type="hidden" name="confirm" value="مسح">
+      <input type="hidden" name="delete_password" value="">
+      <button class="btn danger ghost" type="button" data-delete-confirm style="font-size:0.85rem;padding:6px 12px;">🗑️ {{ _('مسح الأرصدة') }}</button>
+    </form>
     {% endif %}
   </div>
+
+  {% if view == 'items' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="items">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم/اسم المادة أو التصنيف...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم/اسم المادة أو التصنيف...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:260px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
-    <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('مسح') }}</a>
+    {% if q %}
+    <a class="btn ghost" href="{{ url_for('warehouse_balances', view='items') }}">{{ _('مسح البحث') }}</a>
+    {% endif %}
   </form>
   {% set summary_cards_style = 'margin-bottom:14px;' %}
   {% include "_summary_cards.html" %}
@@ -51,7 +66,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.item_no }}</td>
+          <td><strong>{{ r.item_no }}</strong></td>
           <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
           <td>{{ r.unit or '—' }}</td>
           <td>{{ r.category or '—' }}</td>
@@ -76,28 +91,26 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">{{ _('لا توجد أصناف بعد.') }}</td></tr>
+        <tr>
+          <td colspan="7" class="meta" style="text-align:center;padding:24px;">
+            {{ _('لا توجد أصناف بعد.') }} 
+            {% if can('modules.write') or can('section.warehouses') %}
+            <a href="javascript:void(0)" onclick="document.getElementById('quick-add-item-modal').style.display='flex'">{{ _('اضغط هنا لإضافة صنف جديد') }}</a>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
   {% else %}
-  {% if can('modules.write') %}
-  <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="actions js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لمسح الأرصدة') }}" style="margin-bottom:14px;flex-wrap:wrap;">
-    <div style="flex:1;min-width:220px;">
-      <label style="display:block;margin-bottom:6px;font-weight:700;">{{ _('مسح الأرصدة (حذف الحركات فقط)') }}</label>
-      <input type="text" name="confirm" placeholder="{{ _('اكتب: مسح') }}" required autocomplete="off">
-      <input type="hidden" name="delete_password" value="">
-    </div>
-    <button class="btn ghost" type="button" data-delete-confirm style="border-color:#c45c5c;color:#a33;">{{ _('مسح الأرصدة') }}</button>
-  </form>
-  {% endif %}
-
   <form method="get" class="actions" style="margin-bottom:12px;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أو اسم المادة...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم أو اسم المادة...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:260px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
-    <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('مسح') }}</a>
+    {% if q %}
+    <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">{{ _('مسح البحث') }}</a>
+    {% endif %}
   </form>
 
   {% set summary_cards_style = 'margin-bottom:14px;' %}
@@ -121,7 +134,7 @@
       <tbody>
         {% for r in rows %}
         <tr>
-          <td>{{ r.item_no }}</td>
+          <td><strong>{{ r.item_no }}</strong></td>
           <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
           <td>{{ r.unit or '—' }}</td>
           <td><span class="badge ok">{{ r.inbound or 0 }}</span></td>
@@ -153,11 +166,96 @@
           </td>
         </tr>
         {% else %}
-        <tr><td colspan="10" class="meta">{{ _('لا توجد أصناف مرتبطة بالحركات بعد.') }}</td></tr>
+        <tr>
+          <td colspan="10" class="meta" style="text-align:center;padding:24px;">
+            {{ _('لا توجد أصناف مرتبطة بالحركات بعد.') }}
+            {% if can('modules.write') or can('section.warehouses') %}
+            <a href="javascript:void(0)" onclick="document.getElementById('quick-add-item-modal').style.display='flex'">{{ _('اضغط هنا لإضافة صنف ورصيد جديد') }}</a>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
   {% endif %}
+</div>
+
+<!-- نافذة منبثقة لإضافة صنف ورصيد جديد -->
+<div id="quick-add-item-modal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px);">
+  <div style="background:var(--bg-card,#fff);border-radius:14px;max-width:540px;width:100%;box-shadow:0 20px 40px rgba(0,0,0,0.3);border:1px solid var(--border,#e2e8f0);overflow:hidden;animation:fadeIn 0.2s ease-out;">
+    <div style="padding:16px 20px;border-bottom:1px solid var(--border,#e2e8f0);display:flex;justify-content:space-between;align-items:center;background:var(--bg-subtle,#f8fafc);">
+      <h3 style="margin:0;font-size:1.15rem;font-weight:800;color:var(--primary,#1F4E79);">➕ {{ _('إضافة صنف ورصيد جديد') }}</h3>
+      <button type="button" onclick="document.getElementById('quick-add-item-modal').style.display='none'" style="background:none;border:none;font-size:1.4rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+    </div>
+
+    <form method="post" action="{{ url_for('warehouse_item_quick_add') }}" style="padding:20px;">
+      <input type="hidden" name="view" value="{{ view }}">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('رقم المادة (كود الصنف)') }} <span style="color:red;">*</span></label>
+          <input type="text" name="item_no" class="input" placeholder="مثال: 908111006 أو M-01" required style="width:100%;box-sizing:border-box;">
+        </div>
+
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('الوحدة') }}</label>
+          <select name="unit" class="input" style="width:100%;box-sizing:border-box;">
+            <option value="عدد" selected>عدد (EA)</option>
+            <option value="متر">متر (M)</option>
+            <option value="طقم">طقم (SET)</option>
+            <option value="كيلو">كيلو (KG)</option>
+            <option value="حبة">حبة (PC)</option>
+            <option value="لفة">لفة (ROLL)</option>
+            <option value="طن">طن (TON)</option>
+            <option value="برميل">برميل (DRUM)</option>
+          </select>
+        </div>
+      </div>
+
+      <div style="margin-bottom:12px;">
+        <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('اسم المادة / الوصف') }} <span style="color:red;">*</span></label>
+        <input type="text" name="item_name" class="input" placeholder="مثال: CABLE, PWR, 600V/1KV, AL, 4C, 185MM2" required style="width:100%;box-sizing:border-box;">
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('التصنيف') }}</label>
+          <select name="category" class="input" style="width:100%;box-sizing:border-box;">
+            <option value="مواد كهربائية" selected>مواد كهربائية</option>
+            <option value="كابلات">كابلات</option>
+            <option value="محولات">محولات</option>
+            <option value="قواطع">قواطع</option>
+            <option value="أعمدة وإنارة">أعمدة وإنارة</option>
+            <option value="مستلزمات شبكة">مستلزمات شبكة</option>
+            <option value="أدوات ومعدات">أدوات ومعدات</option>
+            <option value="مواد عامة">مواد عامة</option>
+          </select>
+        </div>
+
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('الرصيد الافتتاحي (كمية الوارد)') }}</label>
+          <input type="number" step="any" name="opening_qty" class="input" placeholder="0" style="width:100%;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('الحد الأدنى للرصيد') }}</label>
+          <input type="number" step="any" name="min_qty" class="input" placeholder="0" style="width:100%;box-sizing:border-box;">
+        </div>
+
+        <div>
+          <label style="display:block;font-size:0.85rem;font-weight:700;margin-bottom:4px;">{{ _('ملاحظات') }}</label>
+          <input type="text" name="notes" class="input" placeholder="اختياري..." style="width:100%;box-sizing:border-box;">
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:10px;border-top:1px solid var(--border,#e2e8f0);padding-top:14px;">
+        <button type="button" class="btn ghost" onclick="document.getElementById('quick-add-item-modal').style.display='none'">{{ _('إلغاء') }}</button>
+        <button type="submit" class="btn primary" style="font-weight:700;">💾 {{ _('حفظ وإضافة الصنف') }}</button>
+      </div>
+    </form>
+  </div>
 </div>
 {% endblock %}
