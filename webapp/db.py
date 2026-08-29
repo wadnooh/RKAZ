@@ -349,7 +349,11 @@ EXTRA_TABLE_DDL = {
     "reinforcement_works": """
         CREATE TABLE IF NOT EXISTS reinforcement_works (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rekaz_code TEXT,
+            work_order TEXT,
             work_no TEXT,
+            sap_reservation_no TEXT,
+            notification_no TEXT,
             work_date TEXT,
             department TEXT,
             work_type TEXT,
@@ -710,8 +714,26 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             if seeded:
                 created.append(f"reinforcement_departments_seed:{seeded}")
         if "reinforcement_works" in existing or "reinforcement_works" in created:
-            if _ensure_column(conn, "reinforcement_works", "station_no"):
-                created.append("reinforcement_works.station_no")
+            for col in ("rekaz_code", "work_order", "sap_reservation_no", "notification_no", "station_no"):
+                if _ensure_column(conn, "reinforcement_works", col):
+                    created.append(f"reinforcement_works.{col}")
+            conn.execute(
+                """
+                UPDATE reinforcement_works
+                SET rekaz_code = work_no
+                WHERE (rekaz_code IS NULL OR trim(rekaz_code) = '')
+                  AND (work_no LIKE 'RF-%' OR work_no LIKE 'RN-%')
+                """
+            )
+            conn.execute(
+                """
+                UPDATE reinforcement_works
+                SET work_order = work_no
+                WHERE (work_order IS NULL OR trim(work_order) = '')
+                  AND work_no IS NOT NULL AND trim(work_no) <> ''
+                  AND work_no NOT LIKE 'RF-%'
+                """
+            )
         if "new_coordinations" in existing or "new_coordinations" in created:
             if _ensure_column(conn, "new_coordinations", "coord_kind"):
                 created.append("new_coordinations.coord_kind")
@@ -1613,7 +1635,8 @@ def next_series_code(series: str, conn=None) -> str:
             ).fetchone()
         elif series == "rf":
             taken = conn.execute(
-                "SELECT 1 FROM reinforcement_works WHERE lower(work_no)=lower(?) LIMIT 1", (code,)
+                "SELECT 1 FROM reinforcement_works WHERE lower(rekaz_code)=lower(?) OR lower(work_no)=lower(?) LIMIT 1",
+                (code, code),
             ).fetchone()
         elif series == "cu":
             taken = conn.execute(

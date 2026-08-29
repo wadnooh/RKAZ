@@ -1747,8 +1747,13 @@ def _reinforcement_work_for_ref(ref: str, conn=None):
     own = conn is None
     conn = conn or db.connect()
     row = conn.execute(
-        "SELECT id, work_no FROM reinforcement_works WHERE work_no=? LIMIT 1",
-        (ref,),
+        """
+        SELECT id, work_no, rekaz_code, work_order, sap_reservation_no, notification_no
+        FROM reinforcement_works
+        WHERE work_no=? OR rekaz_code=? OR work_order=? OR sap_reservation_no=? OR notification_no=?
+        LIMIT 1
+        """,
+        (ref, ref, ref, ref, ref),
     ).fetchone()
     if own:
         conn.close()
@@ -4817,8 +4822,10 @@ def module_new(name):
                     data["item_name"] = item["item_name"] or data.get("item_name") or ""
                     data["unit"] = db.normalize_warehouse_unit(item["unit"] or data.get("unit") or "")
         if name == "reinforcement_works":
+            if not (data.get("rekaz_code") or "").strip():
+                data["rekaz_code"] = db.next_series_code("rf", conn)
             if not (data.get("work_no") or "").strip():
-                data["work_no"] = db.next_series_code("rf", conn)
+                data["work_no"] = data.get("rekaz_code") or data.get("work_order") or ""
             if not (data.get("work_date") or "").strip():
                 data["work_date"] = datetime.now().strftime("%Y-%m-%d")
             if not (data.get("status") or "").strip():
@@ -4985,8 +4992,11 @@ def module_new(name):
             prefill = db.enrich_warehouse_tx_from_item(prefill)
         if name == "quantities":
             prefill = db.enrich_quantity_from_boq(prefill, conn)
-    if name == "reinforcement_works" and request.args.get("department") and "department" in prefill:
-        prefill["department"] = request.args.get("department")
+    if name == "reinforcement_works":
+        if request.args.get("department") and "department" in prefill:
+            prefill["department"] = request.args.get("department")
+        if "rekaz_code" in prefill and not (prefill.get("rekaz_code") or "").strip():
+            prefill["rekaz_code"] = db.next_series_code("rf", conn)
     if name == "primary_team_orders":
         # الإضافة من صفحة العمليات ← الفرق الأولية فقط
         conn.close()
@@ -6261,7 +6271,13 @@ def _transaction_trace_payload(q):
             url=url_for("ops_primary_teams", q=r.get("work_order") or q),
         )
 
-    reinforcement = _trace_rows(conn, "reinforcement_works", ("work_no", "ticket_no", "station_no"), q, "id")
+    reinforcement = _trace_rows(
+        conn,
+        "reinforcement_works",
+        ("rekaz_code", "work_order", "work_no", "sap_reservation_no", "notification_no", "ticket_no", "station_no"),
+        q,
+        "id",
+    )
     for r in reinforcement:
         _trace_add(
             items,
@@ -6270,7 +6286,7 @@ def _transaction_trace_payload(q):
             section=r.get("department") or "التعزيز",
             status=r.get("status"),
             date=r.get("work_date"),
-            detail=f"{r.get('work_no') or ''} / {r.get('work_type') or ''} / {r.get('value') or 0} ر.س",
+            detail=f"{r.get('rekaz_code') or r.get('work_order') or r.get('work_no') or ''} / {r.get('work_type') or ''} / {r.get('value') or 0} ر.س",
             url=url_for("reinforcement_work_view", row_id=r["id"]),
         )
 

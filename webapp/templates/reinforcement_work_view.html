@@ -24,14 +24,18 @@
   </div>
 
   <div class="meta-grid">
-    <div class="meta-item"><div class="k">{{ _('رقم المعاملة') }}</div><div class="v"><strong>{{ work.work_no }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم ركاز') }}</div><div class="v"><strong>{{ work.rekaz_code or work.work_no or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم أمر العمل') }}</div><div class="v"><strong>{{ work.work_order or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم حجز الساب') }}</div><div class="v">{{ work.sap_reservation_no or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم الإشعار') }}</div><div class="v">{{ work.notification_no or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم المحطة') }}</div><div class="v">{{ work.station_no or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('التاريخ') }}</div><div class="v">{{ work.work_date or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('القسم') }}</div><div class="v">{{ work.department or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('نوع العمل') }}</div><div class="v">{{ work.work_type or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(work.status) or '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('رقم المحطة') }}</div><div class="v">{{ work.station_no or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ work.ticket_no or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('القيمة') }}</div><div class="v">{{ work.value|money if work.value not in [None, ''] else '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم المعاملة / الاسكيمة') }}</div><div class="v">{{ work.work_no or '—' }}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{{ work.location or '—' }}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ work.notes or '—' }}</div></div>
   </div>

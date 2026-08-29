@@ -70,7 +70,10 @@
     <table class="table">
       <thead>
         <tr>
+          <th>{{ _('رقم ركاز') }}</th>
           <th>{{ _('رقم أمر العمل') }}</th>
+          <th>{{ _('رقم حجز الساب') }}</th>
+          <th>{{ _('رقم الإشعار') }}</th>
           <th>{{ _('رقم المحطة') }}</th>
           <th>{{ _('القسم') }}</th>
           <th>{{ _('التاريخ') }}</th>
@@ -81,7 +84,10 @@
       <tbody>
         {% for work in recent_works %}
         <tr>
-          <td><strong>{{ work.work_no or '—' }}</strong></td>
+          <td><strong>{{ work.rekaz_code or work.work_no or '—' }}</strong></td>
+          <td>{{ work.work_order or '—' }}</td>
+          <td>{{ work.sap_reservation_no or '—' }}</td>
+          <td>{{ work.notification_no or '—' }}</td>
           <td>{{ work.station_no or '—' }}</td>
           <td>{{ work.department or '—' }}</td>
           <td>{{ work.work_date or '—' }}</td>

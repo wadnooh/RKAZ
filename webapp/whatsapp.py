@@ -367,13 +367,21 @@ def reinforcement_whatsapp_message(work: dict, base_url: str = "") -> str:
     base_url = (base_url or "").rstrip("/")
     lines = [
         "⚡ *معاملة التعزيز — ركاز*",
-        f"▫️ *رقم المعاملة:* {work.get('work_no') or '—'}",
+        f"▫️ *رقم ركاز:* {work.get('rekaz_code') or work.get('work_no') or '—'}",
+    ]
+    if work.get("work_order"):
+        lines.append(f"▫️ *رقم أمر العمل:* {work.get('work_order')}")
+    if work.get("sap_reservation_no"):
+        lines.append(f"▫️ *رقم حجز الساب:* {work.get('sap_reservation_no')}")
+    if work.get("notification_no"):
+        lines.append(f"▫️ *رقم الإشعار:* {work.get('notification_no')}")
+    lines.extend([
         f"▫️ *التاريخ:* {work.get('work_date') or '—'}",
         f"▫️ *القسم:* {work.get('department') or '—'}",
         f"▫️ *نوع العمل:* {work.get('work_type') or '—'}",
         f"▫️ *الحالة:* {work.get('status') or '—'}",
         f"▫️ *المحطة:* {work.get('station_no') or '—'}",
-    ]
+    ])
     if work.get("ticket_no"):
         lines.append(f"▫️ *رقم العطل:* {work.get('ticket_no')}")
     if work.get("location"):
