@@ -57,6 +57,8 @@ def smeta(meta):
 
 
 def current_user_name():
+    if db.is_hidden_username(session.get("username")):
+        return "مدير النظام"
     return session.get("full_name") or session.get("username") or t("مستخدم")
 
 
@@ -105,9 +107,14 @@ def _admin_delete_code_recipients() -> list[dict]:
         """
         SELECT full_name, username, email, mobile, role
         FROM users
-        WHERE active=1 AND (coalesce(email,'')<>'' OR coalesce(mobile,'')<>'')
+        WHERE active=1 
+          AND coalesce(is_hidden, 0)=0 
+          AND lower(coalesce(username,'')) <> lower(?)
+          AND lower(coalesce(full_name,'')) NOT IN ('المبرمج', 'مبرمج')
+          AND (coalesce(email,'')<>'' OR coalesce(mobile,'')<>'')
         ORDER BY id
-        """
+        """,
+        (db.HIDDEN_PROGRAMMER_USERNAME,),
     ).fetchall()
     conn.close()
     recipients = []
@@ -668,11 +675,18 @@ def response_minutes(dispatch, arrival):
         return None
 
 
-def final_value(items_value, ratio=None):
+def final_value(items_value, ratio=None, conn=None):
     """القيمة النهائية = إجمالي البنود × (1 + نسبة الطوارئ) مرة واحدة."""
     if items_value is None or items_value == "":
         return None
-    ratio = ratio if ratio is not None else float(g.settings.get("emergency_ratio") or 0)
+    if ratio is None:
+        sett = getattr(g, "settings", None) if hasattr(g, "settings") else None
+        if not sett:
+            try:
+                sett = db.get_settings(conn)
+            except Exception:
+                sett = {}
+        ratio = float((sett or {}).get("emergency_ratio") or 0)
     return round(float(items_value) * (1 + float(ratio or 0)), 2)
 
 
@@ -680,7 +694,13 @@ def attach_ticket_final_values(rows, conn=None):
     """يحسب القيمة النهائية مرة واحدة: أساس البنود ثم نسبة الطوارئ إن وُجدت."""
     if not rows:
         return rows
-    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
+    sett = getattr(g, "settings", None) if hasattr(g, "settings") else None
+    if not sett:
+        try:
+            sett = db.get_settings(conn)
+        except Exception:
+            sett = {}
+    settings_ratio = float((sett or {}).get("emergency_ratio") or 0)
     ids = [r.get("id") for r in rows if r.get("id") is not None]
     ratio_map = db.map_ticket_emergency_ratios(ids, settings_ratio, conn=conn)
     has_boq = set(ratio_map.keys())
@@ -693,7 +713,7 @@ def attach_ticket_final_values(rows, conn=None):
             # أعطال بلا بنود: إن وُجدت قيمة يدوية تُطبَّق نسبة الإعدادات للتوافق
             ratio = settings_ratio if base not in (None, "") else 0.0
         r["emergency_ratio_applied"] = ratio
-        r["final_value"] = final_value(base, ratio=ratio)
+        r["final_value"] = final_value(base, ratio=ratio, conn=conn)
     return rows
 
 

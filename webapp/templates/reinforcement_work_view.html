@@ -1,149 +1,444 @@
 {% extends "base.html" %}
 {% block content %}
-{% set active = 'reinforcement' %}
-{% include "_ops_subnav.html" %}
+{% set active = 'reinforcement_works' %}
+{% set editing = edit_mode %}
+{% set step = edit_step if editing else '' %}
+{% include "_reinforcement_subnav.html" %}
 
-<div class="card">
+{% if editing and wizard_steps %}
+<div class="card ticket-wizard">
+  <div class="toolbar" style="margin-bottom:8px;">
+    <div>
+      <h2 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('خطوات المعاملة / الاسكيمة') }}</h2>
+      <div class="meta">{{ _('تنقّل بين الخطوات يدوياً من الشريط أعلاه — الحفظ لا ينقلك تلقائياً') }}</div>
+    </div>
+  </div>
+  <nav class="ticket-steps" aria-label="{{ _('خطوات تعديل المعاملة') }}">
+    {% for key, label in wizard_steps %}
+    <a class="ticket-step{% if step==key %} is-active{% endif %}"
+       href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step=key) }}#step-{{ key }}">
+      <span class="ticket-step-num">{{ loop.index }}</span>
+      <span>{{ label }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+</div>
+{% endif %}
+
+{# —— الخطوة 1: بيانات المعاملة —— #}
+<div class="card{% if editing and step=='data' %} ticket-step-panel is-active{% endif %}" id="step-data" style="margin-top:{% if editing %}14px{% else %}0{% endif %};">
   <div class="toolbar">
     <div>
-      <h2 class="section-title">{{ _('معاملة التعزيز') }} - {{ work.work_no }}</h2>
-      <div class="meta">{{ _('صفحة واحدة للكميات والصور والتمتير والمستودع الخاصة بالمعاملة.') }}</div>
+      <h2 class="section-title">{% if editing %}{{ _('تعديل المعاملة / الاسكيمة') }}{% else %}{{ _('عرض المعاملة / الاسكيمة') }}{% endif %} — {{ work.work_no or work.rekaz_code }}</h2>
+      <div class="meta">
+        {% if editing %}
+        {% if step=='data' %}{{ _('الخطوة 1: بيانات المعاملة') }}{% else %}{{ _('وضع التعديل — يمكن التنقل بين الخطوات أعلاه') }}{% endif %}
+        {% else %}
+        {{ _('تفاصيل المعاملة والسجلات المرتبطة بها (بنود/كميات، صور، تمتير، مستودع) — للعرض فقط حتى طلب التعديل') }}
+        {% if not can_mutate %}<br>{{ _('لا تملك صلاحية التعديل (يلزم صلاحية قسم التعزيز).') }}{% endif %}
+        {% endif %}
+      </div>
     </div>
     <div class="actions">
       <a class="btn ghost" href="{{ url_for('module_list', name='reinforcement_works') }}">{{ _('رجوع') }}</a>
+      {% if editing %}
+      <a class="btn ghost" href="{{ url_for('reinforcement_work_view', row_id=work.id) }}">{{ _('إنهاء التعديل') }}</a>
+      {% elif can_mutate %}
+      <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step='data') }}#step-data">{{ _('طلب التعديل') }}</a>
+      {% endif %}
       {% if whatsapp_share_url %}
       <a class="btn ghost" href="{{ whatsapp_share_url }}" target="_blank" rel="noopener" title="{{ _('إرسال / مشاركة عبر واتساب') }}" style="display:inline-flex;align-items:center;gap:6px;color:#128C7E;">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
         {{ _('واتساب') }}
       </a>
       {% endif %}
-      {% if can_mutate %}
-      <a class="btn ghost" href="{{ url_for('module_edit', name='reinforcement_works', row_id=work.id) }}">{{ _('تعديل البيانات') }}</a>
+      <a class="btn {% if editing %}ghost{% else %}primary{% endif %}" href="{{ url_for('reinforcement_work_print', row_id=work.id) }}" target="_blank">{{ _('طباعة التقرير') }}</a>
+      {% if editing and can('button.module.reinforcement_works.delete') %}
+      <form method="post" action="{{ url_for('reinforcement_work_delete', row_id=work.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف معاملة التعزيز') }}">
+        <input type="hidden" name="delete_password" value="">
+        <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+      </form>
       {% endif %}
     </div>
   </div>
 
+  {% if editing and can_mutate %}
+  <form method="post" action="{{ url_for('reinforcement_work_edit', row_id=work.id) }}" class="form-grid">
+    <input type="hidden" name="step" value="{{ step or 'data' }}">
+    <div class="field">
+      <label>{{ _('رقم المعاملة / الاسكيمة') }}</label>
+      <input name="work_no" value="{{ work.work_no or '' }}" required placeholder="RF-…">
+      <div class="meta">{{ _('المرجع الأساسي لربط البنود والتمتير والصور') }}</div>
+    </div>
+    <div class="field">
+      <label>{{ _('كود ركاز') }}</label>
+      <input name="rekaz_code" value="{{ work.rekaz_code or '' }}" placeholder="RF-…">
+    </div>
+    <div class="field">
+      <label>{{ _('رقم أمر العمل') }}</label>
+      <input name="work_order" value="{{ work.work_order or '' }}" placeholder="{{ _('رقم أمر العمل') }}">
+    </div>
+    <div class="field">
+      <label>{{ _('رقم حجز الساب') }}</label>
+      <input name="sap_reservation_no" value="{{ work.sap_reservation_no or '' }}" placeholder="{{ _('حجز ساب') }}">
+    </div>
+    <div class="field">
+      <label>{{ _('رقم الإشعار') }}</label>
+      <input name="notification_no" value="{{ work.notification_no or '' }}" placeholder="{{ _('رقم الإشعار') }}">
+    </div>
+    <div class="field">
+      <label>{{ _('رقم المحطة') }}</label>
+      <input name="station_no" value="{{ work.station_no or '' }}">
+    </div>
+    <div class="field">
+      <label>{{ _('التاريخ') }}</label>
+      <input type="date" name="work_date" value="{{ work.work_date or '' }}">
+    </div>
+    <div class="field">
+      <label>{{ _('القسم') }}</label>
+      <select name="department">
+        <option value="">—</option>
+        {% for d in departments %}
+        <option value="{{ d.dept_name }}" {% if work.department==d.dept_name %}selected{% endif %}>{{ d.dept_name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>{{ _('نوع العمل') }}</label>
+      <input name="work_type" value="{{ work.work_type or '' }}" placeholder="{{ _('نوع العمل / التوصيف') }}">
+    </div>
+    <div class="field">
+      <label>{{ _('الحالة') }}</label>
+      <select name="status">
+        {% set status_choices = lists.execution_status or lists.ticket_status %}
+        {% for x in status_choices %}
+        <option value="{{ x }}" {% if work.status==x %}selected{% endif %}>{{ tv(x) }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field">
+      <label>{{ _('رقم العطل المرتبط (إن وجد)') }}</label>
+      <input name="ticket_no" value="{{ work.ticket_no or '' }}" placeholder="{{ _('رقم العطل') }}">
+    </div>
+    <div class="field">
+      <label>{{ _('قيمة المعاملة (المحسوبة)') }}</label>
+      <input type="number" step="0.01" name="value" value="{{ work.final_value if work.final_value is not none else (work.value or '') }}">
+      <div class="meta">{{ _('تُحدّث تلقائياً بناءً على بنود العقد والتمتير') }}</div>
+    </div>
+    <div class="field full">
+      <label>{{ _('الموقع (رابط خرائط)') }}</label>
+      <input name="location" value="{{ work.location or '' }}">
+    </div>
+    <div class="field full">
+      <label>{{ _('ملاحظات') }}</label>
+      <textarea name="notes">{{ work.notes or '' }}</textarea>
+    </div>
+    <div class="actions full" style="grid-column:1/-1">
+      <button class="btn primary" type="submit">{{ _('حفظ المعاملة') }}</button>
+      <span class="meta">{{ _('يبقى التعديل في نفس الصفحة بعد الحفظ') }}</span>
+    </div>
+  </form>
+  {% else %}
   <div class="meta-grid">
-    <div class="meta-item"><div class="k">{{ _('رقم ركاز') }}</div><div class="v"><strong>{{ work.rekaz_code or work.work_no or '—' }}</strong></div></div>
-    <div class="meta-item"><div class="k">{{ _('رقم أمر العمل') }}</div><div class="v"><strong>{{ work.work_order or '—' }}</strong></div></div>
-    <div class="meta-item"><div class="k">{{ _('رقم حجز الساب') }}</div><div class="v">{{ work.sap_reservation_no or '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('رقم الإشعار') }}</div><div class="v">{{ work.notification_no or '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('رقم المحطة') }}</div><div class="v">{{ work.station_no or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم المعاملة / الاسكيمة') }}</div><div class="v"><strong>{{ work.work_no or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('كود ركاز') }}</div><div class="v"><strong>{{ work.rekaz_code or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('أمر العمل') }}</div><div class="v"><strong>{{ work.work_order or '—' }}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('حجز الساب / الإشعار') }}</div><div class="v">{{ work.sap_reservation_no or '—' }} / {{ work.notification_no or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('التاريخ') }}</div><div class="v">{{ work.work_date or '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('القسم') }}</div><div class="v">{{ work.department or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القسم') }}</div><div class="v"><span class="badge">{{ work.department or '—' }}</span></div></div>
     <div class="meta-item"><div class="k">{{ _('نوع العمل') }}</div><div class="v">{{ work.work_type or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('المحطة') }}</div><div class="v">{{ work.station_no or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(work.status) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('رقم العطل') }}</div><div class="v">{{ work.ticket_no or '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('القيمة') }}</div><div class="v">{{ work.value|money if work.value not in [None, ''] else '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('رقم المعاملة / الاسكيمة') }}</div><div class="v">{{ work.work_no or '—' }}</div></div>
-    <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{{ work.location or '—' }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('إجمالي البنود') }}</div><div class="v">{% if work.boq_base_total is not none %}{{ work.boq_base_total|money }}{% elif work.items_value is not none %}{{ work.items_value|money }}{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('نسبة الطوارئ') }}</div><div class="v">{% if work.emergency_ratio_applied %}{{ (work.emergency_ratio_applied * 100)|round(1) }}٪{% else %}{{ _('بدون زيادة') }}{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القيمة النهائية') }}</div><div class="v"><strong>{% if work.final_value is not none %}{{ work.final_value|money }}{% else %}—{% endif %}</strong></div></div>
+    <div class="meta-item"><div class="k">{{ _('سجلات التمتير') }}</div><div class="v">{{ related.metering|length }} {{ _('سجل') }}</div></div>
+    <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{% if work.location %}<a href="{{ work.location }}" target="_blank" rel="noopener">{{ work.location }}</a>{% else %}—{% endif %}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ work.notes or '—' }}</div></div>
   </div>
+  {% endif %}
 </div>
 
-<div class="card{% if focus == 'quantities' %} is-active{% endif %}" id="section-quantities" style="margin-top:14px;">
+{# —— الخطوة 2: بنود العقد والكميات والتمتير (موحّد) —— #}
+<div class="card{% if editing and step=='boq' %} ticket-step-panel is-active{% endif %}" id="step-boq" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الكميات وورقة التمتير') }}</h3>
-      <div class="meta">{{ related.quantities|length }} {{ _('بند') }} | {{ _('الإجمالي') }} {{ qty_total|money }}</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('بنود العقد والكميات والتمتير') }}</h3>
+      <div class="meta">
+        {% if editing and step=='boq' %}<strong>{{ _('الخطوة الحالية: إضافة الكمية') }}</strong> — {% endif %}
+        {% if boq_file %}{{ _('مرتبط بالدليل:') }} {{ boq_file.filename }} — {% endif %}
+        {{ related.boq_lines|length }} {{ _('بند') }} |
+        {{ _('إجمالي البنود') }} {{ (work.boq_base_total or 0)|money }}
+        {% if work.emergency_ratio_applied %}
+        | {{ _('طوارئ') }} {{ (work.emergency_ratio_applied * 100)|round(1) }}٪
+        {% endif %}
+        | {{ _('القيمة النهائية') }} {{ (work.final_value or work.boq_final_total or 0)|money }}
+      </div>
     </div>
     <div class="actions">
       {% if can_mutate %}
-      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='quantities', ticket_no=work.work_no) }}">{{ _('إضافة كمية') }}</a>{% endif %}
+      {% if not editing or step != 'boq' %}
+      <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step='boq') }}#step-boq">{{ _('إضافة البنود') }}</a>
       {% endif %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='quantities', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
+      {% endif %}
     </div>
   </div>
+
+  {% if editing and can_mutate %}
+  {% if has_boq_catalog %}
+  <form method="post" action="{{ url_for('reinforcement_work_boq_add', row_id=work.id) }}" class="form-grid" style="margin-bottom:14px;" id="reinforcementBoqForm">
+    <div class="field">
+      <label>{{ _('رقم البند') }}</label>
+      <input type="text" name="item_no" id="reinforcementBoqItemNo" required autocomplete="off" placeholder="{{ _('اكتب رقم البند من الدليل') }}" dir="ltr" style="text-align:left"{% if editing and step=='boq' %} autofocus{% endif %}>
+      <div class="meta" id="reinforcementBoqPreview" style="margin-top:4px;"></div>
+    </div>
+    <div class="field"><label>{{ _('الكمية') }}</label><input type="number" step="0.01" name="qty" value="1" required></div>
+    <div class="field">
+      <label>{{ _('تصنيف العمل') }}</label>
+      <select name="work_class" id="reinforcementBoqClass">
+        <option value="اعتيادي">{{ _('اعتيادي (بدون زيادة)') }}</option>
+        <option value="طوارئ">{{ _('طوارئ (نسبة زيادة)') }}</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>{{ _('نسبة الزيادة (طوارئ)') }}</label>
+      <input type="number" step="0.01" min="0" name="increase_ratio" id="reinforcementBoqRatio" value="{{ emergency_ratio }}" placeholder="{{ emergency_ratio }}">
+      <div class="meta">{{ _('اعتيادي = بدون زيادة على القيمة النهائية — طوارئ = تُطبَّق النسبة مرة واحدة على إجمالي البنود في القيمة النهائية') }}</div>
+    </div>
+    <div class="field full"><label>{{ _('ملاحظات البند') }}</label><input name="notes" value=""></div>
+    <div class="actions" style="grid-column:1/-1;">
+      <button class="btn primary" type="submit">{{ _('إضافة بند وربطه بالتمتير') }}</button>
+      <span class="meta">{{ _('يُحسب إجمالي التمتير تلقائياً من بنود العقد المرتبطة بهذه المعاملة/الاسكيمة.') }}</span>
+    </div>
+  </form>
+  <script>
+  (function () {
+    var I18N_UNIT = {{ _('الوحدة:')|tojson }};
+    var I18N_PRICE = {{ _('السعر:')|tojson }};
+    var I18N_OK = {{ _('بند موجود في الدليل')|tojson }};
+    var I18N_MISS = {{ _('البند غير موجود في الدليل')|tojson }};
+    var input = document.getElementById("reinforcementBoqItemNo");
+    var preview = document.getElementById("reinforcementBoqPreview");
+    if (!input || !preview) return;
+    var timer = null;
+    var url = {{ url_for('api_boq_item')|tojson }};
+    function lookup() {
+      var code = (input.value || "").trim();
+      if (!code) {
+        preview.textContent = "";
+        preview.style.color = "";
+        return;
+      }
+      fetch(url + "?item_no=" + encodeURIComponent(code))
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            var parts = [];
+            if (data.description) parts.push(data.description);
+            if (data.unit) parts.push(I18N_UNIT + " " + data.unit);
+            if (data.unit_price != null && data.unit_price !== "") parts.push(I18N_PRICE + " " + data.unit_price);
+            preview.textContent = parts.join(" — ") || I18N_OK;
+            preview.style.color = "";
+          } else {
+            preview.textContent = data.error || I18N_MISS;
+            preview.style.color = "var(--danger, #b42318)";
+          }
+        })
+        .catch(function () {
+          preview.textContent = "";
+        });
+    }
+    input.addEventListener("blur", lookup);
+    input.addEventListener("input", function () {
+      clearTimeout(timer);
+      timer = setTimeout(lookup, 350);
+    });
+  })();
+  </script>
+  {% else %}
+  <p class="meta" style="margin-bottom:12px;">
+    {{ _('لا يوجد دليل بنود عقد نشط.') }}
+    {% if can('section.contracts') %}
+    <a href="{{ url_for('contracts_admin_home') }}">{{ _('ارفع ملف Excel من إدارة العقود') }}</a>.
+    {% endif %}
+  </p>
+  {% endif %}
+  {% endif %}
+
   <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>{{ _('البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الوحدة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('السعر') }}</th><th>{{ _('الإجمالي') }}</th><th>{{ _('إجراءات') }}</th></tr></thead>
-      <tbody>
-        {% for q in related.quantities %}
+    <table class="table" style="min-width:0">
+      <thead>
         <tr>
-          <td>{{ q.item_no or '—' }}</td>
-          <td>{{ q.description or '—' }}</td>
-          <td>{{ q.unit or '—' }}</td>
-          <td>{{ q.qty or '—' }}</td>
-          <td>{{ q.unit_price|money if q.unit_price not in [None, ''] else '—' }}</td>
-          <td>{{ ((q.qty or 0)|float * (q.unit_price or 0)|float)|money }}</td>
-          <td>{% if can_mutate %}<a class="btn ghost" href="{{ url_for('module_edit', name='quantities', row_id=q.id) }}">{{ _('تعديل') }}</a>{% endif %}</td>
+          <th>{{ _('رقم البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الوحدة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('سعر الوحدة') }}</th>
+          <th>{{ _('الإجمالي') }}</th><th>{{ _('التصنيف') }}</th><th>{{ _('نسبة الزيادة') }}</th>
+          {% if editing and can_mutate %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in related.boq_lines %}
+        <tr>
+          <td>{{ line.item_no or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
+          <td>{{ line.unit or '—' }}</td>
+          <td>{{ line.qty if line.qty is not none else '—' }}</td>
+          <td>{% if line.unit_price is not none %}{{ line.unit_price|money }}{% else %}—{% endif %}</td>
+          <td><strong>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</strong></td>
+          <td>{{ tv(line.work_class) or '—' }}</td>
+          <td>{% if line.work_class == 'طوارئ' %}{{ ((line.increase_ratio or 0) * 100)|round(1) }}٪{% else %}—{% endif %}</td>
+          {% if editing and can_mutate %}
+          <td class="actions">
+            <form method="post" action="{{ url_for('reinforcement_work_boq_delete', row_id=work.id, line_id=line.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف البند') }}">
+              <input type="hidden" name="delete_password" value="">
+              <button class="btn ghost" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+            </form>
+          </td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">{{ _('لا توجد كميات مرتبطة.') }}</td></tr>
+        <tr><td colspan="{% if editing and can_mutate %}9{% else %}8{% endif %}" class="meta">{% if editing and can_mutate %}{{ _('لا توجد بنود لهذه المعاملة بعد — أدخل رقم البند أعلاه.') }}{% else %}{{ _('لا توجد بنود لهذه المعاملة بعد.') }}{% endif %}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if related.boq_lines %}
+  <div class="meta" style="margin-top:10px;">
+    {{ _('إجمالي البنود') }}: <strong>{{ (work.boq_base_total or 0)|money }}</strong>
+    {% if work.emergency_ratio_applied %}
+    — {{ _('نسبة الطوارئ') }}: <strong>{{ (work.emergency_ratio_applied * 100)|round(1) }}٪</strong>
+    {% endif %}
+    — {{ _('القيمة النهائية') }}: <strong>{{ (work.final_value or 0)|money }}</strong>
+  </div>
+  {% endif %}
+  {% if editing and step=='boq' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
 
-<div class="card{% if focus == 'photos' %} is-active{% endif %}" id="section-photos" style="margin-top:14px;">
+{# —— الخطوة 3: الصور والمرفقات —— #}
+<div class="card{% if editing and step=='photos' %} ticket-step-panel is-active{% endif %}" id="step-photos" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('الصور والمرفقات') }}</h3>
-      <div class="meta">{{ related.photos|length }} {{ _('سجل') }}</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('قائمة الصور والمرفقات') }}</h3>
+      <div class="meta">
+        {% if editing and step=='photos' %}<strong>{{ _('الخطوة الحالية: الصور') }}</strong> — {% endif %}
+        {{ related.photos|length }} {{ _('سجل صور مرتبط بهذه المعاملة') }}
+      </div>
     </div>
     <div class="actions">
-      {% if can_mutate %}
-      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=work.work_no) }}">{{ _('إضافة صور') }}</a>
+      {% if can_mutate and can('modules.write') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='photos', ticket_no=work.work_no or work.rekaz_code) }}">{{ _('إضافة صور') }}</a>
       {% endif %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
-    </div>
-  </div>
-  {% for p in related.photos %}
-  <div class="attachment-panel" style="margin-bottom:10px;">
-    <div class="attachment-panel__head">
-      <strong>{{ _('سجل صور') }} #{{ p.id }}</strong>
-      <span class="badge">{{ p.complete }}</span>
-    </div>
-    <div class="attachment-list attachment-list--gallery">
-      {% for field_value in [p.before_shot, p.during_shot, p.after_shot, p.quantities_shot, p.location_shot] %}
-        {% for ref in photo_refs(field_value) %}
-          <div class="attachment-item">
-          {% if is_image_ref(ref) %}
-          <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
-          {% elif is_pdf_ref(ref) %}
-          <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>PDF</span><em>{{ media_filename(ref) }}</em></a>
-          {% endif %}
-          <a class="attachment-download" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
-          </div>
-        {% endfor %}
-      {% endfor %}
-      {% for ref in attachment_refs(p.attachments) %}
-        <div class="attachment-item">
-        {% if is_image_ref(ref) %}
-        <a class="attachment-preview attachment-preview--image" href="{{ ref }}" target="_blank" rel="noopener"><img src="{{ ref }}" alt=""></a>
-        {% else %}
-        <a class="attachment-preview attachment-preview--file" href="{{ ref }}" target="_blank" rel="noopener"><span>{{ media_filename(ref).split('.')[-1]|upper }}</span><em>{{ media_filename(ref) }}</em></a>
-        {% endif %}
-        <a class="attachment-download" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
-        </div>
-      {% endfor %}
-    </div>
-    <div class="actions" style="margin-top:10px;">
-      {% if can_mutate %}<a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">{{ _('تعديل') }}</a>{% endif %}
-    </div>
-  </div>
-  {% else %}
-  <p class="meta">{{ _('لا توجد صور مرتبطة.') }}</p>
-  {% endfor %}
-</div>
-
-<div class="card{% if focus == 'metering' %} is-active{% endif %}" id="section-metering" style="margin-top:14px;">
-  <div class="toolbar">
-    <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير والكميات المعتمدة') }}</h3>
-      <div class="meta">{{ related.metering|length }} {{ _('سجل') }} | {{ _('مبلغ الكميات المحسوب') }} <strong>{{ qty_total|money }}</strong></div>
-    </div>
-    <div class="actions">
-      {% if can_mutate %}
-      {% if false %}<a class="btn primary" href="{{ url_for('module_new', name='metering', ticket_no=work.work_no) }}">{{ _('إضافة تمتر') }}</a>{% endif %}
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='photos', ticket_no=work.work_no or work.rekaz_code) }}">{{ _('عرض الكل') }}</a>
       {% endif %}
-      <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=work.work_no) }}">{{ _('عرض الكل') }}</a>
     </div>
   </div>
   <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>{{ _('المسؤول') }}</th><th>{{ _('البداية') }}</th><th>{{ _('الرفع') }}</th><th>{{ _('الاعتماد') }}</th><th>{{ _('الحالة') }}</th><th>{{ _('القيمة') }}</th><th>{{ _('إجراءات') }}</th></tr></thead>
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>{{ _('قبل') }}</th><th>{{ _('أثناء') }}</th><th>{{ _('بعد') }}</th><th>{{ _('كميات') }}</th><th>{{ _('موقع') }}</th><th>{{ _('الحالة') }}</th>{% if editing and can_mutate %}<th></th>{% endif %}</tr>
+      </thead>
+      <tbody>
+        {% for p in related.photos %}
+        <tr>
+          {% for key, label in [('before_shot',_('قبل')),('during_shot',_('أثناء')),('after_shot',_('بعد')),('quantities_shot',_('كميات')),('location_shot',_('موقع'))] %}
+          <td>
+            {% set refs = photo_refs(p[key]) %}
+            {% if refs %}
+              <div class="attachment-list is-compact">
+                {% for ref in refs[:3] %}
+                  <span class="attachment-compact-item">
+                  {% if is_pdf_ref(ref) %}
+                  <a class="photo-pdf-chip" href="{{ ref }}" target="_blank" rel="noopener">PDF</a>
+                  {% else %}
+                  <a href="{{ ref }}" target="_blank" rel="noopener"><img class="photo-thumb" src="{{ ref }}" alt="{{ label }}"></a>
+                  {% endif %}
+                  <a class="attachment-download attachment-download--mini" href="{{ media_download_url(ref) }}">{{ _('تنزيل') }}</a>
+                  </span>
+                {% endfor %}
+                {% if refs|length > 3 %}<span class="badge">+{{ refs|length - 3 }}</span>{% endif %}
+              </div>
+            {% elif p[key] == 'نعم' %}
+              <span class="badge ok">{{ tv("نعم") }}</span>
+            {% else %}
+              —
+            {% endif %}
+          </td>
+          {% endfor %}
+          <td>
+            {% if p.complete == 'مكتمل' %}<span class="badge ok">{{ _('مكتمل') }}</span>
+            {% else %}<span class="badge danger">{{ _('ناقص') }}</span>{% endif %}
+          </td>
+          {% if editing and can_mutate %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='photos', row_id=p.id) }}">{{ _('تعديل') }}</a></td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr><td colspan="7" class="meta">{{ _('لا يوجد سجل صور لهذه المعاملة بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if editing and step=='photos' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
+</div>
+
+{# —— الخطوة 4: التمتير والكميات المعتمدة —— #}
+<div class="card{% if editing and step=='metering' %} ticket-step-panel is-active{% endif %}" id="step-metering" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('التمتير والكميات المعتمدة') }}</h3>
+      <div class="meta">
+        {% if editing and step=='metering' %}<strong>{{ _('الخطوة الحالية: التمتير') }}</strong> — {% endif %}
+        {{ related.boq_lines|length }} {{ _('بند كمية') }} |
+        {{ _('مبلغ التمتير المحسوب') }} <strong>{{ (work.final_value or 0)|money }}</strong> |
+        {{ related.metering|length }} {{ _('سجل رفع/اعتماد') }}
+      </div>
+    </div>
+    <div class="actions">
+      {% if can_mutate %}
+      <a class="btn ghost" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step='boq') }}#step-boq">{{ _('إضافة/تعديل البنود') }}</a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='metering', ticket_no=work.work_no or work.rekaz_code) }}">{{ _('عرض الكل') }}</a>
+      {% endif %}
+    </div>
+  </div>
+  <div class="meta-grid" style="margin-bottom:12px;">
+    <div class="meta-item"><div class="k">{{ _('إجمالي البنود') }}</div><div class="v">{{ (work.boq_base_total or 0)|money }}</div></div>
+    <div class="meta-item"><div class="k">{{ _('نسبة الطوارئ') }}</div><div class="v">{% if work.emergency_ratio_applied %}{{ (work.emergency_ratio_applied * 100)|round(1) }}٪{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('القيمة المعتمدة للتمتير') }}</div><div class="v"><strong>{{ (work.final_value or 0)|money }}</strong></div></div>
+  </div>
+  <div class="table-wrap" style="margin-bottom:12px;">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>{{ _('رقم البند') }}</th><th>{{ _('الوصف') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('السعر') }}</th><th>{{ _('الإجمالي') }}</th><th>{{ _('التصنيف') }}</th></tr>
+      </thead>
+      <tbody>
+        {% for line in related.boq_lines %}
+        <tr>
+          <td>{{ line.item_no or '—' }}</td>
+          <td>{{ line.description or '—' }}</td>
+          <td>{{ line.qty if line.qty is not none else '—' }}</td>
+          <td>{% if line.unit_price is not none %}{{ line.unit_price|money }}{% else %}—{% endif %}</td>
+          <td><strong>{% if line.line_total is not none %}{{ line.line_total|money }}{% else %}—{% endif %}</strong></td>
+          <td>{{ tv(line.work_class) or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="6" class="meta">{{ _('لا توجد بنود كميات مرتبطة بالتمتير بعد.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>{{ _('المسؤول') }}</th><th>{{ _('بداية') }}</th><th>{{ _('الرفع') }}</th><th>{{ _('الاعتماد') }}</th><th>{{ _('الحالة') }}</th><th>{{ _('قيمة معتمدة (مبلغ الكميات)') }}</th>{% if editing and can_mutate %}<th></th>{% endif %}</tr>
+      </thead>
       <tbody>
         {% for m in related.metering %}
         <tr>
@@ -152,46 +447,73 @@
           <td>{{ m.submit_date or '—' }}</td>
           <td>{{ m.approve_date or '—' }}</td>
           <td>{{ tv(m.status) or '—' }}</td>
-          <td>{{ m.approved_value|money if m.approved_value not in [None, ''] else '—' }}</td>
-          <td>{% if can_mutate %}<a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">{{ _('تعديل') }}</a>{% endif %}</td>
+          <td>{% if m.approved_value is not none %}{{ m.approved_value|money }}{% else %}—{% endif %}</td>
+          {% if editing and can_mutate %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='metering', row_id=m.id) }}">{{ _('تعديل') }}</a></td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">{{ _('لا توجد سجلات تمتير مرتبطة.') }}</td></tr>
+        <tr><td colspan="{% if editing and can_mutate %}7{% else %}6{% endif %}" class="meta">{{ _('لا يوجد سجل تمتير لهذه المعاملة بعد.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if editing and step=='metering' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
 
-<div class="card{% if focus == 'warehouse' %} is-active{% endif %}" id="section-warehouse" style="margin-top:14px;">
+{# —— الخطوة 5: صرف المستودع —— #}
+{% if can_warehouse %}
+<div class="card{% if editing and step=='warehouse' %} ticket-step-panel is-active{% endif %}" id="step-warehouse" style="margin-top:14px;">
   <div class="toolbar">
     <div>
-      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('المستودع') }}</h3>
-      <div class="meta">{{ related.warehouse_tx|length }} {{ _('حركة') }}</div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">{{ _('حركات المستودع') }}</h3>
+      <div class="meta">
+        {% if editing and step=='warehouse' %}<strong>{{ _('الخطوة الحالية: المستودع') }}</strong> — {% endif %}
+        {{ related.warehouse_tx|length }} {{ _('حركة — الصرف مربوط برقم المعاملة / أمر العمل / كود ركاز') }}
+      </div>
     </div>
     <div class="actions">
+      {% if editing and step=='warehouse' and can_mutate %}
+      <a class="btn primary" href="{{ url_for('module_new', name='warehouse_tx', ticket_no=work.work_no, work_order=work.work_order or none, **{'from': 'reinforcement', 'tx_type': 'منصرف للمعاملة'}) }}">{{ _('إضافة حركة') }}</a>
+      {% endif %}
       <a class="btn ghost" href="{{ url_for('warehouse_movements_summary', source='reinforcement') }}">{{ _('حركات التعزيز') }}</a>
     </div>
   </div>
   <div class="table-wrap">
-    <table class="table">
-      <thead><tr><th>{{ _('السند') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('النوع') }}</th><th>{{ _('المادة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('أمر العمل') }}</th><th>{{ _('إجراءات') }}</th></tr></thead>
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr><th>{{ _('السند') }}</th><th>{{ _('التاريخ') }}</th><th>{{ _('النوع') }}</th><th>{{ _('المادة') }}</th><th>{{ _('الكمية') }}</th><th>{{ _('أمر العمل') }}</th><th>{{ _('كود ركاز') }}</th>{% if editing and can_mutate %}<th></th>{% endif %}</tr>
+      </thead>
       <tbody>
         {% for w in related.warehouse_tx %}
         <tr>
           <td>{% if w.voucher_no %}<a href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}">{{ w.voucher_no }}</a>{% else %}—{% endif %}</td>
           <td>{{ w.tx_date or '—' }}</td>
           <td>{{ tv(w.tx_type) or '—' }}</td>
-          <td>{{ w.item_no or '—' }}{% if w.item_name %} - {{ w.item_name }}{% endif %}</td>
-          <td>{{ w.qty or '—' }}</td>
-          <td>{{ w.work_order or w.source_ref or '—' }}</td>
-          <td>{% if can_mutate and can_warehouse %}<a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=reinforcement">{{ _('تعديل') }}</a>{% endif %}</td>
+          <td>{{ w.item_no or '—' }}{% if w.item_name %} — {{ w.item_name }}{% endif %}</td>
+          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td>{{ w.work_order or work.work_order or '—' }}</td>
+          <td>{{ w.rekaz_code or work.rekaz_code or '—' }}</td>
+          {% if editing and can_mutate %}
+          <td class="actions"><a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=reinforcement">{{ _('تعديل') }}</a></td>
+          {% endif %}
         </tr>
         {% else %}
-        <tr><td colspan="7" class="meta">{{ _('لا توجد حركات مستودع مرتبطة.') }}</td></tr>
+        <tr><td colspan="{% if editing and can_mutate %}8{% else %}7{% endif %}" class="meta">{{ _('لا توجد حركات مستودع مرتبطة بهذه المعاملة.') }}</td></tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
+  {% if editing and step=='warehouse' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=work.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
 </div>
+{% endif %}
+
 {% endblock %}

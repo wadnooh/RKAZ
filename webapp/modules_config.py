@@ -158,9 +158,10 @@ MODULES = {
             ("end_date", "تاريخ النهاية", "date"),
             ("ticket_no", "رقم العطل المرتبط", "ticket"),
             ("site", "الموقع", "text"),
+            ("value", "القيمة الإجمالية", "number"),
             ("notes", "ملاحظات", "textarea"),
         ],
-        "list_cols": ["project_code", "project_name", "project_type", "status", "start_date", "ticket_no"],
+        "list_cols": ["project_code", "project_name", "project_type", "status", "start_date", "ticket_no", "value"],
     },
     # ---- دليل البنود (مرآة للدليل النشط من رفع Excel في العقود) ----
     "boq_items": {

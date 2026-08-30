@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8">
   <title>{{ title_text }} — {{ (settings.company_name if settings is defined and settings else (g.settings.company_name if g is defined and g.settings is defined else 'شركة ركاز الإنجاز للمقاولات')) }}</title>
+  <style>
     :root {
       --bg-page: #EEF2F6;
       --bg-card: #FFFFFF;
@@ -539,8 +540,8 @@
                   {% set val = r[k] if k in r else (r.get(k) if r.get is defined else '') %}
                   {% if val is none or val == '' %}
                     —
-                  {% elif k in ['final_value', 'items_value', 'value', 'amount', 'total', 'price', 'unit_price', 'boq_base_total'] and (val|string)|replace(',','')|float(0) > 0 %}
-                    {{ "{:,.2f}".format(val|string|replace(',','')|float) }}
+                  {% elif k in ['final_value', 'items_value', 'value', 'amount', 'total', 'price', 'unit_price', 'boq_base_total'] %}
+                    {{ "{:,.2f}".format((val|string)|replace(',','')|float(0)) }}
                   {% else %}
                     {{ tv(val|string) if tv is defined else val }}
                   {% endif %}

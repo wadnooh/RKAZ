@@ -1,6 +1,5 @@
 {# شريط فرعي داخل العمليات والصيانة — تبويبات فرعية حقيقية فقط (بدون لوحة مكررة لاسم القسم) #}
 {% set p = request.path or '' %}
-{% set on_reinforcement = active=='reinforcement' or p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %}
 <div class="toolbar" style="margin-bottom:12px;">
   <div class="actions" data-tab-strip="1" data-tab-strip-key="ops_rakaz_tabs">
     {% if can('tab.ops.tickets') %}
@@ -8,9 +7,6 @@
     {% endif %}
     {% if can('tab.ops.primary_teams') %}<a class="btn ghost{% if active=='primary_teams' %} primary{% endif %}" href="{{ url_for('ops_primary_teams') }}">{{ _('الفرق الأولية') }}</a>{% endif %}
     {% if can('tab.ops.teams') %}<a class="btn ghost{% if active=='teams' %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام العاجلة') }}</a>{% endif %}
-    {% if can('tab.ops.reinforcement') %}
-    <a class="btn ghost{% if on_reinforcement %} primary{% endif %}" href="{{ url_for('reinforcement_home') }}">{{ tr('nav_reinforcement') }}</a>
-    {% endif %}
     {% for tab in ops_custom_tabs or [] %}
     <a class="btn ghost{% if active==('custom:' ~ tab.slug) or (active_slug is defined and active_slug==tab.slug) or p == tab.href or p.startswith('/ops/tabs/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
     {% endfor %}

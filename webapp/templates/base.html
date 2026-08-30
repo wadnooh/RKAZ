@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="{{ lang }}" dir="{{ 'rtl' if lang == 'ar' else 'ltr' }}">
 <head>
   <meta charset="utf-8">
@@ -58,7 +58,10 @@
     <a class="tab{% if p.startswith('/projects') or p.startswith('/module/projects') %} active{% endif %}" href="{{ url_for('projects_home') }}">{{ tr('nav_projects') }}</a>
     {% endif %}
     {% if can('tab.ops') %}
-    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/ops/tabs') or p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %} active{% endif %}" href="{{ url_for('tickets_list') if can('tickets.read') else url_for('ops_primary_teams') }}">{{ tr('nav_ops') }}</a>
+    <a class="tab{% if p == '/' or p.startswith('/ops') or p.startswith('/tickets') or p.startswith('/module/quantities') or p.startswith('/module/photos') or p.startswith('/module/metering') or p.startswith('/teams') or p.startswith('/ops/tabs') %} active{% endif %}" href="{{ url_for('tickets_list') if can('tickets.read') else url_for('ops_primary_teams') }}">{{ tr('nav_ops') }}</a>
+    {% endif %}
+    {% if can('tab.reinforcement') or can('section.reinforcement') %}
+    <a class="tab{% if p.startswith('/reinforcement') or p.startswith('/module/reinforcement_') %} active{% endif %}" href="{{ url_for('reinforcement_home') }}">{{ tr('nav_reinforcement') }}</a>
     {% endif %}
     {% if can('tab.contractors') %}
     <a class="tab{% if p.startswith('/contractors') or p.startswith('/module/contractor_') %} active{% endif %}" href="{{ url_for('contractors_home') }}">{{ tr('nav_contractors') }}</a>

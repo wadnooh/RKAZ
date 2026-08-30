@@ -304,17 +304,9 @@ def _ticket_rows(conn, date_from: str = "", date_to: str = "") -> list[dict]:
 def _tickets_value(conn, tickets: list[dict], settings: dict) -> float:
     if not tickets:
         return 0.0
-    default_ratio = _num(settings.get("emergency_ratio"))
-    ids = [r.get("id") for r in tickets if r.get("id") is not None]
-    ratio_map = db.map_ticket_emergency_ratios(ids, default_ratio, conn=conn)
-    total = 0.0
-    for row in tickets:
-        base = row.get("items_value")
-        if base in (None, ""):
-            continue
-        ratio = ratio_map.get(row.get("id"), default_ratio)
-        total += _num(base) * (1 + _num(ratio))
-    return round(total, 2)
+    from webapp import helpers
+    helpers.attach_ticket_final_values(tickets, conn)
+    return round(sum(float(r.get("final_value") or 0) for r in tickets), 2)
 
 
 def _purchase_total(conn, date_from: str = "", date_to: str = "") -> float:

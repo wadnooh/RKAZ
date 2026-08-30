@@ -1,0 +1,235 @@
+{# لوحة بنود العقد وجدول الكميات (BOQ) الموحدة لجميع المعاملات #}
+<div class="card" id="section-boq" style="margin-top:16px; border: 1px solid var(--border, #e2e8f0); border-radius: 8px;">
+  <div class="toolbar" style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:12px;">
+    <div>
+      <h3 class="section-title" style="margin:0; font-size:1.1rem; display:flex; align-items:center; gap:8px;">
+        <span>📋</span> {{ _('بنود العقد وجدول الكميات (BOQ)') }}
+      </h3>
+      <div class="meta" style="font-size:0.85rem; color:var(--text-muted, #64748b); margin-top:2px;">
+        {{ _('إضافة بنود العقد وحساب التكاليف والربط الفوري بإجمالي قيمة المعاملة') }}
+      </div>
+    </div>
+    <div style="display:flex; align-items:center; gap:12px;">
+      <div style="background:var(--bg-highlight, #f8fafc); border:1px solid var(--border, #cbd5e1); border-radius:6px; padding:6px 14px; text-align:right;">
+        <span style="font-size:0.8rem; color:var(--text-muted, #64748b);">{{ _('إجمالي بنود العقد:') }}</span>
+        <strong id="tx-boq-grand-total" style="font-size:1.1rem; color:var(--primary, #0f766e); margin-right:6px;">{{ (tx_boq_total or 0)|money }}</strong>
+      </div>
+    </div>
+  </div>
+
+  {# نموذج إضافة بند جديد #}
+  {% if can('modules.write') %}
+  <div style="background:var(--bg-subtle, #f1f5f9); padding:12px 14px; border-radius:6px; margin-bottom:14px; border:1px solid var(--border-subtle, #e2e8f0);">
+    <form method="post" action="{{ url_for('module_boq_add', name=name, row_id=row.id) }}" id="tx-boq-add-form">
+      <input type="hidden" name="record_ref" value="{{ row.project_code or row.work_no or row.rekaz_code or row.ticket_no or '' }}">
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:10px; align-items:end;">
+        
+        {# حقل رقم البند والبحث الذكي #}
+        <div>
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('رقم البند (دليل العقد)') }} *</label>
+          <div style="position:relative;">
+            <input type="text" name="item_no" id="tx-boq-item-no" class="form-input" style="width:100%;" placeholder="{{ _('رقم البند أو ابحث...') }}" autocomplete="off" required list="tx-boq-catalog-list">
+            <datalist id="tx-boq-catalog-list"></datalist>
+          </div>
+        </div>
+
+        {# التوصيف التلقائي #}
+        <div style="grid-column: span 2;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('التوصيف / الوصف') }}</label>
+          <input type="text" id="tx-boq-desc" class="form-input" style="width:100%; background:#fff; cursor:default;" placeholder="{{ _('يجلب تلقائياً من دليل العقد') }}" readonly>
+        </div>
+
+        {# الوحدة #}
+        <div>
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('الوحدة') }}</label>
+          <input type="text" id="tx-boq-unit" class="form-input" style="width:100%; background:#fff; cursor:default;" placeholder="—" readonly>
+        </div>
+
+        {# سعر الوحدة #}
+        <div>
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('سعر الوحدة (ر.س)') }}</label>
+          <input type="text" id="tx-boq-unit-price" class="form-input" style="width:100%; background:#fff; cursor:default; font-weight:600;" placeholder="0.00" readonly>
+        </div>
+
+        {# الكمية #}
+        <div>
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('الكمية') }} *</label>
+          <input type="number" step="any" name="qty" id="tx-boq-qty" class="form-input" style="width:100%; font-weight:bold;" value="1" min="0.01" required>
+        </div>
+
+        {# إجمالي البند المحسوب #}
+        <div>
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('الإجمالي التقديري') }}</label>
+          <div id="tx-boq-calc-total" style="height:38px; display:flex; align-items:center; padding:0 10px; background:#fff; border:1px solid #cbd5e1; border-radius:4px; font-weight:bold; color:var(--primary, #0f766e);">
+            0.00 ر.س
+          </div>
+        </div>
+
+        {# تصنيف العمل #}
+        <div>
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('تصنيف العمل') }}</label>
+          <select name="work_class" id="tx-boq-work-class" class="form-select" style="width:100%;">
+            <option value="اعتيادي" selected>{{ _('اعتيادي') }}</option>
+            <option value="طوارئ">{{ _('طوارئ') }}</option>
+          </select>
+        </div>
+
+        {# ملاحظات #}
+        <div style="grid-column: span 2;">
+          <label style="display:block; font-size:0.85rem; font-weight:600; margin-bottom:4px;">{{ _('ملاحظات البند') }}</label>
+          <input type="text" name="notes" class="form-input" style="width:100%;" placeholder="{{ _('ملاحظات اختيارية...') }}">
+        </div>
+
+        {# زر الإضافة #}
+        <div>
+          <button type="submit" class="btn primary" style="width:100%; height:38px; justify-content:center;">
+            <span>➕</span> {{ _('إضافة البند والربط الفوري') }}
+          </button>
+        </div>
+
+      </div>
+    </form>
+  </div>
+  {% endif %}
+
+  {# جدول بنود العقد المسجلة للمعاملة #}
+  <div class="table-wrap">
+    <table class="table" style="width:100%;">
+      <thead>
+        <tr style="background:var(--bg-table-head, #f8fafc);">
+          <th style="width:50px;">#</th>
+          <th>{{ _('رقم البند') }}</th>
+          <th>{{ _('التوصيف') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th style="text-align:center;">{{ _('الكمية') }}</th>
+          <th style="text-align:right;">{{ _('سعر الوحدة') }}</th>
+          <th style="text-align:right;">{{ _('الإجمالي') }}</th>
+          <th>{{ _('التصنيف') }}</th>
+          <th>{{ _('ملاحظات') }}</th>
+          {% if can('modules.write') %}
+          <th style="text-align:center; width:80px;">{{ _('إجراءات') }}</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for line in tx_boq_lines %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td><strong>{{ line.item_no }}</strong></td>
+          <td>{{ line.description or '—' }}</td>
+          <td><span class="badge ghost">{{ line.unit or '—' }}</span></td>
+          <td style="text-align:center; font-weight:600;">{{ line.qty }}</td>
+          <td style="text-align:right;">{{ line.unit_price|money }}</td>
+          <td style="text-align:right; font-weight:bold; color:var(--primary, #0f766e);">{{ line.line_total|money }}</td>
+          <td>
+            {% if line.work_class == 'طوارئ' %}
+            <span class="badge danger">{{ _('طوارئ') }}</span>
+            {% else %}
+            <span class="badge">{{ _('اعتيادي') }}</span>
+            {% endif %}
+          </td>
+          <td style="font-size:0.85rem; color:var(--text-muted, #64748b);">{{ line.notes or '—' }}</td>
+          {% if can('modules.write') %}
+          <td style="text-align:center;">
+            <form method="post" action="{{ url_for('module_boq_delete', name=name, row_id=row.id, line_id=line.id) }}" onsubmit="return confirm('{{ _('هل أنت متأكد من حذف هذا البند وإعادة احتساب القيمة فورياً؟') }}');" style="display:inline;">
+              <button type="submit" class="btn danger" style="padding:3px 8px; font-size:0.8rem;" title="{{ _('حذف البند') }}">
+                🗑️ {{ _('حذف') }}
+              </button>
+            </form>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="{% if can('modules.write') %}10{% else %}9{% endif %}" style="text-align:center; padding:24px; color:var(--text-muted, #64748b);">
+            {{ _('لا توجد بنود عقد مسجلة لهذه المعاملة بعد. أضف بنوداً من النموذج أعلاه لاحتساب القيمة وربطها تلقائياً.') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if tx_boq_lines %}
+      <tfoot>
+        <tr style="background:var(--bg-table-foot, #f1f5f9); font-weight:bold;">
+          <td colspan="6" style="text-align:left; font-size:0.95rem;">{{ _('المجموع الكلي لبنود العقد:') }}</td>
+          <td style="text-align:right; font-size:1.05rem; color:var(--primary, #0f766e);">{{ tx_boq_total|money }}</td>
+          <td colspan="{% if can('modules.write') %}3{% else %}2{% endif %}"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+<script>
+(function() {
+  var itemNoInput = document.getElementById('tx-boq-item-no');
+  var descInput = document.getElementById('tx-boq-desc');
+  var unitInput = document.getElementById('tx-boq-unit');
+  var unitPriceInput = document.getElementById('tx-boq-unit-price');
+  var qtyInput = document.getElementById('tx-boq-qty');
+  var calcTotalBox = document.getElementById('tx-boq-calc-total');
+  var dataList = document.getElementById('tx-boq-catalog-list');
+  var currentUnitPrice = 0;
+
+  function updateCalcTotal() {
+    var qty = parseFloat(qtyInput ? qtyInput.value : 0) || 0;
+    var total = qty * currentUnitPrice;
+    if (calcTotalBox) {
+      calcTotalBox.textContent = total.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' ر.س';
+    }
+  }
+
+  function fetchBoqDetails(itemNo) {
+    if (!itemNo) return;
+    fetch('/api/boq-item?item_no=' + encodeURIComponent(itemNo))
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res && res.ok) {
+          if (descInput) descInput.value = res.description || '';
+          if (unitInput) unitInput.value = res.unit || '';
+          currentUnitPrice = parseFloat(res.unit_price || 0);
+          if (unitPriceInput) unitPriceInput.value = currentUnitPrice.toFixed(2);
+          updateCalcTotal();
+        }
+      })
+      .catch(function(err) { console.error('Error fetching boq item:', err); });
+  }
+
+  var searchTimer = null;
+  function searchBoqCatalog(query) {
+    if (!query || query.length < 1) return;
+    fetch('/api/boq-search?q=' + encodeURIComponent(query) + '&limit=15')
+      .then(function(r) { return r.json(); })
+      .then(function(res) {
+        if (res && res.ok && res.items && dataList) {
+          dataList.innerHTML = '';
+          res.items.forEach(function(it) {
+            var opt = document.createElement('option');
+            opt.value = it.item_no;
+            opt.label = (it.short_desc || it.description || '') + ' (' + (it.unit_price || 0) + ' ر.س)';
+            dataList.appendChild(opt);
+          });
+        }
+      })
+      .catch(function(err) { console.error('Error searching catalog:', err); });
+  }
+
+  if (itemNoInput) {
+    itemNoInput.addEventListener('input', function() {
+      var val = this.value.trim();
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(function() {
+        searchBoqCatalog(val);
+      }, 250);
+      fetchBoqDetails(val);
+    });
+    itemNoInput.addEventListener('change', function() {
+      fetchBoqDetails(this.value.trim());
+    });
+  }
+
+  if (qtyInput) {
+    qtyInput.addEventListener('input', updateCalcTotal);
+  }
+})();
+</script>

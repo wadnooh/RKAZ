@@ -4,8 +4,8 @@
   {% set active = 'tickets' %}
   {% include "_ops_subnav.html" %}
 {% elif section == 'reinforcement' or name in ['reinforcement_departments','reinforcement_works'] %}
-  {% set active = 'reinforcement' %}
-  {% include "_ops_subnav.html" %}
+  {% set active = name %}
+  {% include "_reinforcement_subnav.html" %}
 {% elif section == 'quality' %}
   {% set quality_tab = 'new_coords' if name == 'new_coordinations' else ('evacuations' if name == 'quality_clearances' else ('permits' if name == 'issued_licenses' else 'new_coords')) %}
   {% set quality_sub = 'coords' if name == 'new_coordinations' else ('initial' if name == 'quality_clearances' else ('active' if name == 'issued_licenses' else 'coords')) %}
@@ -163,7 +163,9 @@
           {% for key, label, ftype in module.fields if key in module.list_cols %}
           {% if not (name == 'warehouse_tx' and source_filter and key == 'source_section') %}
           <td>
-            {% if key == 'ticket_no' and r[key] %}
+            {% if name == 'reinforcement_works' and key in ['rekaz_code', 'work_no', 'work_order'] and r[key] %}
+              <a href="{{ url_for('reinforcement_work_view', row_id=r.id) }}"><strong>{{ r[key] }}</strong></a>
+            {% elif key == 'ticket_no' and r[key] and name != 'reinforcement_works' %}
               <a href="{{ url_for('tickets_list', q=r[key]) }}">{{ r[key] }}</a>
             {% elif name == 'custody' and key == 'item_no' %}
               <span class="meta">{{ r.line_count or 0 }} {{ _('بند') }}</span>

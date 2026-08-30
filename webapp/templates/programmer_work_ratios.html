@@ -15,8 +15,8 @@
   </div>
 
   {% set cards = [
-    {'title': _('نسبة ركاز'), 'value': '%.1f%%'|format((settings.rekaz_ratio or 0)|float), 'subtitle': _('مدخلة من المبرمج فقط')},
-    {'title': _('نسبة المقاول الرئيسي'), 'value': '%.1f%%'|format((settings.main_contractor_ratio or 0)|float), 'subtitle': _('مدخلة من المبرمج فقط')}
+    {'title': _('نسبة ركاز'), 'value': '%.1f%%'|format((settings.rekaz_ratio or 0)|float), 'subtitle': _('محددة إدارياً')},
+    {'title': _('نسبة المقاول الرئيسي'), 'value': '%.1f%%'|format((settings.main_contractor_ratio or 0)|float), 'subtitle': _('محددة إدارياً')}
   ] %}
   {% set summary_cards = cards %}
   {% set summary_cards_style = 'margin-bottom:14px;' %}

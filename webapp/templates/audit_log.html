@@ -21,7 +21,7 @@
         <tr>
           <td>{{ r.id }}</td>
           <td>{{ r.created_at }}</td>
-          <td>{{ r.user_name }}</td>
+          <td>{{ r.user_name }}{% if is_supervisory and r.is_hidden %} <span class="badge" style="background:var(--accent,#0ea5e9);color:#fff;font-size:11px;padding:2px 6px;border-radius:6px;">{{ _('رقابي') }}</span>{% endif %}</td>
           <td>{{ r.action }}</td>
           <td>{{ r.entity }}</td>
           <td>{{ r.entity_id or '—' }}</td>

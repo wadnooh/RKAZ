@@ -37,6 +37,7 @@ TICKET_HEADERS = [
     "رقم الفاتورة",
     "حالة SAP",
     "قيمة البنود",
+    "القيمة النهائية",
     "ملاحظات",
 ]
 
@@ -67,6 +68,7 @@ TICKET_FIELDS = [
     "invoice_no",
     "sap_status",
     "items_value",
+    "final_value",
     "notes",
 ]
 
@@ -101,6 +103,7 @@ _COL_WIDTHS = {
     "رقم الفاتورة": 14,
     "حالة SAP": 12,
     "قيمة البنود": 12,
+    "القيمة النهائية": 14,
     "ملاحظات": 28,
 }
 
@@ -186,6 +189,11 @@ _TICKET_ALIASES = {
     "sap_status": "sap_status",
     "قيمة البنود": "items_value",
     "items_value": "items_value",
+    "القيمة النهائية": "final_value",
+    "القيمه النهائيه": "final_value",
+    "القيمة الكلية": "final_value",
+    "final_value": "final_value",
+    "final value": "final_value",
     "ملاحظات": "notes",
     "notes": "notes",
 }
@@ -355,10 +363,14 @@ def build_tickets_template() -> bytes:
 
 def export_tickets(rows: list[dict] | None = None, title: str | None = None, filters: list[str] | None = None) -> bytes:
     """تصدير الأعطال بترويسة احترافية وشعار — أعمدة مطابقة للقالب."""
+    from webapp import helpers
     if rows is None:
         conn = db.connect()
         rows = db.rows_to_dicts(conn.execute("SELECT * FROM tickets ORDER BY id").fetchall())
+        helpers.attach_ticket_final_values(rows, conn)
         conn.close()
+    else:
+        helpers.attach_ticket_final_values(rows)
 
     wb = Workbook()
     ws = wb.active
@@ -369,14 +381,8 @@ def export_tickets(rows: list[dict] | None = None, title: str | None = None, fil
     year_val = str(now_dt.year)
     header_title = title or f"العمليات والصيانة - الشمال - الأعطال - {year_val}"
 
-    # حساب إجمالي المبالغ
-    total_amt = 0.0
-    for r in rows:
-        val = r.get("final_value") or r.get("items_value") or 0
-        try:
-            total_amt += float(str(val).replace(",", "").strip() or 0)
-        except Exception:
-            pass
+    # حساب إجمالي المبالغ من القيمة النهائية
+    total_amt = round(sum(float(r.get("final_value") or 0) for r in rows), 2)
 
     meta_lines = [
         "التبويب: العمليات والصيانة",

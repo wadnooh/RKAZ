@@ -13,8 +13,8 @@
   {% set active = 'tickets' %}
   {% include "_ops_subnav.html" %}
 {% elif section == 'reinforcement' or name in ['reinforcement_departments','reinforcement_works'] %}
-  {% set active = 'reinforcement' %}
-  {% include "_ops_subnav.html" %}
+  {% set active = name %}
+  {% include "_reinforcement_subnav.html" %}
 {% elif section == 'ops' %}
   {% set active = 'ops' %}
   {% include "_ops_subnav.html" %}
@@ -311,6 +311,9 @@
 {% endif %}
 {% if name == 'contractor_supplies' %}
 {% include "_contractor_supply_lines.html" %}
+{% endif %}
+{% if mode == 'edit' and name in ['projects', 'construction_works', 'reinforcement_works', 'contractor_works'] %}
+{% include "_transaction_boq_panel.html" %}
 {% endif %}
 
 {% if name in ['warehouse_tx', 'custody'] %}

@@ -1,0 +1,370 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <title>{{ _('تقرير معاملة تعزيز') }} {{ work.work_no or work.rekaz_code }}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 9mm;
+    }
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      color: #16344f;
+      background: #d9e3ef;
+      font-family: Tahoma, "Segoe UI", Arial, sans-serif;
+      font-size: 11px;
+      line-height: 1.35;
+    }
+    .wrap {
+      width: 210mm;
+      min-height: 297mm;
+      margin: 16px auto;
+      padding: 0;
+    }
+    .printbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin: 0 0 10px;
+      padding: 0 4px;
+    }
+    .btn {
+      border: 1px solid #2f5f93;
+      background: #fff;
+      color: #123f69;
+      padding: 8px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 700;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      font-size: 13px;
+    }
+    .btn.primary {
+      background: linear-gradient(135deg, #1e6ecf, #13539d);
+      color: #fff;
+      border-color: #13539d;
+    }
+    .sheet {
+      width: 210mm;
+      min-height: 297mm;
+      background: #fff;
+      border: 1px solid #c5d5e6;
+      overflow: hidden;
+      box-shadow: 0 10px 28px rgba(16, 61, 103, 0.12);
+      display: flex;
+      flex-direction: column;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: 110px 1fr 110px;
+      gap: 8px;
+      align-items: center;
+      padding: 10px 12px;
+      background: linear-gradient(135deg, #0f4f86 0%, #1d74bf 55%, #2f8fd8 100%);
+      color: #fff;
+      flex: 0 0 auto;
+    }
+    .hero img {
+      width: 104px;
+      height: 42px;
+      object-fit: contain;
+      background: rgba(255, 255, 255, 0.94);
+      border-radius: 8px;
+      padding: 4px;
+    }
+    .hero .left { justify-self: start; }
+    .hero .right { justify-self: end; }
+    .hero h1 {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 900;
+      text-align: center;
+      letter-spacing: 0.2px;
+    }
+    .hero .company {
+      margin-top: 3px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 700;
+      opacity: 0.96;
+    }
+    .hero .subtitle {
+      margin-top: 3px;
+      text-align: center;
+      font-size: 10px;
+      opacity: 0.9;
+    }
+    .body {
+      flex: 1 1 auto;
+      display: flex;
+      flex-direction: column;
+    }
+    .section {
+      padding: 8px 12px;
+      border-top: 1px solid #e5edf6;
+    }
+    .section h2 {
+      margin: 0 0 6px;
+      font-size: 13px;
+      color: #123f69;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .section h2::before {
+      content: "";
+      width: 5px;
+      height: 14px;
+      border-radius: 999px;
+      background: linear-gradient(180deg, #1d74bf, #67b0ff);
+      display: inline-block;
+      flex: 0 0 auto;
+    }
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 5px;
+    }
+    .meta-item {
+      background: #f7fbff;
+      border: 1px solid #d7e4f1;
+      border-radius: 6px;
+      padding: 5px 7px;
+      min-height: 38px;
+    }
+    .meta-item.span-2 { grid-column: span 2; }
+    .meta-item.span-all { grid-column: 1 / -1; }
+    .meta-item .k {
+      color: #5f748a;
+      font-size: 9.5px;
+      font-weight: 700;
+    }
+    .meta-item .v {
+      margin-top: 2px;
+      font-weight: 800;
+      color: #123f69;
+      font-size: 11px;
+      word-break: break-word;
+    }
+    .meta-item.highlight {
+      background: #eef6ff;
+      border-color: #9dbce0;
+    }
+    .meta-item.highlight .v { color: #0d4f8a; font-size: 12px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      border: 1px solid #d0deec;
+      padding: 4px 5px;
+      text-align: right;
+      font-size: 10px;
+      vertical-align: top;
+    }
+    th {
+      background: #f3f8ff;
+      color: #3d5f82;
+      font-weight: 800;
+    }
+    td.desc {
+      word-break: break-word;
+      overflow-wrap: anywhere;
+    }
+    col.c-idx { width: 6%; }
+    col.c-no { width: 14%; }
+    col.c-desc { width: 38%; }
+    col.c-unit { width: 8%; }
+    col.c-qty { width: 10%; }
+    col.c-price { width: 12%; }
+    col.c-total { width: 12%; }
+    tfoot th {
+      background: #eef5fc;
+      font-size: 10px;
+    }
+    tfoot tr.final th {
+      background: #dcecff;
+      color: #0d4f8a;
+      font-size: 11px;
+    }
+    .footer {
+      margin-top: auto;
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      padding: 6px 12px;
+      border-top: 1px solid #e5edf6;
+      color: #5f748a;
+      font-size: 9.5px;
+      flex: 0 0 auto;
+    }
+    @media print {
+      html, body {
+        width: auto;
+        height: auto;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }
+      .wrap {
+        width: 100%;
+        min-height: 0;
+        margin: 0;
+        padding: 0;
+      }
+      .printbar { display: none !important; }
+      .sheet {
+        width: 100%;
+        min-height: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="printbar">
+      <button class="btn primary" type="button" onclick="window.print()">{{ _('طباعة التقرير') }}</button>
+      <a class="btn" href="{{ url_for('reinforcement_work_view', row_id=work.id) }}">{{ _('رجوع للمعاملة') }}</a>
+    </div>
+
+    <div class="sheet">
+      <div class="hero">
+        <div class="left"><img src="/static/brand/rekaz.png" alt="Rekaz"></div>
+        <div>
+          <h1>{{ _('تقرير معاملة التعزيز / الاسكيمات') }}</h1>
+          <div class="company">{{ _('شركة ركاز لخدمات الأعمال') }}</div>
+          <div class="subtitle">{{ work.work_no or work.rekaz_code }} — {{ work.department or _('قسم التعزيز') }}</div>
+        </div>
+        <div class="right"><img src="/static/brand/sec.jpg" alt="SEC"></div>
+      </div>
+
+      <div class="body">
+        <div class="section">
+          <h2>{{ _('بيانات المعاملة الأساسية') }}</h2>
+          <div class="meta-grid">
+            <div class="meta-item"><div class="k">{{ _('رقم المعاملة / الاسكيمة') }}</div><div class="v">{{ work.work_no or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('كود ركاز') }}</div><div class="v">{{ work.rekaz_code or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('أمر العمل') }}</div><div class="v">{{ work.work_order or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('حجز الساب') }}</div><div class="v">{{ work.sap_reservation_no or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('رقم الإشعار') }}</div><div class="v">{{ work.notification_no or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('التاريخ') }}</div><div class="v">{{ work.work_date or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('القسم') }}</div><div class="v">{{ work.department or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('المحطة') }}</div><div class="v">{{ work.station_no or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('نوع العمل') }}</div><div class="v">{{ work.work_type or '—' }}</div></div>
+            <div class="meta-item"><div class="k">{{ _('الحالة') }}</div><div class="v">{{ tv(work.status) or '—' }}</div></div>
+            <div class="meta-item highlight"><div class="k">{{ _('إجمالي البنود') }}</div><div class="v">{{ (work.boq_base_total or work.value or 0)|money }}</div></div>
+            <div class="meta-item highlight"><div class="k">{{ _('القيمة النهائية') }}</div><div class="v">{{ (work.final_value or work.value or 0)|money }}</div></div>
+            {% if work.notes %}
+            <div class="meta-item span-all"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ work.notes }}</div></div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="section">
+          <h2>{{ _('بنود العقد والكميات والتمتير') }} ({{ boq_lines|length }} {{ _('بند') }})</h2>
+          <table>
+            <colgroup>
+              <col class="c-idx">
+              <col class="c-no">
+              <col class="c-desc">
+              <col class="c-unit">
+              <col class="c-qty">
+              <col class="c-price">
+              <col class="c-total">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>{{ _('رقم البند') }}</th>
+                <th>{{ _('الوصف') }}</th>
+                <th>{{ _('الوحدة') }}</th>
+                <th>{{ _('الكمية') }}</th>
+                <th>{{ _('السعر') }}</th>
+                <th>{{ _('الإجمالي') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for line in boq_lines %}
+              <tr>
+                <td>{{ loop.index }}</td>
+                <td>{{ line.item_no or '—' }}</td>
+                <td class="desc">{{ line.description or '—' }}</td>
+                <td>{{ line.unit or '—' }}</td>
+                <td>{{ line.qty if line.qty is not none else '—' }}</td>
+                <td>{{ line.unit_price|money if line.unit_price is not none else '—' }}</td>
+                <td><strong>{{ line.line_total|money if line.line_total is not none else '—' }}</strong></td>
+              </tr>
+              {% else %}
+              <tr><td colspan="7" style="text-align:center;color:#64748b;">{{ _('لا توجد بنود عقد مسجلة لهذه المعاملة.') }}</td></tr>
+              {% endfor %}
+            </tbody>
+            {% if boq_lines %}
+            <tfoot>
+              <tr>
+                <th colspan="6" style="text-align:left;">{{ _('إجمالي بنود العقد (الأساس):') }}</th>
+                <th>{{ (work.boq_base_total or 0)|money }}</th>
+              </tr>
+              {% if work.emergency_ratio_applied %}
+              <tr>
+                <th colspan="6" style="text-align:left;">{{ _('نسبة زيادة الطوارئ:') }} ({{ (work.emergency_ratio_applied * 100)|round(1) }}٪)</th>
+                <th>{{ ((work.final_value or 0) - (work.boq_base_total or 0))|money }}</th>
+              </tr>
+              {% endif %}
+              <tr class="final">
+                <th colspan="6" style="text-align:left;">{{ _('القيمة النهائية المعتمدة:') }}</th>
+                <th>{{ (work.final_value or 0)|money }}</th>
+              </tr>
+            </tfoot>
+            {% endif %}
+          </table>
+        </div>
+
+        {% if metering %}
+        <div class="section">
+          <h2>{{ _('سجلات التمتير والاعتماد') }} ({{ metering|length }} {{ _('سجل') }})</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>{{ _('المسؤول') }}</th>
+                <th>{{ _('تاريخ البداية') }}</th>
+                <th>{{ _('تاريخ الرفع') }}</th>
+                <th>{{ _('تاريخ الاعتماد') }}</th>
+                <th>{{ _('الحالة') }}</th>
+                <th>{{ _('القيمة المعتمدة') }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for m in metering %}
+              <tr>
+                <td>{{ m.officer or '—' }}</td>
+                <td>{{ m.start_date or '—' }}</td>
+                <td>{{ m.submit_date or '—' }}</td>
+                <td>{{ m.approve_date or '—' }}</td>
+                <td>{{ tv(m.status) or '—' }}</td>
+                <td><strong>{{ (m.approved_value or work.final_value or 0)|money }}</strong></td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="footer">
+        <div>{{ _('نظام إدارة العمليات — شركة ركاز لخدمات الأعمال') }}</div>
+        <div>{{ _('معاملة رقم:') }} {{ work.work_no or work.rekaz_code }}</div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

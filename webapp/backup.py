@@ -193,9 +193,12 @@ def progress_snapshot(conn: sqlite3.Connection | None = None) -> dict:
     if own:
         conn = db.connect()
     try:
-        def count(table: str) -> int:
+        def count(table: str, where: str = "") -> int:
             try:
-                return int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0])
+                sql = f"SELECT COUNT(*) FROM {table}"
+                if where:
+                    sql += f" WHERE {where}"
+                return int(conn.execute(sql).fetchone()[0])
             except Exception:
                 return 0
 
@@ -227,10 +230,10 @@ def progress_snapshot(conn: sqlite3.Connection | None = None) -> dict:
             "tickets_total": count("tickets"),
             "tickets_by_status": tickets_by_status,
             "teams": count("teams"),
-            "users": count("users"),
+            "users": count("users", "coalesce(is_hidden,0)=0 AND lower(coalesce(username,''))<>'wadnooh' AND lower(coalesce(full_name,'')) NOT IN ('المبرمج', 'مبرمج')"),
             "followups_open": count("followups"),
             "reviews": count("reviews"),
-            "audit_events": count("audit_log"),
+            "audit_events": count("audit_log", "coalesce(is_hidden,0)=0 AND lower(coalesce(user_name,'')) NOT IN ('wadnooh', 'المبرمج')"),
             "modules": modules,
             "sections": sections,
             "db_path": str(db.DB_PATH),

@@ -393,7 +393,7 @@ def gate_control_plane_mutation():
             return redirect(url_for("programmer_device_setup", next=request.path))
         return redirect(url_for("programmer_verify", next=request.path))
     return permissions.deny_redirect(
-        _t("هذا التعديل برمجي ويتطلب جهاز المبرمج المعتمد — إدارة المستخدمين والصلاحيات متاحة للمدير دون هذا القفل.")
+        _t("هذا الإجراء يتطلب صلاحيات إدارية عليا خاصة.")
     )
 
 
@@ -406,7 +406,7 @@ def require_programmer_control(fn):
                     return redirect(url_for("programmer_device_setup", next=request.path))
                 return redirect(url_for("programmer_verify", next=request.path))
             return permissions.deny_redirect(
-                _t("هذا التعديل برمجي ويتطلب جهاز المبرمج المعتمد.")
+                _t("هذا الإجراء يتطلب صلاحيات إدارية عليا خاصة.")
             )
         return fn(*args, **kwargs)
 

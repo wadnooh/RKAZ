@@ -1374,7 +1374,7 @@ def required_perm_for_request() -> str | None:
     args = request.view_args or {}
 
     # الوحدات العامة
-    if ep in {"module_list", "module_new", "module_edit", "module_delete"}:
+    if ep in {"module_list", "module_new", "module_edit", "module_delete", "module_boq_add", "module_boq_delete"}:
         mod_name = args.get("name")
         section = _module_section(mod_name)
         section_perm = SECTION_PERMS.get(section or "")
@@ -1398,13 +1398,13 @@ def required_perm_for_request() -> str | None:
         # كميات/صور/تمتير مرتبطة بالعطل: لا تُعدَّل دون tickets.write
         if mod_name in TICKET_LINKED_WRITE_MODULES and not has_perm("tickets.write"):
             return "tickets.write"
-        if ep in {"module_new", "module_edit"}:
+        if ep in {"module_new", "module_edit", "module_boq_add"}:
             if not has_perm("modules.write"):
                 return "modules.write"
             action = "add" if ep == "module_new" else "edit"
             button_perm = f"button.module.{mod_name}.{action}"
             return None if has_perm(button_perm) else button_perm
-        if ep == "module_delete":
+        if ep in {"module_delete", "module_boq_delete"}:
             if not has_perm("modules.delete"):
                 return "modules.delete"
             button_perm = f"button.module.{mod_name}.delete"
@@ -1578,7 +1578,7 @@ def required_perm_for_request() -> str | None:
     if ep == "api_jump_destinations":
         return None  # يُفلتر المحتوى حسب الصلاحيات
 
-    if ep == "api_boq_item":
+    if ep in {"api_boq_item", "api_boq_search"}:
         return None  # بحث قراءة بعد تسجيل الدخول
 
     # --- إعادة بناء باستخدام قاموس للوضوح ---
