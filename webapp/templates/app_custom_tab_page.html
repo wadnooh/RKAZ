@@ -1,11 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
-{% if section == 'ops' %}
+{% if section == 'ops' or section == 'reinforcement' %}
   {% set active = 'custom:' ~ (tab.slug or '') %}
   {% include "_ops_subnav.html" %}
-{% elif section == 'reinforcement' %}
-  {% set active = 'custom:' ~ (tab.slug or '') %}
-  {% include "_reinforcement_subnav.html" %}
 {% elif section == 'warehouses' %}
   {% set warehouse_active = 'custom:' ~ (tab.slug or '') %}
   {% include "_warehouse_subnav.html" %}

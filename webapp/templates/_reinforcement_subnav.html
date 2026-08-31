@@ -1,19 +1,2 @@
-{# شريط فرعي داخل التعزيز - اسكيمات — تبويبات فرعية حقيقية فقط #}
-{% set p = request.path or '' %}
-{% set reinforcement_custom_tabs = (app_custom_tabs_by_section or {}).get('reinforcement') or [] %}
-<div class="toolbar" style="margin-bottom:12px;">
-  <div class="actions" data-tab-strip="1" data-tab-strip-key="reinforcement_rakaz_tabs">
-    {% if can('tab.reinforcement') or can('section.reinforcement') %}
-    <a class="btn ghost{% if active=='reinforcement_home' or p == '/reinforcement' or p == url_for('reinforcement_home') %} primary{% endif %}" href="{{ url_for('reinforcement_home') }}">{{ _('الرئيسية (التعزيز - اسكيمات)') }}</a>
-    {% endif %}
-    {% if can('tab.module.reinforcement_works') or can('section.reinforcement') %}
-    <a class="btn ghost{% if active=='reinforcement_works' or p.startswith('/reinforcement/works') or (name is defined and name=='reinforcement_works') %} primary{% endif %}" href="{{ url_for('module_list', name='reinforcement_works') }}">{{ _('معاملات التعزيز / اسكيمات') }}</a>
-    {% endif %}
-    {% if can('tab.module.reinforcement_departments') or can('section.reinforcement') %}
-    <a class="btn ghost{% if active=='reinforcement_departments' or (name is defined and name=='reinforcement_departments') %} primary{% endif %}" href="{{ url_for('module_list', name='reinforcement_departments') }}">{{ _('أقسام التعزيز') }}</a>
-    {% endif %}
-    {% for tab in reinforcement_custom_tabs %}
-    <a class="btn ghost{% if (active_slug is defined and active_slug==tab.slug) or p == tab.href or p.startswith('/tabs/reinforcement/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
-    {% endfor %}
-  </div>
-</div>
+{% include "_ops_subnav.html" %}
+
