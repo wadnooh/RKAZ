@@ -193,8 +193,13 @@ def create_app():
     # ابدأ الحفظ التلقائي في الخلفية (محلي + رفع إلى S3)
     try:
         backup_svc.start_auto_backup_scheduler(app)
-        app.register_blueprint(tickets_bp)
-        app.register_blueprint(api_bp)
+    except Exception:
+        pass
+    try:
+        if "tickets" not in app.blueprints:
+            app.register_blueprint(tickets_bp)
+        if "api" not in app.blueprints:
+            app.register_blueprint(api_bp)
         _register_legacy_ticket_endpoints()
     except Exception:
         pass
@@ -217,6 +222,7 @@ def _register_legacy_ticket_endpoints() -> None:
         ("tickets_import", "/tickets/import", "tickets.import_from_excel", ["POST"]),
         ("ticket_new", "/tickets/new", "tickets.new", ["GET", "POST"]),
         ("ticket_view", "/tickets/<int:ticket_id>", "tickets.view", ["GET"]),
+        ("view_ticket", "/tickets/<int:ticket_id>", "tickets.view", ["GET"]),
         ("ticket_print", "/tickets/<int:ticket_id>/print", "tickets.print_view", ["GET"]),
         ("ticket_edit", "/tickets/<int:ticket_id>/edit", "tickets.edit", ["GET", "POST"]),
         ("ticket_delete", "/tickets/<int:ticket_id>/delete", "tickets.delete", ["POST"]),
