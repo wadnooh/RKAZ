@@ -3,6 +3,9 @@
 {% if section == 'ops' or section == 'reinforcement' %}
   {% set active = 'custom:' ~ (tab.slug or '') %}
   {% include "_ops_subnav.html" %}
+{% elif section == 'hr' %}
+  {% set active = 'custom:' ~ (tab.slug or '') %}
+  {% include "_hr_subnav.html" %}
 {% elif section == 'warehouses' %}
   {% set warehouse_active = 'custom:' ~ (tab.slug or '') %}
   {% include "_warehouse_subnav.html" %}

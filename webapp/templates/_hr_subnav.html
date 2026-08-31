@@ -1,0 +1,16 @@
+﻿{# شريط فرعي داخل الموارد البشرية #}
+{% set p = request.path or '' %}
+{% set hr_custom_tabs = (app_custom_tabs_by_section or {}).get('hr') or [] %}
+<div class="toolbar" style="margin-bottom:12px;">
+  <div class="actions" data-tab-strip="1" data-tab-strip-key="hr_rakaz_tabs">
+    {% if can('tab.module.hr_employees') or can('section.hr') %}
+    <a class="btn ghost{% if active=='hr_employees' or (name is defined and name=='hr_employees') %} primary{% endif %}" href="{{ url_for('module_list', name='hr_employees') }}">{{ _('الموظفون') }}</a>
+    {% endif %}
+    {% if can('tab.ops.teams') or can('section.hr') or can('tab.hr') %}
+    <a class="btn ghost{% if active=='teams' or p.startswith('/teams') or p.startswith('/hr/teams') %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام الحرجة') }}</a>
+    {% endif %}
+    {% for tab in hr_custom_tabs %}
+    <a class="btn ghost{% if (active_slug is defined and active_slug==tab.slug) or p == tab.href or p.startswith('/tabs/hr/' ~ tab.slug) %} primary{% endif %}" href="{{ tab.href }}">{% if tab.icon %}{{ tab.icon }} {% endif %}{{ tab.title }}</a>
+    {% endfor %}
+  </div>
+</div>

@@ -82,7 +82,7 @@
     <a class="tab{% if p.startswith('/maintenance') or p.startswith('/module/workshop_') %} active{% endif %}" href="{{ url_for('maintenance_home') }}">{{ tr('nav_maintenance') }}</a>
     {% endif %}
     {% if can('tab.hr') %}
-    <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') %} active{% endif %}" href="{{ url_for('hr_home') }}">{{ tr('nav_hr') }}</a>
+    <a class="tab{% if p.startswith('/hr') or p.startswith('/module/hr_') or p.startswith('/teams') %} active{% endif %}" href="{{ url_for('hr_home') }}">{{ tr('nav_hr') }}</a>
     {% endif %}
     {% if can('tab.contracts') %}
     <a class="tab{% if p.startswith('/contracts-admin') or p.startswith('/module/contracts') or p.startswith('/module/boq_') or p.startswith('/reports') %} active{% endif %}" href="{{ url_for('contracts_admin_home') }}">{{ tr('nav_contracts') }}</a>

@@ -1491,11 +1491,11 @@ def required_perm_for_request() -> str | None:
         return None
 
     if ep == "teams_page":
-        if not has_perm("section.ops"):
-            return "section.ops"
+        if not (has_perm("section.hr") or has_perm("section.ops")):
+            return "section.hr"
         if method == "POST":
             return None if has_perm("teams.write") else "teams.write"
-        return None if has_perm("section.ops") else "section.ops"
+        return None
 
     if ep in {
         "warehouse_items_template",

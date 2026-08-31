@@ -9,7 +9,6 @@
     <a class="btn ghost{% if active=='tickets' or p.startswith('/tickets') %} primary{% endif %}" href="{{ url_for('tickets_list') }}">{{ _('الأعطال') }}</a>
     {% endif %}
     {% if can('tab.ops.primary_teams') %}<a class="btn ghost{% if active=='primary_teams' or p.startswith('/ops/primary-teams') %} primary{% endif %}" href="{{ url_for('ops_primary_teams') }}">{{ _('الفرق الأولية') }}</a>{% endif %}
-    {% if can('tab.ops.teams') %}<a class="btn ghost{% if active=='teams' or p.startswith('/teams') %} primary{% endif %}" href="{{ url_for('teams_page') }}">{{ _('فرق المهام العاجلة') }}</a>{% endif %}
     {% if can('tab.module.reinforcement_works') or can('tab.ops.reinforcement') or can('section.reinforcement') or can('tab.reinforcement') %}
     <a class="btn ghost{% if is_reinforce_works or is_reinforce_home %} primary{% endif %}" href="{{ url_for('module_list', name='reinforcement_works') }}">{{ _('الاسكيمات (معاملات التعزيز)') }}</a>
     {% endif %}

@@ -6007,6 +6007,7 @@ def export_primary_teams_pdf():
 
 
 @app.route("/teams", methods=["GET", "POST"])
+@app.route("/hr/teams", methods=["GET", "POST"])
 @login_required
 def teams_page():
     conn = db.connect()

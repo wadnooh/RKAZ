@@ -3,6 +3,9 @@
 {% if section == 'ops' or section == 'reinforcement' or name in ['quantities','photos','metering','reinforcement_departments','reinforcement_works'] %}
   {% set active = name if name in ['reinforcement_departments','reinforcement_works'] else (active if active is defined else 'tickets') %}
   {% include "_ops_subnav.html" %}
+{% elif section == 'hr' or name == 'hr_employees' %}
+  {% set active = name %}
+  {% include "_hr_subnav.html" %}
 {% elif section == 'quality' %}
   {% set quality_tab = 'new_coords' if name == 'new_coordinations' else ('evacuations' if name == 'quality_clearances' else ('permits' if name == 'issued_licenses' else 'new_coords')) %}
   {% set quality_sub = 'coords' if name == 'new_coordinations' else ('initial' if name == 'quality_clearances' else ('active' if name == 'issued_licenses' else 'coords')) %}
