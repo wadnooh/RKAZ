@@ -43,6 +43,9 @@
       <div class="meta">{{ _('عدد السجلات المعروضة:') }} {{ rows|length if rows is defined else 0 }}</div>
     </div>
     <div class="actions print-actions">
+      {% if can('modules.read') or can('button.module.new_coordinations.export') or can('button.module.issued_licenses.export') or can('button.module.quality_clearances.export') %}
+      <a class="btn ghost" href="{{ url_for('quality_export_excel', tab=qtab, sub=qsub or none, year=year or none, month=month or none, q=q or none) }}">{{ _('تصدير Excel') }}</a>
+      {% endif %}
       <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
     </div>
   </div>

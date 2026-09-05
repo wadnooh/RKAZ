@@ -1656,6 +1656,146 @@ def quality_home():
     )
 
 
+@app.route("/quality/export.xlsx")
+@login_required
+def quality_export_excel():
+    if not permissions.can("section.quality") or not (
+        permissions.can("modules.read")
+        or permissions.can("button.module.new_coordinations.export")
+        or permissions.can("button.module.issued_licenses.export")
+        or permissions.can("button.module.quality_clearances.export")
+    ):
+        abort(403)
+
+    tab = (request.args.get("tab") or "new_coords").strip().lower()
+    if tab not in ("permits", "new_coords", "evacuations"):
+        tab = "new_coords"
+    sub = (request.args.get("sub") or "").strip().lower()
+    year = (request.args.get("year") or "").strip()
+    month = (request.args.get("month") or "").strip()
+    q = (request.args.get("q") or "").strip()
+
+    permit_subs = {"active", "checks", "closing", "asphalt", "expired"}
+    evac_subs = {"initial", "final", "cancelled"}
+    new_coords_subs = {"coords", "reports", "master_plan", "violations", "expired", "cancelled", "final"}
+    if tab == "permits" and (not sub or sub not in permit_subs):
+        sub = "active"
+    elif tab == "evacuations" and (not sub or sub not in evac_subs):
+        sub = "initial"
+    elif tab == "new_coords" and (not sub or sub not in new_coords_subs):
+        sub = "coords"
+
+    conn = db.connect()
+    try:
+        rows = []
+        cancelled_licenses = []
+        mode = ""
+        if tab == "permits":
+            rows = db.list_issued_licenses_for_hub(conn, sub=sub, year=year, month=month, q=q)
+            mode = "licenses"
+        elif tab == "new_coords":
+            if sub in {"coords", "reports", "master_plan", "violations"}:
+                rows = db.list_new_coordinations_for_hub(
+                    conn, kind=db.coord_kind_for_sub(sub), year=year, month=month, q=q
+                )
+                mode = "new_coords"
+            elif sub == "expired":
+                rows = db.list_issued_licenses_for_hub(conn, sub="expired", year=year, month=month, q=q)
+                mode = "licenses"
+            elif sub == "cancelled":
+                cancelled_licenses = db.list_issued_licenses_for_hub(
+                    conn, sub="cancelled", year=year, month=month, q=q
+                )
+                rows = db.list_clearances_for_hub(conn, stage="cancelled", year=year, month=month, q=q)
+                mode = "cancelled"
+            elif sub == "final":
+                rows = db.list_clearances_for_hub(conn, stage="final", year=year, month=month, q=q)
+                mode = "clearances"
+        elif tab == "evacuations":
+            if sub == "cancelled":
+                cancelled_licenses = db.list_issued_licenses_for_hub(
+                    conn, sub="cancelled", year=year, month=month, q=q
+                )
+                rows = db.list_clearances_for_hub(conn, stage="cancelled", year=year, month=month, q=q)
+                mode = "cancelled"
+            else:
+                rows = db.list_clearances_for_hub(conn, stage=sub, year=year, month=month, q=q)
+                mode = "clearances"
+    finally:
+        conn.close()
+
+    sub_labels = {
+        "coords": _t("التنسيقات الجديدة"),
+        "reports": _t("البلاغات"),
+        "master_plan": _t("المخطط الشامل"),
+        "violations": _t("المخالفات"),
+        "active": _t("الرخص السارية"),
+        "checks": _t("تحت التشييكات"),
+        "closing": _t("تحت إجراءات الإغلاق"),
+        "asphalt": _t("موردي الأسفلت"),
+        "expired": _t("الرخص المنتهية"),
+        "initial": _t("الإخلاء المبدئي"),
+        "final": _t("الإخلاء النهائي"),
+        "cancelled": _t("الرخص الملغاة"),
+    }
+    title = f"{_t('التنسيقات والجودة')} - {sub_labels.get(sub, sub)}"
+    filters = [f"التبويب: {sub_labels.get(sub, sub)}"]
+    if year:
+        filters.append(f"السنة: {year}")
+    if month:
+        filters.append(f"الشهر: {month}")
+    if q:
+        filters.append(f"بحث: {q}")
+
+    if mode == "licenses":
+        fields = [
+            "id", "work_order", "rtc_no", "ticket_no", "issue_date", "expiry_date",
+            "remaining_days", "district", "license_length", "status",
+            "consultant_notes", "consultant_submitted", "consultant_result",
+        ]
+        headers = [
+            "ID", "أمر العمل", "رقم مرجع / RTC", "رقم العطل", "تاريخ الإصدار",
+            "تاريخ الانتهاء", "الأيام المتبقية", "الحي", "طول الرخصة", "حالة الرخصة",
+            "ملاحظات الاستشاري", "تقديم الاستشاري", "نتيجة الاستشاري",
+        ]
+        export_rows = rows
+    elif mode == "new_coords":
+        fields = [
+            "id", "coord_no", "coord_kind", "request_date", "authority", "district",
+            "linked_section", "ticket_no", "project_code", "status", "license_no",
+        ]
+        headers = [
+            "ID", "رقم التنسيق", "نوع التبويب", "تاريخ الطلب", "الجهة", "الحي",
+            "القسم المستهدف", "رقم العطل", "كود المشروع", "الحالة", "رقم الرخصة",
+        ]
+        export_rows = rows
+    elif mode == "cancelled":
+        fields = [
+            "record_type", "id", "license_no", "work_order", "ticket_no", "rekaz_code",
+            "clearance_no", "request_date", "issue_date", "district", "contractor", "status",
+        ]
+        headers = [
+            "نوع السجل", "ID", "رقم الرخصة", "أمر العمل", "رقم العطل", "كود RR",
+            "رقم الإخلاء", "تاريخ الطلب", "تاريخ الإصدار", "الحي", "الجهة", "الحالة",
+        ]
+        export_rows = [{**r, "record_type": "رخصة ملغاة"} for r in cancelled_licenses]
+        export_rows.extend({**r, "record_type": "إخلاء ملغى"} for r in rows)
+    else:
+        fields = ["id", "ticket_no", "rekaz_code", "clearance_no", "clearance_stage", "request_date", "contractor", "status"]
+        headers = ["ID", "رقم العطل", "كود RR", "رقم الإخلاء", "مرحلة الإخلاء", "تاريخ الطلب", "الجهة", "الحالة"]
+        export_rows = rows
+
+    stamp = datetime.now().strftime("%Y%m%d")
+    return _simple_xlsx_export(
+        title=title,
+        headers=headers,
+        rows=export_rows,
+        field_keys=fields,
+        download_name=f"quality-{tab}-{sub}-{stamp}.xlsx",
+        filters=filters,
+    )
+
+
 @app.route("/safety")
 @login_required
 def safety_home():
