@@ -42,7 +42,8 @@
       <h2 class="section-title">{{ current_tab_label }}</h2>
       <div class="meta">{{ _('عدد السجلات المعروضة:') }} {{ rows|length if rows is defined else 0 }}</div>
     </div>
-    <div class="actions">
+    <div class="actions print-actions">
+      <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
     </div>
   </div>
 

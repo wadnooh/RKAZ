@@ -2608,3 +2608,49 @@ a.quality-metric.active {
     break-inside: avoid;
   }
 }
+
+@media print {
+  body {
+    background: #fff !important;
+  }
+  .topbar,
+  .tabs,
+  .jump-fab,
+  .flash-list,
+  .quality-subnav,
+  .quality-filter,
+  .toolbar .actions,
+  .table .actions,
+  form.actions {
+    display: none !important;
+  }
+  .container,
+  .container-wide {
+    max-width: none !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+  .card,
+  .quality-hub {
+    border: 0 !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: #fff !important;
+  }
+  .section-title {
+    color: #111 !important;
+  }
+  .table-wrap {
+    overflow: visible !important;
+    border-color: #ddd !important;
+  }
+  .table th {
+    background: #f3f3f3 !important;
+    color: #111 !important;
+  }
+  .table td,
+  .table th {
+    border-color: #ddd !important;
+  }
+}

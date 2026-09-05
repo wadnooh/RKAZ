@@ -64,6 +64,9 @@
       {% if can('button.module.' ~ name ~ '.export') or can('modules.read') %}
       <a class="btn ghost" href="{{ url_for('module_report_view', name=name, ticket_no=ticket_filter or none, item_no=item_filter or none, source=source_filter or none, department=department_filter or none, date_from=date_from or none, date_to=date_to or none, excavation=1 if excavation_filter else none, linked_section=linked_section_filter or none, missing_amount=1 if missing_amount else none) }}" target="_blank" style="font-weight:700;">{{ _('عرض التقرير') }}</a>
       {% endif %}
+      {% if section == 'quality' or name in ['coordination', 'new_coordinations', 'issued_licenses', 'quality_clearances'] %}
+      <button class="btn ghost" type="button" onclick="window.print()">{{ _('طباعة') }}</button>
+      {% endif %}
       {% if export_href and can('button.module.' ~ name ~ '.export') %}
       <a class="btn ghost" href="{{ export_href }}">{{ _('تصدير Excel') }}{% if missing_amount %} ({{ _('المفلتر') }}){% endif %}</a>
       {% endif %}
