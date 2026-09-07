@@ -1,6 +1,6 @@
 """Fixed asset register, straight-line estimates and review history."""
 import sqlite3
-from datetime import date
+from datetime import date, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from flask import request, render_template, redirect, url_for, flash, abort
 from webapp import db, permissions, helpers
@@ -35,6 +35,19 @@ def depreciation(asset, as_of=None):
     accumulated = min(base, annual * Decimal(days) / Decimal(365))
     money = lambda value: value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)
     return dict(annual=money(annual), accumulated=money(accumulated), net=money(cost-accumulated))
+
+
+def report_period(year, month, today=None):
+    today = today or date.today()
+    if not year and not month:
+        return None, today, 'كل الفترات'
+    year = int(year or today.year)
+    month = int(month) if month else None
+    if not 1900 <= year <= 9998 or (month is not None and not 1 <= month <= 12):
+        raise ValueError('الفترة غير صالحة')
+    start = date(year, month or 1, 1)
+    end = date(year + 1, 1, 1) if month is None or month == 12 else date(year, month + 1, 1)
+    return start, min(end, today), (f'{year} / {month:02d}' if month else str(year))
 
 
 def validate_asset(form):
@@ -93,6 +106,14 @@ def register(app, login_required):
         kind = kind if kind in ('car','equipment','independent') else ''
         review = review if review in ('due','upcoming','unscheduled') else ''
         today = date.today()
+        year = (request.args.get('year') or '').strip()
+        month = (request.args.get('month') or '').strip()
+        if month and not year:
+            year = str(today.year)
+        try:
+            period_start, period_end, period_label = report_period(year, month, today)
+        except ValueError:
+            abort(400)
         conditions, params = [], []
         if q:
             conditions.append("(" + " OR ".join("instr(lower(COALESCE(" + field + ",'')),lower(?)) > 0" for field in ('a.asset_no','a.name','c.plate_no','e.equip_no','e.equip_name')) + ")")
@@ -107,18 +128,39 @@ def register(app, login_required):
         where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
         conn = db.connect()
         try:
+            years = [r[0] for r in conn.execute("SELECT DISTINCT substr(acquired_on,1,4) FROM fixed_assets ORDER BY 1 DESC")]
             rows = [dict(row) for row in conn.execute("""SELECT a.*, c.plate_no, e.equip_no,
                 (SELECT MAX(reviewed_on) FROM fixed_asset_reviews WHERE asset_id=a.id) last_review
                 FROM fixed_assets a LEFT JOIN workshop_cars c ON c.id=a.car_id
                 LEFT JOIN workshop_equipment e ON e.id=a.equipment_id""" + where + " ORDER BY a.id DESC", params)]
         finally:
             conn.close()
-        today = date.today()
+        if period_start:
+            rows = [row for row in rows if date.fromisoformat(row['acquired_on']) <= period_end and period_start <= today]
+        selected = request.args.getlist('selected')
+        if selected:
+            selected_ids = {int(value) for value in selected if value.isdigit()}
+            rows = [row for row in rows if row['id'] in selected_ids]
         for row in rows:
-            row.update(depreciation(row, today))
+            row.update(depreciation(row, period_end))
+            before = depreciation(row, period_start)['accumulated'] if period_start else Decimal(0)
+            row['period_depreciation'] = max(Decimal(0), row['accumulated'] - before)
+            row['asset_type'] = 'سيارة' if row['car_id'] else 'معدة' if row['equipment_id'] else 'أصل مستقل'
+            row['asset_status'] = 'مستهلك دفترياً' if row['net'] <= Decimal(row['residual']) else 'نشط'
+
             row['overdue'] = bool(row['next_review'] and row['next_review'] <= today.isoformat())
-        totals = {key: sum((Decimal(str(row[key])) for row in rows), Decimal(0)) for key in ('cost','accumulated','net')}
-        return render_template('fixed_assets.html', rows=rows, totals=totals, today=today, section='maintenance', q=q, kind=kind, review=review)
+        totals = {key: sum((Decimal(str(row[key])) for row in rows), Decimal(0)) for key in ('cost','period_depreciation','accumulated','net')}
+        export = request.args.get('export')
+        if export in ('xlsx', 'print'):
+            if not permissions.can('reports.view'):
+                abort(403)
+            if export == 'print':
+                return render_template('fixed_assets_print.html', rows=rows, totals=totals, period_label=period_label, q=q, today=today)
+            keys = ['asset_type','name','asset_no','cost','annual_rate','period_depreciation','accumulated','net','asset_status']
+            headers = ['نوع الأصل','اسم الأصل','رقم / كود الأصل','تكلفة الأصل','نسبة الإهلاك %','إهلاك الفترة','الإهلاك المتراكم','القيمة الدفترية','حالة الأصل']
+            safe_rows = [{key: ("'" + value if isinstance(value, str) and value.startswith(('=', '+', '-', '@')) else value) for key,value in row.items()} for row in rows]
+            return helpers.simple_xlsx_export('تقرير الأصول الثابتة', headers, safe_rows, keys, 'fixed-assets.xlsx', filters=['الفترة: '+period_label, 'البحث: '+q], summary_lines=['عدد الأصول: '+str(len(rows))])
+        return render_template('fixed_assets.html', rows=rows, totals=totals, today=today, section='maintenance', q=q, kind=kind, review=review, year=year, month=month, years=sorted(set(years + [str(today.year),year]) - {''}, reverse=True), period_label=period_label)
 
     @app.route('/fixed-assets/new', methods=['GET','POST'])
     @app.route('/fixed-assets/<int:asset_id>', methods=['GET','POST'])

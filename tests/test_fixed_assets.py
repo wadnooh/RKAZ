@@ -92,6 +92,29 @@ class AssetTests(unittest.TestCase):
         finally:
             template_rendered.disconnect(capture, self.app)
 
+    def test_report_period_and_exports(self):
+        self.assertEqual(assets.report_period('2025','2',date(2026,1,1))[:2], (date(2025,2,1),date(2025,3,1)))
+        self.client.post('/fixed-assets/new',data=self.data)
+        from flask import template_rendered
+        captured=[]
+        def capture(sender,template,context,**extra): captured.append(context)
+        template_rendered.connect(capture,self.app)
+        try:
+            response=self.client.get('/fixed-assets?year=2025')
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(captured[-1]['rows'][0]['period_depreciation'],Decimal('1800.00'))
+            response=self.client.get('/fixed-assets?export=print&selected=1&year=2025')
+            self.assertEqual(response.status_code,200)
+            self.assertEqual(len(captured[-1]['rows']),1)
+            self.assertEqual(self.client.get('/fixed-assets?year=2025&month=13').status_code,400)
+            with patch.object(assets.helpers,'simple_xlsx_export',return_value='exported') as export:
+                self.assertEqual(self.client.get('/fixed-assets?export=xlsx&selected=999').status_code,200)
+                self.assertEqual(export.call_args.args[2],[])
+            with patch.object(assets.permissions,'can',side_effect=lambda *args: 'reports.view' not in args):
+                self.assertEqual(self.client.get('/fixed-assets?export=xlsx').status_code,403)
+        finally:
+            template_rendered.disconnect(capture,self.app)
+
     def test_missing_link_rejected(self):
         self.client.post('/fixed-assets/new',data=dict(self.data,link='car:999'))
         self.assertEqual(self.conn.execute('SELECT count(*) FROM fixed_assets').fetchone()[0],0)
