@@ -297,7 +297,7 @@
             </span>
             {% endif %}
             {% if can_mod_delete and can('button.module.' ~ name ~ '.delete') %}
-            <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
+            <form method="post" action="{{ url_for('module_delete', name=name, row_id=r.id) }}" class="js-delete-guard" data-delete-review="{{ _('مراجعة الحذف: تأكد من السجل قبل الحذف النهائي. رقم السجل:') }} {{ r.get('purchase_no') or r.get('custody_no') or r.id }}" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
               <input type="hidden" name="delete_password" value="">
               <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
             </form>

@@ -6212,3 +6212,28 @@ def create_or_update_warehouse_item(
     finally:
         if own:
             conn.close()
+
+
+def delete_external_record(name: str, row_id: int, conn) -> str:
+    """Delete an unposted purchase/custody and its lines in the caller transaction."""
+    config = {
+        "external_purchases": ("external_purchase_lines", "purchase_id", "purchase_no", ("received_voucher_no",)),
+        "custody": ("custody_lines", "custody_id", "custody_no", ("issued_voucher_no", "return_voucher_no", "warehouse_tx_id", "return_warehouse_tx_id")),
+    }
+    lines_table, parent_key, reference_key, linked_fields = config[name]
+    # Acquire the write lock before checking links to prevent concurrent posting.
+    if not conn.in_transaction:
+        conn.execute("BEGIN IMMEDIATE")
+    row = conn.execute(f"SELECT * FROM {name} WHERE id=?", (row_id,)).fetchone()
+    if row is None:
+        raise ValueError("السجل غير موجود")
+    record = dict(row)
+    linked = any(record.get(key) for key in linked_fields)
+    for line in conn.execute(f"SELECT * FROM {lines_table} WHERE {parent_key}=?", (row_id,)):
+        values = dict(line)
+        linked = linked or values.get("warehouse_tx_id") or values.get("return_warehouse_tx_id")
+    if linked:
+        raise ValueError("لا يمكن حذف سجل مرتبط بحركات مستودع. راجع سندات الصرف والاستلام أولاً.")
+    conn.execute(f"DELETE FROM {lines_table} WHERE {parent_key}=?", (row_id,))
+    conn.execute(f"DELETE FROM {name} WHERE id=?", (row_id,))
+    return str(record.get(reference_key) or row_id)

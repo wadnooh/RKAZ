@@ -484,6 +484,8 @@
 
     function openModal(form, message) {
       if (!form || submitting) return;
+      var review = form.getAttribute("data-delete-review");
+      if (review && !window.confirm(review)) return;
       pendingForm = form;
       if (input) {
         input.value = "";

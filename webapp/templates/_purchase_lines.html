@@ -36,7 +36,7 @@
           <th>{{ _('الكمية') }}</th>
           <th>{{ _('سعر الوحدة') }}</th>
           <th>{{ _('الإجمالي') }}</th>
-          {% if not received and can('modules.write') %}<th></th>{% endif %}
+          {% if not received and (can('modules.delete') and can('button.module.external_purchases.delete')) %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -52,7 +52,7 @@
           <td>{{ ln.qty if ln.qty is not none else '—' }}</td>
           <td>{{ ln.unit_price|money if ln.unit_price is not none else '—' }}</td>
           <td>{{ lt|money }}</td>
-          {% if not received and can('modules.write') %}
+          {% if not received and (can('modules.delete') and can('button.module.external_purchases.delete')) %}
           <td class="actions">
             <form method="post" action="{{ url_for('purchase_line_delete', line_id=ln.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف الصنف') }}">
               <input type="hidden" name="delete_password" value="">
@@ -70,7 +70,7 @@
         <tr>
           <td colspan="6" style="text-align:left;font-weight:800;">{{ _('إجمالي الطلب') }}</td>
           <td style="font-weight:800;">{{ ns.total|money }}</td>
-          {% if not received and can('modules.write') %}<td></td>{% endif %}
+          {% if not received and (can('modules.delete') and can('button.module.external_purchases.delete')) %}<td></td>{% endif %}
         </tr>
       </tfoot>
       {% endif %}

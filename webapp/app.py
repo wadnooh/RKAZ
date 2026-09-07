@@ -3551,7 +3551,7 @@ def custody_line_add(row_id):
 @app.route("/module/custody/lines/<int:line_id>/delete", methods=["POST"])
 @login_required
 def custody_line_delete(line_id):
-    if not permissions.can("section.external") or not permissions.can("modules.write"):
+    if not all(permissions.can(key) for key in ("section.external", "modules.delete", "button.module.custody.delete")):
         return permissions.deny_redirect()
     conn = db.connect()
     line = conn.execute("SELECT custody_id FROM custody_lines WHERE id=?", (line_id,)).fetchone()
@@ -3603,7 +3603,7 @@ def purchase_line_add(row_id):
 @app.route("/module/external_purchases/lines/<int:line_id>/delete", methods=["POST"])
 @login_required
 def purchase_line_delete(line_id):
-    if not permissions.can("section.external") or not permissions.can("modules.write"):
+    if not all(permissions.can(key) for key in ("section.external", "modules.delete", "button.module.external_purchases.delete")):
         return permissions.deny_redirect()
     conn = db.connect()
     line = conn.execute("SELECT purchase_id FROM external_purchase_lines WHERE id=?", (line_id,)).fetchone()
@@ -5851,7 +5851,19 @@ def module_delete(name, row_id):
         return _reject_bad_delete_password(fallback)
     conn = db.connect()
     deleted_ref = ""
-    if name == "tickets":
+    if name in {"external_purchases", "custody"}:
+        try:
+            deleted_ref = db.delete_external_record(name, row_id, conn)
+        except ValueError as exc:
+            conn.rollback()
+            conn.close()
+            flash(str(exc), "danger")
+            return redirect(url_for("module_list", name=name))
+        except Exception:
+            conn.rollback()
+            conn.close()
+            raise
+    elif name == "tickets":
         _, deleted_ref = db.delete_ticket(row_id, conn=conn)
     elif name == "construction_works":
         _, deleted_ref = db.delete_construction_work(row_id, conn=conn)

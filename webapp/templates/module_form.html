@@ -27,6 +27,13 @@
 {% endif %}
 
 <div class="card">
+  {% if mode == 'edit' and name in ['external_purchases', 'custody'] and can('modules.delete') and can('button.module.' ~ name ~ '.delete') %}
+  <form method="post" action="{{ url_for('module_delete', name=name, row_id=row.id) }}" class="js-delete-guard" data-delete-review="{{ _('مراجعة الحذف: سيتم حذف السجل وجميع بنوده غير المرحّلة. لا يمكن التراجع. رقم السجل:') }} {{ row.get('purchase_no') or row.get('custody_no') or row.id }}">
+    <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="delete_password" value="">
+    <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف السجل') }}</button>
+  </form>
+  {% endif %}
   <div class="toolbar">
     <div>
       <h2 class="section-title">{% if mode=='new' %}{{ _('إضافة') }} — {{ module.title }}{% else %}{{ _('تعديل') }} — {{ module.title }}{% endif %}</h2>

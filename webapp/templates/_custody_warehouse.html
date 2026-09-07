@@ -90,7 +90,7 @@
           <th>{{ _('رصيد ركاز المتاح') }}</th>
           <th>{{ _('المستودع') }}</th>
           <th>{{ _('المصدر') }}</th>
-          {% if can('modules.write') %}<th></th>{% endif %}
+          {% if (can('modules.delete') and can('button.module.custody.delete')) %}<th></th>{% endif %}
         </tr>
       </thead>
       <tbody>
@@ -123,7 +123,7 @@
             {% endif %}
           </td>
           <td>{% if ln.source_type == 'external' %}{{ _('خارجي / مؤقت') }}{% else %}{{ _('المستودع') }}{% endif %}</td>
-          {% if can('modules.write') %}
+          {% if (can('modules.delete') and can('button.module.custody.delete')) %}
           <td class="actions">
             {% if not ln.warehouse_tx_id and not ln.return_warehouse_tx_id %}
             <form method="post" action="{{ url_for('custody_line_delete', line_id=ln.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كود تأكيد الحذف لحذف بند العهدة') }}">
@@ -150,7 +150,7 @@
           <td></td>
           <td>{% if returned %}<span class="badge ok">{{ _('كلها مرتجعة') }}</span>{% elif issued %}<span class="badge ok">{{ _('كلها مصروفة') }}</span>{% endif %}</td>
           <td></td>
-          {% if can('modules.write') %}<td></td>{% endif %}
+          {% if (can('modules.delete') and can('button.module.custody.delete')) %}<td></td>{% endif %}
         </tr>
       </tfoot>
       {% endif %}

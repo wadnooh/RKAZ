@@ -1,8 +1,8 @@
 # نشر نظام ركاز على VPS (الاستضافة الرسمية)
 
-**الرابط المؤقت الحالي:** https://rekaz.wadnooh.com
+**الرابط الحالي المتحقق منه:** https://report.ralenjaz.com
 
-> ملاحظة تشغيلية: تم إرجاع التطبيق مؤقتاً إلى `rekaz.wadnooh.com` لحين إصلاح `report.ralenjaz.com`.
+> تحقق 2026-09-07: النشر الفعلي على VPS بعنوان `191.101.2.59`. استضافة Premium بعنوان `92.113.18.126` منفصلة عن تطبيق ركاز.
 
 | البند | القيمة |
 |-------|--------|
@@ -34,6 +34,17 @@ nginx -t
 - `aws.ok` = true و`auto_backup.last_s3_ok` = true
 
 ---
+
+## اتصال النشر المتحقق منه
+
+من PowerShell على الجهاز الحالي:
+
+```powershell
+ssh -o IdentitiesOnly=yes -i "$env:USERPROFILE/.ssh/weeklyreport_client_ed25519" root@191.101.2.59
+```
+
+هذا المفتاح استُخدم في عمليات النشر السابقة وتم التحقق منه بتاريخ 2026-09-07.
+المفتاح `.deploy_keys/rekaz_deploy_ed25519` يخص اتصال Premium ولا يعمل على VPS ركاز.
 
 ## تحديث الكود على السيرفر
 
