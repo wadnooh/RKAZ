@@ -26,6 +26,11 @@
   {% include "_section_subnav.html" %}
 {% endif %}
 
+{% if name in ['workshop_cars','workshop_equipment'] and mode == 'edit' %}
+<div class="card" style="margin-bottom:12px"><h3>الأصل الثابت والإهلاك</h3>
+{% if linked_fixed_asset %}<p>{{ linked_fixed_asset.asset_no }} — {{ linked_fixed_asset.name }} · الإهلاك السنوي {{ linked_fixed_asset.annual_rate }}% · القيمة الدفترية {{ linked_fixed_asset.net|money }}</p><a class="btn primary" href="{{ url_for('fixed_asset_edit',asset_id=linked_fixed_asset.id) }}">الأصل والمراجعات</a>
+{% elif can('modules.write') %}<a class="btn ghost" href="{{ url_for('fixed_asset_edit',link=('car:' if name == 'workshop_cars' else 'equipment:') ~ row.id) }}">إضافة أصل وربطه بهذا السجل</a>{% endif %}</div>
+{% endif %}
 <div class="card">
   {% if mode == 'edit' and name in ['external_purchases', 'custody'] and can('modules.delete') and can('button.module.' ~ name ~ '.delete') %}
   <form method="post" action="{{ url_for('module_delete', name=name, row_id=row.id) }}" class="js-delete-guard" data-delete-review="{{ _('مراجعة الحذف: سيتم حذف السجل وجميع بنوده غير المرحّلة. لا يمكن التراجع. رقم السجل:') }} {{ row.get('purchase_no') or row.get('custody_no') or row.id }}">

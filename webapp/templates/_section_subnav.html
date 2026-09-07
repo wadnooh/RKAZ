@@ -1,3 +1,4 @@
+{% if section == 'maintenance' %}{% include '_assets_nav.html' %}{% else %}
 {% if section and (section_modules or section_meta) %}
 {% set p = request.path or '' %}
 {% set section_custom_tabs = (app_custom_tabs_by_section or {}).get(section) or [] %}
@@ -22,4 +23,6 @@
   </div>
 </div>
 {% endif %}
+{% endif %}
+
 {% endif %}

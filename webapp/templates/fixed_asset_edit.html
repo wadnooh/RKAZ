@@ -1,0 +1,22 @@
+{% extends 'base.html' %}{% block content %}{% include '_assets_nav.html' %}
+<div class="card"><h2>{{ 'بيانات الأصل الثابت' if asset_id else 'إضافة أصل ثابت' }}</h2>
+<form method="post"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<fieldset {% if not can('modules.write') %}disabled{% endif %} style="border:0;padding:0"><div class="form-grid">
+{% for key,label,kind in [('asset_no','رقم الأصل','text'),('name','اسم الأصل','text'),('acquired_on','تاريخ بدء الاستخدام والإهلاك','date'),('cost','تكلفة الأصل','number'),('residual','القيمة المتبقية','number'),('annual_rate','نسبة الإهلاك السنوية %','number'),('next_review','المراجعة القادمة','date')] %}
+<label>{{ label }}<input name="{{ key }}" type="{{ kind }}" value="{{ row.get(key,'') }}" {% if key != 'next_review' %}required{% endif %} {% if kind=='number' %}step="0.01" min="0" {% if key=='annual_rate' %}max="100"{% endif %}{% endif %}></label>{% endfor %}
+<label>السيارة أو المعدة المرتبطة<select name="link"><option value="">أصل مستقل</option>
+{% for car in cars %}<option value="car:{{ car.id }}" {% if row.get('car_id')==car.id or row.get('link')=='car:' ~ car.id %}selected{% endif %}>سيارة: {{ car.plate_no }}</option>{% endfor %}
+{% for eq in equipment %}<option value="equipment:{{ eq.id }}" {% if row.get('equipment_id')==eq.id or row.get('link')=='equipment:' ~ eq.id %}selected{% endif %}>معدة: {{ eq.equip_no }} — {{ eq.equip_name }}</option>{% endfor %}</select></label>
+<label>ملاحظات<textarea name="notes">{{ row.get('notes','') }}</textarea></label></div>
+{% if can('modules.write') %}<button class="btn primary" type="submit">حفظ الأصل</button>{% endif %}</fieldset></form>
+{% if row.get('car_id') and can('button.module.workshop_cars.edit') %}<a class="btn ghost" href="{{ url_for('module_edit',name='workshop_cars',row_id=row.car_id) }}">فتح السيارة في الورشة</a>{% endif %}
+{% if row.get('equipment_id') and can('button.module.workshop_equipment.edit') %}<a class="btn ghost" href="{{ url_for('module_edit',name='workshop_equipment',row_id=row.equipment_id) }}">فتح المعدة</a>{% endif %}
+{% if estimate %}<p>الإهلاك السنوي: {{ estimate.annual|money }} · المتراكم حتى {{ today }}: {{ estimate.accumulated|money }} · القيمة الدفترية: {{ estimate.net|money }}</p>{% endif %}
+<p class="meta">الإهلاك بالقسط الثابت حسب النسبة التي تدخلها، على أساس 365 يوماً في السنة، وبحد أقصى التكلفة ناقص القيمة المتبقية.</p></div>
+{% if asset_id %}<div class="card" style="margin-top:16px"><h3>مراجعات الأصل</h3>
+{% if can('modules.write') %}<form method="post" action="{{ url_for('fixed_asset_review',asset_id=asset_id) }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><div class="form-grid">
+<label>تاريخ المراجعة<input type="date" name="reviewed_on" value="{{ today }}" max="{{ today }}" required></label>
+<label>الحالة<select name="condition"><option>جيد</option><option>يحتاج صيانة</option><option>متوقف</option></select></label>
+<label>موعد المراجعة القادمة<input type="date" name="next_review" required></label>
+<label>نتيجة المراجعة<textarea name="notes" required></textarea></label></div><button class="btn primary">تسجيل مراجعة</button></form>{% endif %}
+{% for review in reviews %}<div class="card" style="margin-top:10px"><strong>{{ review.reviewed_on }} — {{ review.condition }}</strong><p>{{ review.notes }}</p><small>{{ review.reviewer }} · الموعد القادم: {{ review.next_review or '—' }}</small></div>{% else %}<p>لم تُسجل مراجعات بعد.</p>{% endfor %}</div>{% endif %}{% endblock %}

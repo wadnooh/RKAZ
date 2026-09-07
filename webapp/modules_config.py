@@ -559,7 +559,7 @@ SECTION_META = {
     "warehouses": {"title": "المستودعات", "home": "warehouse_movements_summary"},
     "external": {"title": "المشتريات الخارجية والعهد", "home": "external_purchases_home"},
     "financial": {"title": "المتابعات المالية", "home": "financial_home"},
-    "maintenance": {"title": "الورشة (سيارات - معدات)", "home": "maintenance_home"},
+    "maintenance": {"title": "الأصول الثابتة", "home": "maintenance_home"},
     "hr": {"title": "الموارد البشرية", "home": "hr_home"},
     "contracts": {"title": "إدارة العقود", "home": "contracts_admin_home"},
     "reinforcement": {"title": "التعزيز - اسكيمات", "home": "reinforcement_home"},

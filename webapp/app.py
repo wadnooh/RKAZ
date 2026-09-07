@@ -3807,7 +3807,7 @@ def general_report_whatsapp():
 @app.route("/maintenance")
 @login_required
 def maintenance_home():
-    return _redirect_section_first_child("maintenance")
+    return redirect(url_for("fixed_assets_home"))
 
 
 @app.route("/hr")
@@ -5851,6 +5851,12 @@ def module_delete(name, row_id):
         return _reject_bad_delete_password(fallback)
     conn = db.connect()
     deleted_ref = ""
+    if name in {"workshop_cars", "workshop_equipment"}:
+        field = "car_id" if name == "workshop_cars" else "equipment_id"
+        if conn.execute(f"SELECT id FROM fixed_assets WHERE {field}=?", (row_id,)).fetchone():
+            conn.close()
+            flash("لا يمكن حذف سيارة أو معدة مرتبطة بأصل ثابت. راجع سجل الأصل أولاً.", "danger")
+            return redirect(url_for("module_list", name=name))
     if name in {"external_purchases", "custody"}:
         try:
             deleted_ref = db.delete_external_record(name, row_id, conn)
@@ -7021,6 +7027,10 @@ def main():
     else:
         print(f"تشغيل نظام متابعة الأعمال العام — مكتب خدمات خريص على http://{host}:{port}")
         app.run(host=host, port=port, debug=False)
+
+
+from webapp.fixed_assets import register as register_fixed_assets
+register_fixed_assets(app, login_required)
 
 
 if __name__ == "__main__":

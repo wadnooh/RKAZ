@@ -1,0 +1,5 @@
+<div class="toolbar"><div class="actions">
+<a class="btn ghost" href="{{ url_for('fixed_assets_home') }}">الأصول الثابتة</a>
+{% if can('tab.module.workshop_cars') %}<a class="btn ghost" href="{{ url_for('module_list',name='workshop_cars') }}">الورشة والسيارات</a>{% endif %}
+{% if can('tab.module.workshop_equipment') %}<a class="btn ghost" href="{{ url_for('module_list',name='workshop_equipment') }}">المعدات</a>{% endif %}
+</div></div>

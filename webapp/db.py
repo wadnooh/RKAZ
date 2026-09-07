@@ -612,6 +612,8 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
     conn = conn or connect()
     created: list[str] = []
     try:
+        from webapp.fixed_assets import ensure_schema as ensure_assets_schema
+        ensure_assets_schema(conn)
         existing = {
             r[0]
             for r in conn.execute(
