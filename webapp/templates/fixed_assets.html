@@ -3,9 +3,16 @@
 <div class="card">
 <div class="toolbar"><div><h2>الأصول الثابتة</h2><p class="meta">سجل الأصول المرتبطة بالسيارات والمعدات ومتابعة الإهلاك والمراجعات — {{ today }}</p></div>
 {% if can('modules.write') %}<a class="btn primary" href="{{ url_for('fixed_asset_edit') }}">إضافة أصل ثابت</a>{% endif %}</div>
+<form method="get" action="{{ url_for('fixed_assets_home') }}" style="margin:16px 0">
+<div class="form-grid">
+<label>البحث عن أصل<input type="search" name="q" value="{{ q }}" placeholder="رقم الأصل، الاسم، لوحة السيارة، رقم المعدة أو اسمها"></label>
+<label>نوع الأصل<select name="kind">{% for value,label in [('','جميع الأنواع'),('car','السيارات'),('equipment','المعدات'),('independent','أصول مستقلة')] %}<option value="{{ value }}" {% if kind==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+<label>موعد المراجعة<select name="review">{% for value,label in [('','جميع المراجعات'),('due','مستحقة حتى اليوم'),('upcoming','قادمة'),('unscheduled','دون موعد')] %}<option value="{{ value }}" {% if review==value %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></label>
+</div><button class="btn primary" type="submit">بحث وجلب النتائج</button> <a class="btn ghost" href="{{ url_for('fixed_assets_home') }}">مسح البحث وعرض الكل</a>
+</form><p class="meta">عدد النتائج: {{ rows|length }} — الإجماليات التالية تخص نتائج البحث المعروضة.</p>
 <div class="actions"><span class="badge">التكلفة: {{ totals.cost|money }}</span><span class="badge">الإهلاك المتراكم: {{ totals.accumulated|money }}</span><span class="badge">القيمة الدفترية: {{ totals.net|money }}</span></div>
 <p class="meta">القسط الثابت: (التكلفة − القيمة المتبقية) × النسبة السنوية × الأيام منذ بدء الاستخدام ÷ 365. يتوقف الإهلاك عند القيمة المتبقية؛ الحساب تقديري ولا ينشئ قيوداً محاسبية.</p>
 <div style="overflow-x:auto"><table><thead><tr><th>رقم الأصل</th><th>الاسم</th><th>الربط</th><th>التكلفة</th><th>الإهلاك % سنوياً</th><th>الإهلاك المتراكم</th><th>القيمة الدفترية</th><th>آخر مراجعة</th><th>المراجعة القادمة</th><th></th></tr></thead><tbody>
 {% for r in rows %}<tr><td>{{ r.asset_no }}</td><td>{{ r.name }}</td><td>{{ r.plate_no or r.equip_no or 'أصل مستقل' }}</td><td>{{ r.cost|money }}</td><td>{{ r.annual_rate }}</td><td>{{ r.accumulated|money }}</td><td>{{ r.net|money }}</td><td>{{ r.last_review or '—' }}</td><td>{% if r.overdue %}<span class="badge danger">مستحقة: {{ r.next_review }}</span>{% else %}{{ r.next_review or '—' }}{% endif %}</td><td><a class="btn ghost" href="{{ url_for('fixed_asset_edit',asset_id=r.id) }}">فتح ومراجعة</a></td></tr>
-{% else %}<tr><td colspan="10">لا توجد أصول مسجلة. أضف أصلاً واربطه بسيارة أو معدة موجودة.</td></tr>{% endfor %}</tbody></table></div></div>
+{% else %}<tr><td colspan="10">{% if q or kind or review %}لا توجد أصول مطابقة للبحث. غيّر شروط البحث أو اعرض الكل.{% else %}لا توجد أصول مسجلة. أضف أصلاً واربطه بسيارة أو معدة موجودة.{% endif %}</td></tr>{% endfor %}</tbody></table></div></div>
 {% endblock %}

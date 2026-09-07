@@ -75,6 +75,23 @@ class AssetTests(unittest.TestCase):
             self.assertEqual(self.client.post('/fixed-assets/1/review').status_code,403)
         self.assertEqual(self.client.get('/fixed-assets/999').status_code,404)
 
+    def test_search_filters_and_totals(self):
+        self.client.post('/fixed-assets/new', data=self.data)
+        self.client.post('/fixed-assets/new', data=dict(self.data, asset_no='B2', name='Independent', link='', cost='200', residual='0', next_review=''))
+        from flask import template_rendered
+        captured = []
+        def capture(sender, template, context, **extra): captured.append(context)
+        template_rendered.connect(capture, self.app)
+        try:
+            for query, expected in [({'q':'CAR-1'}, ['A1']), ({'q':'Independent'}, ['B2']), ({'kind':'independent'}, ['B2']), ({'review':'unscheduled'}, ['B2']), ({'q':'CAR-1','kind':'independent'}, []), ({'q':"% OR 1=1 --"}, [])]:
+                response = self.client.get('/fixed-assets', query_string=query)
+                self.assertEqual(response.status_code, 200)
+                context = captured[-1]
+                self.assertEqual([r['asset_no'] for r in context['rows']], expected)
+                self.assertEqual(context['totals']['cost'], sum((Decimal(r['cost']) for r in context['rows']), Decimal(0)))
+        finally:
+            template_rendered.disconnect(capture, self.app)
+
     def test_missing_link_rejected(self):
         self.client.post('/fixed-assets/new',data=dict(self.data,link='car:999'))
         self.assertEqual(self.conn.execute('SELECT count(*) FROM fixed_assets').fetchone()[0],0)

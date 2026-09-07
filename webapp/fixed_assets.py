@@ -87,12 +87,30 @@ def register(app, login_required):
     @login_required
     def fixed_assets_home():
         access()
+        q = (request.args.get('q') or '').strip()
+        kind = request.args.get('kind', '')
+        review = request.args.get('review', '')
+        kind = kind if kind in ('car','equipment','independent') else ''
+        review = review if review in ('due','upcoming','unscheduled') else ''
+        today = date.today()
+        conditions, params = [], []
+        if q:
+            conditions.append("(" + " OR ".join("instr(lower(COALESCE(" + field + ",'')),lower(?)) > 0" for field in ('a.asset_no','a.name','c.plate_no','e.equip_no','e.equip_name')) + ")")
+            params.extend([q] * 5)
+        if kind:
+            conditions.append({'car': 'a.car_id IS NOT NULL', 'equipment': 'a.equipment_id IS NOT NULL', 'independent': 'a.car_id IS NULL AND a.equipment_id IS NULL'}[kind])
+        if review == 'unscheduled':
+            conditions.append("COALESCE(a.next_review,'') = ''")
+        elif review:
+            conditions.append("COALESCE(a.next_review,'') != '' AND a.next_review " + ('<=' if review == 'due' else '>') + ' ?')
+            params.append(today.isoformat())
+        where = (' WHERE ' + ' AND '.join(conditions)) if conditions else ''
         conn = db.connect()
         try:
             rows = [dict(row) for row in conn.execute("""SELECT a.*, c.plate_no, e.equip_no,
                 (SELECT MAX(reviewed_on) FROM fixed_asset_reviews WHERE asset_id=a.id) last_review
                 FROM fixed_assets a LEFT JOIN workshop_cars c ON c.id=a.car_id
-                LEFT JOIN workshop_equipment e ON e.id=a.equipment_id ORDER BY a.id DESC""")]
+                LEFT JOIN workshop_equipment e ON e.id=a.equipment_id""" + where + " ORDER BY a.id DESC", params)]
         finally:
             conn.close()
         today = date.today()
@@ -100,7 +118,7 @@ def register(app, login_required):
             row.update(depreciation(row, today))
             row['overdue'] = bool(row['next_review'] and row['next_review'] <= today.isoformat())
         totals = {key: sum((Decimal(str(row[key])) for row in rows), Decimal(0)) for key in ('cost','accumulated','net')}
-        return render_template('fixed_assets.html', rows=rows, totals=totals, today=today, section='maintenance')
+        return render_template('fixed_assets.html', rows=rows, totals=totals, today=today, section='maintenance', q=q, kind=kind, review=review)
 
     @app.route('/fixed-assets/new', methods=['GET','POST'])
     @app.route('/fixed-assets/<int:asset_id>', methods=['GET','POST'])
