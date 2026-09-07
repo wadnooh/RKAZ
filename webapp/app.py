@@ -3432,7 +3432,7 @@ def warehouse_tx_delete(row_id):
     """حذف سطر مادة من حركة مستودع مع الرجوع لعرض المعاملة أو القائمة."""
     if not permissions.can("modules.write"):
         flash(_t("لا تملك صلاحية الحذف."), "danger")
-        return redirect(request.form.get("next") or url_for("warehouses_home"))
+        return redirect(helpers.safe_local_redirect(request.form.get("next"), url_for("warehouses_home")))
     if not _delete_password_ok():
         return _reject_bad_delete_password(url_for("warehouses_home"))
     conn = db.connect()
@@ -3440,7 +3440,7 @@ def warehouse_tx_delete(row_id):
     if not row:
         conn.close()
         flash(_t("السجل غير موجود"), "danger")
-        return redirect(request.form.get("next") or url_for("warehouses_home"))
+        return redirect(helpers.safe_local_redirect(request.form.get("next"), url_for("warehouses_home")))
     voucher = (row["voucher_no"] or "").strip() if hasattr(row, "keys") else ""
     conn.execute("DELETE FROM warehouse_tx WHERE id=?", (row_id,))
     conn.commit()
@@ -3448,7 +3448,7 @@ def warehouse_tx_delete(row_id):
     db.log_audit(current_user_name(), "حذف", "معاملات المستودع", row_id, voucher)
     flash(_t("تم حذف مادة الحركة"), "ok")
     _after_data_change()
-    nxt = (request.form.get("next") or "").strip()
+    nxt = helpers.safe_local_redirect(request.form.get("next"), "")
     if nxt:
         return redirect(nxt)
     if voucher:
@@ -4005,7 +4005,7 @@ def users_home():
 
 
 def _safe_next_path(raw: str | None, fallback: str) -> str:
-    nxt = (raw or "").strip()
+    nxt = helpers.safe_local_redirect(raw, fallback)
     if nxt.startswith("/") and not nxt.startswith("//") and nxt not in {"/", "/login"}:
         return nxt
     return fallback

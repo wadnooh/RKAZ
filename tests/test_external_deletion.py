@@ -77,5 +77,18 @@ class DeleteRoutePermissionTests(unittest.TestCase):
             env.parse((Path('webapp/templates') / name).read_text(encoding='utf-8'))
 
 
+class SafeRedirectTests(unittest.TestCase):
+    def test_reject_external_and_obfuscated_urls(self):
+        from webapp.helpers import safe_local_redirect
+        for value in ['https://example.com', '//example.com', '/%2fexample.com', '/\\example.com', '/%5cexample.com', '/%0a/example.com', 'javascript:alert(1)', None]:
+            with self.subTest(value=value):
+                self.assertEqual(safe_local_redirect(value, '/fallback'), '/fallback')
+
+    def test_preserve_internal_path_and_query(self):
+        from webapp.helpers import safe_local_redirect
+        value = '/module/custody?q=test&page=2'
+        self.assertEqual(safe_local_redirect(value, '/fallback'), value)
+
+
 if __name__ == '__main__':
     unittest.main()

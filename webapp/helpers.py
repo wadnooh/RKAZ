@@ -254,13 +254,31 @@ def delete_password_ok() -> bool:
     return _send_delete_code(scope)
 
 
+def safe_local_redirect(raw: str | None, fallback: str) -> str:
+    """Allow only root-relative paths; reject browser URL normalization tricks."""
+    from urllib.parse import unquote, urlsplit
+    value = (raw or "").strip()
+    decoded = unquote(value)
+    if any(ord(char) < 32 or ord(char) == 127 for char in (raw or "") + decoded):
+        return fallback
+    if "\\" in decoded or not decoded.startswith("/") or decoded.startswith("//"):
+        return fallback
+    try:
+        parts = urlsplit(decoded)
+    except ValueError:
+        return fallback
+    if parts.scheme or parts.netloc:
+        return fallback
+    return value
+
+
 def reject_bad_delete_password(fallback_url: str):
     flash(
         getattr(g, "delete_confirm_message", None) or t("أدخل كود تأكيد الحذف المرسل إلى بريد حسابات admin."),
         getattr(g, "delete_confirm_category", "danger"),
     )
     nxt = (request.form.get("next") or "").strip()
-    return redirect(nxt or fallback_url)
+    return redirect(safe_local_redirect(nxt, fallback_url))
 
 
 def summary_card(title, value, subtitle="", *, money=False, href=None, active=False):
