@@ -3892,6 +3892,84 @@ def hr_employee_pdf(emp_id: int):
     )
 
 
+@app.route("/hr/report")
+@login_required
+def hr_comprehensive_report():
+    if not (permissions.can("hr.report.view") or permissions.can("section.hr") or permissions.can("tab.hr")):
+        flash(_t("ليس لديك صلاحية لعرض تقرير الموارد البشرية."), "danger")
+        return redirect(url_for("hr_home"))
+    filters = {
+        "q": (request.args.get("q") or "").strip(),
+        "administration": (request.args.get("administration") or "").strip(),
+        "department": (request.args.get("department") or "").strip(),
+        "status": (request.args.get("status") or "").strip(),
+        "nationality": (request.args.get("nationality") or "").strip(),
+        "doc_expiry": (request.args.get("doc_expiry") or "").strip(),
+    }
+    report_data = db.get_hr_comprehensive_report(filters=filters)
+    return render_template(
+        "hr_report.html",
+        title=_t("التقرير الشامل للموظفين"),
+        subtitle=_t("كشف تفصيلي شامل لبيانات الموظفين والوثائق والرواتب مع خيارات الفلترة والتصدير."),
+        section="hr",
+        report_data=report_data,
+        filters=filters,
+        active="hr_report",
+    )
+
+
+@app.route("/hr/report/excel")
+@login_required
+def hr_comprehensive_report_excel():
+    if not (permissions.can("hr.report.export") or permissions.can("section.hr") or permissions.can("export") or permissions.can("tab.hr")):
+        flash(_t("ليس لديك صلاحية لتصدير تقرير الموارد البشرية."), "danger")
+        return redirect(url_for("hr_comprehensive_report"))
+    filters = {
+        "q": (request.args.get("q") or "").strip(),
+        "administration": (request.args.get("administration") or "").strip(),
+        "department": (request.args.get("department") or "").strip(),
+        "status": (request.args.get("status") or "").strip(),
+        "nationality": (request.args.get("nationality") or "").strip(),
+        "doc_expiry": (request.args.get("doc_expiry") or "").strip(),
+    }
+    report_data = db.get_hr_comprehensive_report(filters=filters)
+    from webapp import reports
+    excel_buf = reports.generate_hr_comprehensive_excel(report_data)
+    filename = f"HR_Comprehensive_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return send_file(
+        excel_buf,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        as_attachment=True,
+        download_name=filename,
+    )
+
+
+@app.route("/hr/report/pdf")
+@login_required
+def hr_comprehensive_report_pdf():
+    if not (permissions.can("hr.report.export") or permissions.can("section.hr") or permissions.can("export") or permissions.can("tab.hr")):
+        flash(_t("ليس لديك صلاحية لتصدير تقرير الموارد البشرية."), "danger")
+        return redirect(url_for("hr_comprehensive_report"))
+    filters = {
+        "q": (request.args.get("q") or "").strip(),
+        "administration": (request.args.get("administration") or "").strip(),
+        "department": (request.args.get("department") or "").strip(),
+        "status": (request.args.get("status") or "").strip(),
+        "nationality": (request.args.get("nationality") or "").strip(),
+        "doc_expiry": (request.args.get("doc_expiry") or "").strip(),
+    }
+    report_data = db.get_hr_comprehensive_report(filters=filters)
+    from webapp import reports
+    pdf_buf = reports.generate_hr_comprehensive_pdf(report_data)
+    filename = f"HR_Comprehensive_Report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return send_file(
+        pdf_buf,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=filename,
+    )
+
+
 @app.route("/contracts-admin")
 @login_required
 def contracts_admin_home():
@@ -4520,6 +4598,19 @@ def _apply_attachments_from_request(name: str, data: dict) -> None:
         request.files,
         scope=name,
         record_ref=ref,
+        clear=clear,
+    )
+
+
+def _apply_employee_photo_from_request(name: str, data: dict) -> None:
+    """معالجة حفظ أو حذف الصورة الشخصية للموظف."""
+    if name != "hr_employees":
+        return
+    clear = str(request.form.get("clear_photo") or "").strip().lower() in {"1", "on", "yes", "true"}
+    media_svc.apply_employee_photo_upload(
+        data,
+        request.files,
+        emp_no=data.get("emp_no"),
         clear=clear,
     )
 
@@ -5332,6 +5423,7 @@ def module_new(name):
                 )
         try:
             _apply_attachments_from_request(name, data)
+            _apply_employee_photo_from_request(name, data)
         except ValueError as exc:
             conn.close()
             flash(str(exc), "danger")
@@ -5661,6 +5753,7 @@ def module_edit(name, row_id):
                 )
         try:
             _apply_attachments_from_request(name, data)
+            _apply_employee_photo_from_request(name, data)
         except ValueError as exc:
             conn.close()
             flash(str(exc), "danger")

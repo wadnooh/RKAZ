@@ -17,6 +17,9 @@
       {% if can('button.module.hr_leaves.add') or can('section.hr') %}
       <a class="btn ghost" href="{{ url_for('module_new', name='hr_leaves') }}">🏖️ {{ _('تسجيل إجازة') }}</a>
       {% endif %}
+      {% if can('hr.report.view') or can('section.hr') or can('tab.hr') %}
+      <a class="btn ghost" href="{{ url_for('hr_comprehensive_report') }}">📑 {{ _('التقرير الشامل للموظفين') }}</a>
+      {% endif %}
       {% if can('button.module.hr_employees.export') or can('export') %}
       <a class="btn ghost" href="{{ url_for('module_export_excel', name='hr_employees') }}">📥 {{ _('تصدير كشف الموظفين (Excel)') }}</a>
       {% endif %}

@@ -186,6 +186,7 @@ EXTRA_TABLE_DDL = {
     "hr_employees": """
         CREATE TABLE IF NOT EXISTS hr_employees (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            photo TEXT,
             emp_no TEXT,
             full_name TEXT,
             job_title TEXT,
@@ -817,6 +818,7 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("tickets.has_excavation")
         if "hr_employees" in existing or "hr_employees" in created:
             for col, dtype in (
+                ("photo", "TEXT"),
                 ("administration", "TEXT"),
                 ("id_number", "TEXT"),
                 ("id_expiry_date", "TEXT"),
@@ -6589,6 +6591,131 @@ def list_active_employees_for_select(conn: sqlite3.Connection | None = None) -> 
             """
         ).fetchall()
         return rows_to_dicts(rows)
+    finally:
+        if own:
+            conn.close()
+
+
+def get_hr_comprehensive_report(conn: sqlite3.Connection | None = None, filters: dict | None = None) -> dict:
+    """جلب بيانات التقرير الشامل لجميع الموظفين مع الفلاتر والإحصائيات والتحليلات المالية والوثائقية."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        filters = filters or {}
+        from datetime import date, datetime, timedelta
+        today = date.today()
+        today_str = today.isoformat()
+        in_30_str = (today + timedelta(days=30)).isoformat()
+        in_60_str = (today + timedelta(days=60)).isoformat()
+
+        all_employees = rows_to_dicts(conn.execute("SELECT * FROM hr_employees ORDER BY emp_no ASC, full_name ASC").fetchall())
+
+        administrations = sorted(list({(e.get("administration") or "").strip() for e in all_employees if (e.get("administration") or "").strip()}))
+        departments = sorted(list({(e.get("department") or "").strip() for e in all_employees if (e.get("department") or "").strip()}))
+        nationalities = sorted(list({(e.get("nationality") or "").strip() for e in all_employees if (e.get("nationality") or "").strip()}))
+
+        def _doc_info(date_val: str | None) -> dict:
+            if not date_val or not str(date_val).strip():
+                return {"date": "—", "status": "none", "label": "غير مسجل", "badge": "ghost"}
+            v = str(date_val).strip()[:10]
+            if v < today_str:
+                return {"date": v, "status": "expired", "label": "منتهية", "badge": "danger"}
+            elif v <= in_30_str:
+                return {"date": v, "status": "critical", "label": "حرجة (≤30 يوم)", "badge": "warning"}
+            elif v <= in_60_str:
+                return {"date": v, "status": "warning", "label": "قريبة (≤60 يوم)", "badge": "info"}
+            return {"date": v, "status": "valid", "label": "سارية", "badge": "ok"}
+
+        filtered_rows = []
+        q = (filters.get("q") or "").strip().lower()
+        filter_adm = (filters.get("administration") or "").strip()
+        filter_dept = (filters.get("department") or "").strip()
+        filter_status = (filters.get("status") or "").strip()
+        filter_nat = (filters.get("nationality") or "").strip()
+        filter_doc = (filters.get("doc_expiry") or "").strip()
+
+        for e in all_employees:
+            if q:
+                searchable = f"{e.get('emp_no') or ''} {e.get('full_name') or ''} {e.get('id_number') or ''} {e.get('phone') or ''} {e.get('job_title') or ''} {e.get('profession') or ''} {e.get('bank_name') or ''} {e.get('iban') or ''}".lower()
+                if q not in searchable:
+                    continue
+
+            if filter_adm and (e.get("administration") or "").strip() != filter_adm:
+                continue
+
+            if filter_dept and filter_dept.lower() not in (e.get("department") or "").lower():
+                continue
+
+            if filter_status and (e.get("status") or "").strip() != filter_status:
+                continue
+
+            if filter_nat and (e.get("nationality") or "").strip() != filter_nat:
+                continue
+
+            basic = float(e.get("basic_salary") or 0)
+            housing = float(e.get("housing_allowance") or 0)
+            other = float(e.get("other_allowances") or 0)
+            total_salary = basic + housing + other
+
+            iqama_info = _doc_info(e.get("id_expiry_date"))
+            license_info = _doc_info(e.get("license_expiry_date"))
+            insurance_info = _doc_info(e.get("insurance_expiry_date"))
+            contract_info = _doc_info(e.get("contract_end_date"))
+
+            doc_statuses = [iqama_info["status"], license_info["status"], insurance_info["status"], contract_info["status"]]
+            has_expired = "expired" in doc_statuses
+            has_critical = "critical" in doc_statuses
+            has_warning = "warning" in doc_statuses
+
+            if filter_doc == "expired" and not has_expired:
+                continue
+            elif filter_doc == "critical" and not (has_expired or has_critical):
+                continue
+            elif filter_doc == "warning" and not (has_expired or has_critical or has_warning):
+                continue
+            elif filter_doc == "valid" and (has_expired or has_critical):
+                continue
+
+            e_enriched = dict(e)
+            e_enriched["basic_salary_num"] = basic
+            e_enriched["housing_allowance_num"] = housing
+            e_enriched["other_allowances_num"] = other
+            e_enriched["total_salary_num"] = total_salary
+            e_enriched["iqama_info"] = iqama_info
+            e_enriched["license_info"] = license_info
+            e_enriched["insurance_info"] = insurance_info
+            e_enriched["contract_info"] = contract_info
+            e_enriched["has_expired"] = has_expired
+            e_enriched["has_critical"] = has_critical
+            filtered_rows.append(e_enriched)
+
+        total_basic = sum(r["basic_salary_num"] for r in filtered_rows)
+        total_housing = sum(r["housing_allowance_num"] for r in filtered_rows)
+        total_other = sum(r["other_allowances_num"] for r in filtered_rows)
+        total_payroll = sum(r["total_salary_num"] for r in filtered_rows)
+
+        stats = {
+            "total_count": len(filtered_rows),
+            "active_count": sum(1 for r in filtered_rows if (r.get("status") or "") == "على رأس العمل"),
+            "leave_count": sum(1 for r in filtered_rows if (r.get("status") or "") == "إجازة"),
+            "terminated_count": sum(1 for r in filtered_rows if (r.get("status") or "") == "منتهي"),
+            "total_basic_salary": total_basic,
+            "total_housing_allowance": total_housing,
+            "total_other_allowances": total_other,
+            "total_payroll": total_payroll,
+            "expired_docs_count": sum(1 for r in filtered_rows if r["has_expired"]),
+            "critical_docs_count": sum(1 for r in filtered_rows if r["has_critical"]),
+        }
+
+        return {
+            "rows": filtered_rows,
+            "stats": stats,
+            "administrations": administrations,
+            "departments": departments,
+            "nationalities": nationalities,
+            "filters": filters,
+        }
     finally:
         if own:
             conn.close()

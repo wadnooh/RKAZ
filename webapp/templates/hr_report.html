@@ -1,0 +1,293 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'hr_report' %}
+{% include "_hr_subnav.html" %}
+
+{% set stats = report_data.stats %}
+{% set rows = report_data.rows %}
+{% set filters = report_data.filters %}
+
+<!-- الترويسة الرئيسية والإجراءات السريعة -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+    <div>
+      <div style="display:flex;align-items:center;gap:10px;">
+        <h2 class="section-title" style="margin:0;">📑 {{ _('التقرير الشامل للموارد البشرية والعمالة') }}</h2>
+        <span class="badge" style="font-size:0.85rem;background:rgba(37,99,235,0.1);color:var(--accent,#2563eb);">
+          {{ stats.total_count }} {{ _('موظف') }}
+        </span>
+      </div>
+      <div class="meta" style="margin-top:4px;">
+        {{ _('كشف تفصيلي شامل لكافة بيانات الموظفين، الإدارات، مسير الرواتب الشهرية، ومتابعة سريان الوثائق الرسمية.') }}
+      </div>
+    </div>
+
+    <div class="actions" style="flex-wrap:wrap;gap:8px;">
+      {% if can('hr.report.export') or can('export') or can('section.hr') %}
+      <a class="btn primary" href="{{ url_for('hr_comprehensive_report_excel', q=filters.q, administration=filters.administration, department=filters.department, status=filters.status, nationality=filters.nationality, doc_expiry=filters.doc_expiry) }}">
+        📥 {{ _('تصدير كشف كامل (Excel)') }}
+      </a>
+      <a class="btn ghost" href="{{ url_for('hr_comprehensive_report_pdf', q=filters.q, administration=filters.administration, department=filters.department, status=filters.status, nationality=filters.nationality, doc_expiry=filters.doc_expiry) }}" target="_blank">
+        📄 {{ _('طباعة تقرير رسمي (PDF A4 عريض)') }}
+      </a>
+      {% endif %}
+      <button class="btn ghost" onclick="window.print();">🖨️ {{ _('طباعة المتصفح') }}</button>
+      <a class="btn ghost" href="{{ url_for('hr_home') }}">↩️ {{ _('لوحة الموارد البشرية') }}</a>
+    </div>
+  </div>
+</div>
+
+<!-- بطاقات المؤشرات الإحصائية والمالية -->
+<div class="stats-grid" style="margin-bottom:14px;">
+  <div class="stat-card" style="border-right:4px solid var(--accent, #3b82f6);">
+    <div class="meta">{{ _('إجمالي الموظفين') }}</div>
+    <strong style="font-size:1.55rem;color:var(--text, #1e293b);">{{ stats.total_count }}</strong>
+    <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('ضمن نتيجة الفلترة') }}</div>
+  </div>
+  <div class="stat-card" style="border-right:4px solid #10b981;">
+    <div class="meta">{{ _('على رأس العمل') }}</div>
+    <strong style="font-size:1.55rem;color:#10b981;">{{ stats.active_count }}</strong>
+    <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('موظفون نشطون') }}</div>
+  </div>
+  <div class="stat-card" style="border-right:4px solid #f59e0b;">
+    <div class="meta">{{ _('في إجازة / منتهي') }}</div>
+    <strong style="font-size:1.55rem;color:#f59e0b;">{{ stats.leave_count }} <span style="font-size:0.95rem;color:var(--meta,#64748b);">/ {{ stats.terminated_count }}</span></strong>
+    <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('إجازة / نهاية خدمة') }}</div>
+  </div>
+  <div class="stat-card" style="border-right:4px solid #8b5cf6;">
+    <div class="meta">{{ _('إجمالي مسير الرواتب الشهري') }}</div>
+    <strong style="font-size:1.55rem;color:#8b5cf6;">{{ stats.total_payroll|money }}</strong>
+    <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('أساسي:') }} {{ stats.total_basic_salary|money }}</div>
+  </div>
+  <div class="stat-card" style="border-right:4px solid {% if stats.expired_docs_count > 0 %}#ef4444{% else %}#10b981{% endif %};">
+    <div class="meta">{{ _('وثائق منتهية') }}</div>
+    <strong style="font-size:1.55rem;color:{% if stats.expired_docs_count > 0 %}#ef4444{% else %}#10b981{% endif %};">{{ stats.expired_docs_count }}</strong>
+    <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('إقامة أو رخصة أو تأمين') }}</div>
+  </div>
+  <div class="stat-card" style="border-right:4px solid {% if stats.critical_docs_count > 0 %}#f97316{% else %}#10b981{% endif %};">
+    <div class="meta">{{ _('وثائق حرجة (≤30 يوم)') }}</div>
+    <strong style="font-size:1.55rem;color:{% if stats.critical_docs_count > 0 %}#f97316{% else %}#10b981{% endif %};">{{ stats.critical_docs_count }}</strong>
+    <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('تتطلب تجديداً فورياً') }}</div>
+  </div>
+</div>
+
+<!-- شريط الفلاتر المتقدمة -->
+<div class="card" style="margin-bottom:14px;">
+  <form method="get" action="{{ url_for('hr_comprehensive_report') }}" style="display:grid;grid-template-columns:repeat(auto-fit, minmax(180px, 1fr));gap:12px;align-items:flex-end;">
+    <div>
+      <label style="display:block;margin-bottom:4px;font-weight:600;font-size:0.85rem;">🔍 {{ _('بحث بالاسم أو الرقم أو الهوية') }}</label>
+      <input type="text" name="q" value="{{ filters.q or '' }}" placeholder="{{ _('بحث سريع...') }}" style="width:100%;">
+    </div>
+
+    <div>
+      <label style="display:block;margin-bottom:4px;font-weight:600;font-size:0.85rem;">🏢 {{ _('الإدارة') }}</label>
+      <select name="administration" style="width:100%;">
+        <option value="">{{ _('كافة الإدارات') }}</option>
+        {% for adm in report_data.administrations %}
+        <option value="{{ adm }}" {% if filters.administration == adm %}selected{% endif %}>{{ adm }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label style="display:block;margin-bottom:4px;font-weight:600;font-size:0.85rem;">📁 {{ _('القسم') }}</label>
+      <input type="text" name="department" value="{{ filters.department or '' }}" placeholder="{{ _('فلترة بالقسم...') }}" style="width:100%;">
+    </div>
+
+    <div>
+      <label style="display:block;margin-bottom:4px;font-weight:600;font-size:0.85rem;">💼 {{ _('الحالة الوظيفية') }}</label>
+      <select name="status" style="width:100%;">
+        <option value="">{{ _('كافة الحالات') }}</option>
+        <option value="على رأس العمل" {% if filters.status == 'على رأس العمل' %}selected{% endif %}>{{ _('على رأس العمل') }}</option>
+        <option value="إجازة" {% if filters.status == 'إجازة' %}selected{% endif %}>{{ _('إجازة') }}</option>
+        <option value="منتهي" {% if filters.status == 'منتهي' %}selected{% endif %}>{{ _('منتهي') }}</option>
+      </select>
+    </div>
+
+    <div>
+      <label style="display:block;margin-bottom:4px;font-weight:600;font-size:0.85rem;">🌍 {{ _('الجنسية') }}</label>
+      <select name="nationality" style="width:100%;">
+        <option value="">{{ _('كافة الجنسيات') }}</option>
+        {% for nat in report_data.nationalities %}
+        <option value="{{ nat }}" {% if filters.nationality == nat %}selected{% endif %}>{{ nat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div>
+      <label style="display:block;margin-bottom:4px;font-weight:600;font-size:0.85rem;">🛡️ {{ _('سريان الوثائق') }}</label>
+      <select name="doc_expiry" style="width:100%;">
+        <option value="">{{ _('الكل (بدون استثناء)') }}</option>
+        <option value="expired" {% if filters.doc_expiry == 'expired' %}selected{% endif %}>⚠️ {{ _('وثائق منتهية') }}</option>
+        <option value="critical" {% if filters.doc_expiry == 'critical' %}selected{% endif %}>🚨 {{ _('وثائق حرجة (≤30 يوم)') }}</option>
+        <option value="warning" {% if filters.doc_expiry == 'warning' %}selected{% endif %}>⏳ {{ _('وثائق قريبة (≤60 يوم)') }}</option>
+        <option value="valid" {% if filters.doc_expiry == 'valid' %}selected{% endif %}>✅ {{ _('وثائق سارية فقط') }}</option>
+      </select>
+    </div>
+
+    <div style="display:flex;gap:8px;">
+      <button class="btn primary" type="submit" style="flex:1;">{{ _('تطبيق الفلترة') }}</button>
+      <a class="btn ghost" href="{{ url_for('hr_comprehensive_report') }}" title="{{ _('إعادة ضبط الفلاتر') }}">🔄</a>
+    </div>
+  </form>
+</div>
+
+<!-- جدول البيانات الشامل -->
+<div class="card" style="padding:0;overflow:hidden;">
+  <div class="table-wrap" style="max-height:75vh;overflow:auto;">
+    <table class="table" style="font-size:0.88rem;white-space:nowrap;margin:0;">
+      <thead style="position:sticky;top:0;background:var(--card,#ffffff);z-index:2;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <tr>
+          <th style="width:40px;text-align:center;">#</th>
+          <th style="width:60px;text-align:center;">{{ _('الصورة') }}</th>
+          <th>{{ _('الرقم الوظيفي') }}</th>
+          <th>{{ _('اسم الموظف') }}</th>
+          <th>{{ _('الإدارة') }}</th>
+          <th>{{ _('القسم') }}</th>
+          <th>{{ _('المسمى الوظيفي / المهنة') }}</th>
+          <th>{{ _('الجنسية') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('رقم الجوال') }}</th>
+          <th>{{ _('الهوية / الإقامة') }}</th>
+          <th>{{ _('رخصة القيادة') }}</th>
+          <th>{{ _('التأمين الطبي') }}</th>
+          <th>{{ _('الراتب الأساسي') }}</th>
+          <th>{{ _('إجمالي الراتب') }}</th>
+          <th style="text-align:center;">{{ _('الإجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        {% set photos = photo_refs(r.photo) %}
+        <tr style="{% if r.has_expired %}background:rgba(239,68,68,0.04);{% elif r.has_critical %}background:rgba(249,115,22,0.04);{% endif %}">
+          <td style="text-align:center;color:var(--meta,#64748b);">{{ loop.index }}</td>
+          
+          <!-- صورة الموظف -->
+          <td style="text-align:center;padding:4px 6px;">
+            {% if photos %}
+            <a href="{{ photos[0] }}" target="_blank" rel="noopener" title="{{ _('عرض الصورة بالحجم الكامل') }}">
+              <img src="{{ photos[0] }}" alt="{{ r.full_name }}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;border:1.5px solid var(--border,#cbd5e1);display:inline-block;vertical-align:middle;">
+            </a>
+            {% else %}
+            <span style="display:inline-flex;width:36px;height:36px;border-radius:50%;background:rgba(100,116,139,0.1);align-items:center;justify-content:center;font-size:1.1rem;color:var(--meta,#64748b);">
+              👤
+            </span>
+            {% endif %}
+          </td>
+
+          <td>
+            <a href="{{ url_for('hr_employee_dossier', emp_id=r.id) }}" style="font-weight:700;color:var(--accent,#2563eb);">
+              {{ r.emp_no or '—' }}
+            </a>
+          </td>
+
+          <td>
+            <strong><a href="{{ url_for('hr_employee_dossier', emp_id=r.id) }}" style="color:inherit;">{{ r.full_name }}</a></strong>
+          </td>
+
+          <td>
+            <span class="badge ghost" style="font-weight:600;">{{ r.administration or '—' }}</span>
+          </td>
+
+          <td>{{ r.department or '—' }}</td>
+
+          <td>
+            <div>{{ r.job_title or '—' }}</div>
+            {% if r.profession and r.profession != r.job_title %}
+            <div class="meta" style="font-size:0.75rem;">{{ r.profession }}</div>
+            {% endif %}
+          </td>
+
+          <td>{{ r.nationality or '—' }}</td>
+
+          <td>
+            <span class="badge {% if r.status == 'على رأس العمل' %}ok{% elif r.status == 'إجازة' %}warning{% else %}danger{% endif %}" style="font-size:0.8rem;">
+              {{ r.status or '—' }}
+            </span>
+          </td>
+
+          <td dir="ltr" style="text-align:right;">
+            {% if r.phone %}
+            <a href="tel:{{ r.phone }}" style="color:inherit;">{{ r.phone }}</a>
+            {% else %}—{% endif %}
+          </td>
+
+          <!-- الهوية وسريانها -->
+          <td>
+            <div>{{ r.id_number or '—' }}</div>
+            {% set iqama = r.iqama_info %}
+            {% if iqama.date != '—' %}
+            <div style="font-size:0.78rem;margin-top:2px;">
+              <span class="badge {{ iqama.badge }}" style="font-size:0.72rem;padding:2px 5px;">{{ iqama.date }} ({{ iqama.label }})</span>
+            </div>
+            {% endif %}
+          </td>
+
+          <!-- رخصة القيادة -->
+          <td>
+            <div>{{ r.driving_license_no or '—' }}</div>
+            {% set lic = r.license_info %}
+            {% if lic.date != '—' %}
+            <div style="font-size:0.78rem;margin-top:2px;">
+              <span class="badge {{ lic.badge }}" style="font-size:0.72rem;padding:2px 5px;">{{ lic.date }} ({{ lic.label }})</span>
+            </div>
+            {% endif %}
+          </td>
+
+          <!-- التأمين الطبي -->
+          <td>
+            {% set ins = r.insurance_info %}
+            {% if ins.date != '—' %}
+            <span class="badge {{ ins.badge }}" style="font-size:0.72rem;padding:2px 5px;">{{ ins.date }} ({{ ins.label }})</span>
+            {% else %}—{% endif %}
+          </td>
+
+          <!-- الرواتب -->
+          <td style="font-weight:600;">{{ r.basic_salary_num|money }}</td>
+          <td style="font-weight:700;color:var(--accent,#2563eb);">{{ r.total_salary_num|money }}</td>
+
+          <!-- إجراءات -->
+          <td style="text-align:center;">
+            <div style="display:inline-flex;gap:4px;">
+              <a class="btn ghost" href="{{ url_for('hr_employee_dossier', emp_id=r.id) }}" title="{{ _('فتح الملف الشامل') }}" style="padding:4px 8px;font-size:0.8rem;">
+                👤
+              </a>
+              <a class="btn ghost" href="{{ url_for('hr_employee_pdf', emp_id=r.id) }}" target="_blank" title="{{ _('طباعة بطاقة الموظف') }}" style="padding:4px 8px;font-size:0.8rem;">
+                🖨️
+              </a>
+              {% if can('button.module.hr_employees.edit') or can('modules.write') %}
+              <a class="btn ghost" href="{{ url_for('module_edit', name='hr_employees', row_id=r.id) }}" title="{{ _('تعديل البيانات') }}" style="padding:4px 8px;font-size:0.8rem;">
+                ✏️
+              </a>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="16" style="text-align:center;padding:36px;color:var(--meta,#64748b);">
+            <div style="font-size:2rem;margin-bottom:8px;">🔍</div>
+            <strong>{{ _('لا توجد سجلات تطابق معايير الفلترة المحددة') }}</strong>
+            <div style="margin-top:8px;">
+              <a class="btn ghost" href="{{ url_for('hr_comprehensive_report') }}">{{ _('إلغاء الفلاتر وعرض الكل') }}</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot style="position:sticky;bottom:0;background:var(--card,#ffffff);font-weight:700;box-shadow:0 -1px 3px rgba(0,0,0,0.1);">
+        <tr>
+          <td colspan="4" style="text-align:center;">{{ _('المجموع لكافة السجلات المعروضة') }} ({{ rows|length }} {{ _('موظف') }})</td>
+          <td colspan="9"></td>
+          <td>{{ stats.total_basic_salary|money }}</td>
+          <td style="color:var(--accent,#2563eb);">{{ stats.total_payroll|money }}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+
+{% endblock %}

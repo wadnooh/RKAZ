@@ -161,5 +161,120 @@ class HRSystemTestCase(unittest.TestCase):
         conn.commit()
         conn.close()
 
+    def test_06_employee_photo_and_comprehensive_report(self):
+        conn = db.connect()
+        # 1. Verify photo column
+        emp_cols = [r[1] for r in conn.execute("PRAGMA table_info(hr_employees)").fetchall()]
+        self.assertIn("photo", emp_cols, "Column photo must exist in hr_employees")
+
+        # 2. Insert test employee with photo ref
+        conn.execute("DELETE FROM hr_employees WHERE emp_no='TEST-PHOTO-01'")
+        conn.execute("""
+            INSERT INTO hr_employees (
+                emp_no, full_name, administration, department, job_title, status, phone,
+                basic_salary, housing_allowance, photo
+            ) VALUES (
+                'TEST-PHOTO-01', 'محمد طارق الدوسري', 'الموارد البشرية', 'التوظيف', 'أخصائي توظيف',
+                'على رأس العمل', '0555555555', 7500, 1800, '["/media/local/photos/employees/test.jpg"]'
+            )
+        """)
+        conn.commit()
+        emp = conn.execute("SELECT * FROM hr_employees WHERE emp_no='TEST-PHOTO-01'").fetchone()
+        emp_id = emp['id']
+        conn.close()
+
+        # 3. Test comprehensive report view
+        resp_report = self.client.get('/hr/report')
+        self.assertEqual(resp_report.status_code, 200)
+        html = resp_report.get_data(as_text=True)
+        self.assertIn('التقرير الشامل للموارد البشرية', html)
+        self.assertIn('محمد طارق الدوسري', html)
+        self.assertIn('TEST-PHOTO-01', html)
+
+        # 4. Test comprehensive report with filters
+        resp_filtered = self.client.get('/hr/report?administration=الموارد+البشرية&status=على+رأس+العمل')
+        self.assertEqual(resp_filtered.status_code, 200)
+        self.assertIn('محمد طارق الدوسري', resp_filtered.get_data(as_text=True))
+
+        # 5. Test Excel export
+        resp_excel = self.client.get('/hr/report/excel?administration=الموارد+البشرية')
+        self.assertEqual(resp_excel.status_code, 200)
+        self.assertEqual(resp_excel.data[:4], b"PK\x03\x04")
+
+        # 6. Test PDF export
+        resp_pdf = self.client.get('/hr/report/pdf?administration=الموارد+البشرية')
+        self.assertEqual(resp_pdf.status_code, 200)
+        self.assertEqual(resp_pdf.data[:4], b"%PDF")
+
+        # 7. Test employee dossier and dossier PDF with photo
+        resp_dossier = self.client.get(f'/hr/employee/{emp_id}/dossier')
+        self.assertEqual(resp_dossier.status_code, 200)
+        self.assertIn('محمد طارق الدوسري', resp_dossier.get_data(as_text=True))
+
+        resp_emp_pdf = self.client.get(f'/hr/employee/{emp_id}/pdf')
+        self.assertEqual(resp_emp_pdf.status_code, 200)
+        self.assertEqual(resp_emp_pdf.data[:4], b"%PDF")
+
+        # Cleanup
+        conn = db.connect()
+        conn.execute("DELETE FROM hr_employees WHERE emp_no='TEST-PHOTO-01'")
+        conn.commit()
+        conn.close()
+
+    def test_07_employee_photo_upload_and_clear(self):
+        # 1-pixel valid JPEG
+        tiny_jpeg = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x00\x00\x01\x00\x01\x00\x00\xff\xdb\x00C\x00\x08\x06\x06\x07\x06\x05\x08\x07\x07\x07\t\t\x08\n\x0c\x14\r\x0c\x0b\x0b\x0c\x19\x12\x13\x0f\x14\x1d\x1a\x1f\x1e\x1d\x1a\x1c\x1c $.\' \",#\x1c\x1c(7),01444\x1f\'9=82<.342\xff\xc0\x00\x0b\x08\x00\x01\x00\x01\x01\x01\x11\x00\xff\xda\x00\x08\x01\x01\x00\x00?\x00\xbf\x00\xff\xd9'
+
+        conn = db.connect()
+        conn.execute("DELETE FROM hr_employees WHERE emp_no='TEST-UPL-01'")
+        conn.commit()
+        conn.close()
+
+        # Post new employee with file_photo upload
+        resp = self.client.post('/module/hr_employees/new', data={
+            'emp_no': 'TEST-UPL-01',
+            'full_name': 'سلطان بن عبدالعزيز',
+            'administration': 'الإدارة العامة',
+            'department': 'المكتب التنفيذي',
+            'status': 'على رأس العمل',
+            'phone': '0599999999',
+            'basic_salary': '12000',
+            'housing_allowance': '3000',
+            'file_photo': (io.BytesIO(tiny_jpeg), 'photo.jpg', 'image/jpeg'),
+        }, content_type='multipart/form-data', follow_redirects=True)
+        self.assertEqual(resp.status_code, 200)
+
+        conn = db.connect()
+        row = conn.execute("SELECT id, photo FROM hr_employees WHERE emp_no='TEST-UPL-01'").fetchone()
+        self.assertIsNotNone(row)
+        self.assertTrue(bool(row['photo']), "Photo field should be populated with uploaded reference")
+        self.assertIn("/media/local/photos/employees/", row['photo'])
+        emp_id = row['id']
+
+        # Edit employee and clear photo
+        resp_clear = self.client.post(f'/module/hr_employees/{emp_id}/edit', data={
+            'emp_no': 'TEST-UPL-01',
+            'full_name': 'سلطان بن عبدالعزيز',
+            'administration': 'الإدارة العامة',
+            'department': 'المكتب التنفيذي',
+            'status': 'على رأس العمل',
+            'phone': '0599999999',
+            'basic_salary': '12000',
+            'housing_allowance': '3000',
+            'photo': row['photo'],
+            'clear_photo': '1',
+        }, content_type='multipart/form-data', follow_redirects=True)
+        self.assertEqual(resp_clear.status_code, 200)
+
+        row_cleared = conn.execute("SELECT photo FROM hr_employees WHERE emp_no='TEST-UPL-01'").fetchone()
+        self.assertEqual(row_cleared['photo'], "")
+
+        # Clean up
+        conn.execute("DELETE FROM hr_employees WHERE emp_no='TEST-UPL-01'")
+        conn.commit()
+        conn.close()
+
 if __name__ == '__main__':
     unittest.main()
+
+

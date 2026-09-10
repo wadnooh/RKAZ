@@ -474,6 +474,7 @@ MODULES = {
         "table": "hr_employees",
         "section": "hr",
         "fields": [
+            ("photo", "الصورة الشخصية", "image"),
             ("emp_no", "الرقم الوظيفي", "text"),
             ("full_name", "الاسم", "text"),
             ("nationality", "الجنسية", "list:nationalities"),
@@ -500,6 +501,7 @@ MODULES = {
             ("notes", "ملاحظات", "textarea"),
         ],
         "list_cols": [
+            "photo",
             "emp_no",
             "full_name",
             "job_title",

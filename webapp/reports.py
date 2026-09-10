@@ -1226,9 +1226,49 @@ def generate_employee_dossier_pdf(dossier: dict) -> io.BytesIO:
         [_p("تاريخ الالتحاق", styles["head"]), _p(emp.get("join_date") or "—", styles["body"]), _p("رقم الجوال", styles["head"]), _p(emp.get("phone") or "—", styles["body"])],
         [_p("مسؤول الطوارئ", styles["head"]), _p(emp.get("emergency_contact_name") or "—", styles["body"]), _p("هاتف الطوارئ", styles["head"]), _p(emp.get("emergency_contact_phone") or "—", styles["body"])],
     ]
-    t_info = Table(info_data, colWidths=[38 * mm, 55 * mm, 38 * mm, 55 * mm], hAlign="CENTER")
-    t_info.setStyle(_luxury_table_style())
-    story.append(t_info)
+
+    photo_img = None
+    if emp.get("photo"):
+        try:
+            from webapp import media as media_mod
+            from reportlab.platypus import Image as RLImage
+            prefs = media_mod.attachment_refs(emp.get("photo"))
+            if prefs:
+                pref = prefs[0].split("?")[0]
+                if pref.startswith("/media/"):
+                    parts = pref[len("/media/"):].split("/", 1)
+                    if len(parts) == 2:
+                        p_stream, p_mime, _ = media_mod.load_media(parts[0], parts[1])
+                        if p_mime.startswith("image/"):
+                            photo_img = RLImage(p_stream, width=32 * mm, height=38 * mm)
+        except Exception:
+            photo_img = None
+
+    if photo_img:
+        t_info = Table(info_data, colWidths=[28 * mm, 46 * mm, 28 * mm, 46 * mm], hAlign="RIGHT")
+        t_info.setStyle(_luxury_table_style())
+        photo_box = Table([[photo_img], [_p("الصورة الشخصية", styles["meta"])]], colWidths=[36 * mm], hAlign="CENTER")
+        photo_box.setStyle(TableStyle([
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#CBD5E1")),
+            ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#F8FAFC")),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+            ("TOPPADDING", (0, 0), (-1, -1), 4),
+        ]))
+        t_container = Table([[t_info, photo_box]], colWidths=[148 * mm, 38 * mm], hAlign="CENTER")
+        t_container.setStyle(TableStyle([
+            ("VALIGN", (0, 0), (-1, -1), "TOP"),
+            ("LEFTPADDING", (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+            ("TOPPADDING", (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ]))
+        story.append(t_container)
+    else:
+        t_info = Table(info_data, colWidths=[38 * mm, 55 * mm, 38 * mm, 55 * mm], hAlign="CENTER")
+        t_info.setStyle(_luxury_table_style())
+        story.append(t_info)
     story.append(Spacer(1, 10))
 
     # 2. الوثائق الرسمية
@@ -1292,4 +1332,235 @@ def generate_employee_dossier_pdf(dossier: dict) -> io.BytesIO:
     buf = io.BytesIO(raw_pdf)
     buf.seek(0)
     return buf
+
+
+def generate_hr_comprehensive_excel(report_data: dict) -> io.BytesIO:
+    """تصدير كشف شامل لبيانات الموظفين والوثائق والرواتب مع كامل التنسيق الاحترافي لركاز."""
+    from openpyxl import Workbook
+    from webapp import excel_brand as brand
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "كشف الموظفين الشامل"
+
+    headers = [
+        "الرقم الوظيفي",
+        "الاسم الكامل",
+        "الإدارة",
+        "القسم",
+        "المسمى الوظيفي",
+        "المهنة في الإقامة",
+        "الجنسية",
+        "الحالة",
+        "رقم الجوال",
+        "رقم الهوية / الإقامة",
+        "تاريخ انتهاء الإقامة",
+        "حالة الإقامة",
+        "رقم رخصة القيادة",
+        "تاريخ انتهاء الرخصة",
+        "حالة الرخصة",
+        "تاريخ انتهاء التأمين",
+        "حالة التأمين",
+        "تاريخ نهاية العقد",
+        "تاريخ الالتحاق",
+        "الراتب الأساسي",
+        "بدل السكن",
+        "بدلات أخرى",
+        "إجمالي الراتب",
+        "اسم البنك",
+        "رقم الآيبان",
+        "مسؤول الطوارئ",
+        "هاتف الطوارئ",
+        "ملاحظات",
+    ]
+    ncol = len(headers)
+
+    filters = report_data.get("filters") or {}
+    stats = report_data.get("stats") or {}
+    rows = report_data.get("rows") or []
+
+    meta_lines = []
+    if filters.get("q"):
+        meta_lines.append(f"بحث: {filters['q']}")
+    if filters.get("administration"):
+        meta_lines.append(f"الإدارة: {filters['administration']}")
+    if filters.get("department"):
+        meta_lines.append(f"القسم: {filters['department']}")
+    if filters.get("status"):
+        meta_lines.append(f"الحالة: {filters['status']}")
+    if filters.get("nationality"):
+        meta_lines.append(f"الجنسية: {filters['nationality']}")
+    if filters.get("doc_expiry"):
+        doc_labels = {"expired": "منتهية", "critical": "حرجة (≤30 يوم)", "warning": "قريبة (≤60 يوم)", "valid": "سارية"}
+        meta_lines.append(f"سريان الوثائق: {doc_labels.get(filters['doc_expiry'], filters['doc_expiry'])}")
+
+    summary_lines = [
+        f"عدد السجلات: {stats.get('total_count', len(rows))}",
+        f"على رأس العمل: {stats.get('active_count', 0)}  ·  إجازة: {stats.get('leave_count', 0)}  ·  منتهي: {stats.get('terminated_count', 0)}",
+        f"إجمالي مسير الرواتب: {stats.get('total_payroll', 0):,.2f} ر.س",
+        f"وثائق منتهية: {stats.get('expired_docs_count', 0)}  ·  وثائق حرجة: {stats.get('critical_docs_count', 0)}",
+    ]
+
+    header_row = brand.apply_brand_header(
+        ws,
+        title="التقرير الشامل للموارد البشرية والعمالة",
+        ncol=ncol,
+        meta_lines=meta_lines or ["كافة الإدارات والأقسام"],
+        summary_lines=summary_lines,
+    )
+    brand.write_header_row(ws, headers, header_row)
+
+    start = header_row + 1
+    for offset, r in enumerate(rows):
+        row_idx = start + offset
+        iqama = r.get("iqama_info") or {}
+        lic = r.get("license_info") or {}
+        ins = r.get("insurance_info") or {}
+        vals = [
+            r.get("emp_no") or "",
+            r.get("full_name") or "",
+            r.get("administration") or "",
+            r.get("department") or "",
+            r.get("job_title") or "",
+            r.get("profession") or "",
+            r.get("nationality") or "",
+            r.get("status") or "",
+            r.get("phone") or "",
+            r.get("id_number") or "",
+            r.get("id_expiry_date") or "",
+            iqama.get("label") or "",
+            r.get("driving_license_no") or "",
+            r.get("license_expiry_date") or "",
+            lic.get("label") or "",
+            r.get("insurance_expiry_date") or "",
+            ins.get("label") or "",
+            r.get("contract_end_date") or "",
+            r.get("join_date") or "",
+            r.get("basic_salary_num") or 0.0,
+            r.get("housing_allowance_num") or 0.0,
+            r.get("other_allowances_num") or 0.0,
+            r.get("total_salary_num") or 0.0,
+            r.get("bank_name") or "",
+            r.get("iban") or "",
+            r.get("emergency_contact_name") or "",
+            r.get("emergency_contact_phone") or "",
+            r.get("notes") or "",
+        ]
+        for col_idx, val in enumerate(vals, start=1):
+            cell = ws.cell(row=row_idx, column=col_idx, value=val)
+            if col_idx in (20, 21, 22, 23) and isinstance(val, (int, float)):
+                cell.number_format = "#,##0.00"
+
+    end = start + len(rows) - 1 if rows else header_row
+    if rows:
+        brand.style_data_rows(ws, start_row=start, end_row=end, ncol=ncol)
+
+    data = brand.save_workbook_bytes(wb)
+    buf = io.BytesIO(data)
+    buf.seek(0)
+    return buf
+
+
+def generate_hr_comprehensive_pdf(report_data: dict) -> io.BytesIO:
+    """توليد تقرير شامل رسمي أفقي (Landscape A4) يوضح جميع بيانات الموظفين وإحصائياتهم."""
+    font_name = _font_name()
+    styles = _styles(font_name)
+    report_width = 277  # Landscape A4 printable width in mm
+
+    filters = report_data.get("filters") or {}
+    stats = report_data.get("stats") or {}
+    rows = report_data.get("rows") or []
+
+    subtitle = "التقرير الشامل للموارد البشرية والعمالة"
+
+    story = [
+        _p("المملكة العربية السعودية · شركة ركاز المتقدمة للمقاولات", styles["kicker"]),
+        _p("التقرير الشامل للموارد البشرية والعمالة", styles["title"]),
+        _p(f"تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M')}  ·  عدد الموظفين: {stats.get('total_count', len(rows))}", styles["meta"]),
+        Spacer(1, 8),
+    ]
+
+    # بطاقات الإحصائيات (KPIs)
+    story.extend(_section_band(styles, "المؤشرات الإحصائية والمالية لمسير الموظفين", width_mm=report_width))
+    kpi_data = [
+        [
+            _p("إجمالي الموظفين", styles["head"]),
+            _p("على رأس العمل", styles["head"]),
+            _p("في إجازة", styles["head"]),
+            _p("منتهي الخدمة", styles["head"]),
+            _p("إجمالي مسير الرواتب", styles["head"]),
+            _p("وثائق منتهية / حرجة", styles["head"]),
+        ],
+        [
+            _p(str(stats.get("total_count", len(rows))), styles["cardValue"]),
+            _p(str(stats.get("active_count", 0)), styles["cardValue"]),
+            _p(str(stats.get("leave_count", 0)), styles["cardValue"]),
+            _p(str(stats.get("terminated_count", 0)), styles["cardValue"]),
+            _p(money(stats.get("total_payroll", 0)), styles["cardValue"]),
+            _p(f"{stats.get('expired_docs_count', 0)} منتهية / {stats.get('critical_docs_count', 0)} حرجة", styles["cardValue"]),
+        ],
+    ]
+    t_kpi = Table(kpi_data, colWidths=[40 * mm, 40 * mm, 40 * mm, 40 * mm, 60 * mm, 57 * mm], hAlign="CENTER")
+    t_kpi.setStyle(_luxury_table_style())
+    story.append(t_kpi)
+    story.append(Spacer(1, 10))
+
+    # جدول بيانات الموظفين الشامل
+    story.extend(_section_band(styles, f"بيانات الموظفين وسريان الوثائق ({len(rows)} سجل)", width_mm=report_width))
+    table_headers = [
+        _p("الرقم", styles["head"]),
+        _p("الاسم الكامل", styles["head"]),
+        _p("الإدارة / القسم", styles["head"]),
+        _p("المسمى الوظيفي", styles["head"]),
+        _p("الجنسية", styles["head"]),
+        _p("الحالة", styles["head"]),
+        _p("الهوية وانتهاؤها", styles["head"]),
+        _p("الجوال", styles["head"]),
+        _p("إجمالي الراتب", styles["head"]),
+        _p("سريان الوثائق", styles["head"]),
+    ]
+    t_data = [table_headers]
+
+    for r in rows:
+        iqama = r.get("iqama_info") or {}
+        
+        doc_alerts = []
+        if r.get("has_expired"):
+            doc_alerts.append("منتهية!")
+        elif r.get("has_critical"):
+            doc_alerts.append("حرجة (≤30)")
+        elif iqama.get("status") == "warning":
+            doc_alerts.append("قريبة (≤60)")
+        else:
+            doc_alerts.append("سارية")
+
+        adm_dept = f"{r.get('administration') or '—'} / {r.get('department') or '—'}"
+        id_info = f"{r.get('id_number') or '—'} ({iqama.get('date') or '—'})"
+
+        t_data.append([
+            _p(str(r.get("emp_no") or "—"), styles["cell"]),
+            _p(str(r.get("full_name") or "—"), styles["cell"]),
+            _p(adm_dept, styles["cell"]),
+            _p(str(r.get("job_title") or r.get("profession") or "—"), styles["cell"]),
+            _p(str(r.get("nationality") or "—"), styles["cell"]),
+            _p(str(r.get("status") or "على رأس العمل"), styles["cell"]),
+            _p(id_info, styles["cell"]),
+            _p(str(r.get("phone") or "—"), styles["cell"]),
+            _p(money(r.get("total_salary_num", 0)), styles["cell"]),
+            _p(", ".join(doc_alerts), styles["cell"]),
+        ])
+
+    col_widths = [18 * mm, 40 * mm, 38 * mm, 30 * mm, 20 * mm, 20 * mm, 36 * mm, 24 * mm, 26 * mm, 25 * mm]
+    t_main = Table(t_data, colWidths=col_widths, hAlign="CENTER", repeatRows=1)
+    t_main.setStyle(_luxury_table_style())
+    story.append(t_main)
+    story.append(Spacer(1, 10))
+
+    story.extend(_archive_block(styles, width_mm=report_width))
+
+    raw_pdf = _build_pdf(story, pagesize=landscape(A4), subtitle=subtitle)
+    buf = io.BytesIO(raw_pdf)
+    buf.seek(0)
+    return buf
+
 

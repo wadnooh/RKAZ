@@ -438,3 +438,32 @@ def apply_attachment_uploads(
         if uploaded and (uploaded.filename or "").strip():
             existing.append(save_attachment(uploaded, scope=scope, record_ref=record_ref))
     form_data[field] = encode_attachment_refs(existing)
+
+
+def save_employee_photo(file: FileStorage, emp_no: str | None = None) -> str:
+    """حفظ الصورة الشخصية للموظف وإرجاع مسار الميديا."""
+    data = validate_image(file)
+    kind = _kind_from_bytes(data)
+    ext = _ext_for(file, kind=kind)
+    if ext == ".pdf":
+        raise ValueError("صورة الموظف يجب أن تكون ملف صورة (jpg / png / webp)")
+    photo_rel = f"employees/{_safe_ticket(emp_no)}/photo_{uuid.uuid4().hex}{ext}"
+    rel = f"photos/{photo_rel}"
+    content_type = _CONTENT_TYPES.get(ext, "image/jpeg")
+    return _save_media(data, rel, content_type, Path(photo_rel).name)
+
+
+def apply_employee_photo_upload(form_data: dict, files, emp_no: str | None = None, clear: bool = False) -> None:
+    """معالجة رفع أو حذف الصورة الشخصية للموظف في بيانات النموذج."""
+    if clear:
+        form_data["photo"] = ""
+        return
+    uploaded_files = []
+    if files is not None:
+        uploaded_files = files.getlist("file_photo") or files.getlist("photo")
+    for uploaded in uploaded_files:
+        if uploaded and (uploaded.filename or "").strip():
+            ref = save_employee_photo(uploaded, emp_no=emp_no or form_data.get("emp_no"))
+            form_data["photo"] = encode_attachment_refs([ref])
+            break
+
