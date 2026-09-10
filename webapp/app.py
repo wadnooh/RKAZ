@@ -3970,6 +3970,60 @@ def hr_comprehensive_report_pdf():
     )
 
 
+@app.route("/hr/template.xlsx")
+@login_required
+def hr_template_excel():
+    if not (permissions.can("section.hr") or permissions.can("tab.hr") or permissions.can("tab.module.hr_employees")):
+        flash(_t("ليس لديك صلاحية لتحميل هذا النموذج."), "danger")
+        return redirect(url_for("hr_home"))
+    from webapp import hr_excel
+    data = hr_excel.build_hr_template()
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name="نموذج_بيانات_الموظفين.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+@app.route("/hr/import", methods=["POST"])
+@login_required
+def hr_import_excel():
+    if not (permissions.can("button.module.hr_employees.import") or permissions.can("section.hr") or permissions.can("tab.hr")):
+        flash(_t("ليس لديك صلاحية لاستيراد بيانات الموظفين."), "danger")
+        return redirect(url_for("hr_home"))
+    f = request.files.get("file") or request.files.get("excel_file")
+    if not f or not (f.filename or "").strip():
+        flash(_t("يرجى اختيار ملف Excel بصيغة xlsx أو xls."), "danger")
+        return redirect(request.referrer or url_for("hr_comprehensive_report"))
+    try:
+        from webapp import hr_excel
+        result = hr_excel.import_employees_from_excel(f)
+        if result["ok"] or result["updated"]:
+            flash(
+                _t(
+                    "تم جلب ومعالجة بيانات الموظفين بنجاح: جديد {ok} | محدّث {updated}",
+                    ok=result["ok"],
+                    updated=result["updated"],
+                ),
+                "ok",
+            )
+            helpers.after_data_change()
+            db.log_audit(
+                current_user_name(),
+                "استيراد Excel",
+                "الموظفون",
+                details=f"جديد: {result['ok']}، محدث: {result['updated']}",
+            )
+        else:
+            flash(_t("لم يتم العثور على سجلات جديدة أو محدثة في الملف."), "warning")
+        if result.get("errors"):
+            flash(" / ".join(result["errors"][:5]), "danger")
+    except Exception as exc:
+        flash(_t("حدث خطأ أثناء قراءة ملف Excel: {exc}", exc=exc), "danger")
+    return redirect(request.referrer or url_for("hr_comprehensive_report"))
+
+
 @app.route("/contracts-admin")
 @login_required
 def contracts_admin_home():

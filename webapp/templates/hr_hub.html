@@ -23,6 +23,9 @@
       {% if can('button.module.hr_employees.export') or can('export') %}
       <a class="btn ghost" href="{{ url_for('module_export_excel', name='hr_employees') }}">📥 {{ _('تصدير كشف الموظفين (Excel)') }}</a>
       {% endif %}
+      {% if can('button.module.hr_employees.import') or can('section.hr') %}
+      <button class="btn ghost" type="button" onclick="document.getElementById('hr-import-modal').style.display='flex';">📤 {{ _('جلب بيانات بملف Excel') }}</button>
+      {% endif %}
     </div>
   </div>
 
@@ -70,12 +73,12 @@
   </div>
 </div>
 
-<!-- رادار الوثائق والتنبيهات (Document Expiry Radar) -->
+<!-- التنبيهات (Document Expiry Alerts) -->
 <div class="card" id="radar-section" style="margin-bottom:14px;">
   <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
     <div>
       <h3 class="section-title" style="margin:0;font-size:1.15rem;">
-        🛡️ {{ _('رادار الوثائق والتنبيهات الاستباقية') }}
+        🔔 {{ _('التنبيهات') }}
         {% if expiring_docs %}
         <span class="badge danger" style="margin-right:8px;font-size:0.85rem;">{{ expiring_docs|length }} {{ _('وثيقة مستحقة') }}</span>
         {% endif %}
@@ -198,4 +201,6 @@
     </div>
   </div>
 </div>
+
+{% include "_hr_import_modal.html" %}
 {% endblock %}

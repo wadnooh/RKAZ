@@ -16,7 +16,7 @@
     <a class="btn ghost{% if active=='teams' or p.startswith('/teams') or p.startswith('/hr/teams') %} primary{% endif %}" href="{{ url_for('teams_page') }}">⚡ {{ _('فرق المهام الحرجة') }}</a>
     {% endif %}
     {% if can('section.hr') or can('tab.hr') %}
-    <a class="btn ghost{% if active=='hr_radar' or request.args.get('tab')=='radar' %} primary{% endif %}" href="{{ url_for('hr_home', tab='radar') }}">🛡️ {{ _('رادار الوثائق والتنبيهات') }}</a>
+    <a class="btn ghost{% if active=='hr_radar' or request.args.get('tab')=='radar' %} primary{% endif %}" href="{{ url_for('hr_home', tab='radar') }}">🔔 {{ _('التنبيهات') }}</a>
     {% endif %}
     {% if can('hr.report.view') or can('section.hr') or can('tab.hr') %}
     <a class="btn ghost{% if active=='hr_report' or p.startswith('/hr/report') %} primary{% endif %}" href="{{ url_for('hr_comprehensive_report') }}">📑 {{ _('التقرير الشامل للموظفين') }}</a>

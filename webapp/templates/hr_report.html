@@ -32,6 +32,9 @@
       </a>
       {% endif %}
       <button class="btn ghost" onclick="window.print();">🖨️ {{ _('طباعة المتصفح') }}</button>
+      {% if can('button.module.hr_employees.import') or can('section.hr') %}
+      <button class="btn ghost" type="button" onclick="document.getElementById('hr-import-modal').style.display='flex';">📤 {{ _('جلب بيانات بملف Excel') }}</button>
+      {% endif %}
       <a class="btn ghost" href="{{ url_for('hr_home') }}">↩️ {{ _('لوحة الموارد البشرية') }}</a>
     </div>
   </div>
@@ -289,5 +292,7 @@
     </table>
   </div>
 </div>
+
+{% include "_hr_import_modal.html" %}
 
 {% endblock %}

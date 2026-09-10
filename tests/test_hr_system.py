@@ -93,7 +93,7 @@ class HRSystemTestCase(unittest.TestCase):
         resp = self.client.get('/hr')
         self.assertEqual(resp.status_code, 200)
         self.assertIn('لوحة الموارد البشرية'.encode('utf-8'), resp.data)
-        self.assertIn('رادار الوثائق والتنبيهات'.encode('utf-8'), resp.data)
+        self.assertIn('التنبيهات'.encode('utf-8'), resp.data)
 
         # Get employee ID
         conn = db.connect()
@@ -271,6 +271,105 @@ class HRSystemTestCase(unittest.TestCase):
 
         # Clean up
         conn.execute("DELETE FROM hr_employees WHERE emp_no='TEST-UPL-01'")
+        conn.commit()
+        conn.close()
+
+    def test_08_hr_excel_template_and_import(self):
+        # 1. Test downloading official HR Excel template
+        resp_tpl = self.client.get('/hr/template.xlsx')
+        self.assertEqual(resp_tpl.status_code, 200)
+        self.assertEqual(resp_tpl.data[:4], b"PK\x03\x04")
+        self.assertIn("attachment", resp_tpl.headers.get("Content-Disposition", ""))
+
+        # 2. Cleanup any previous test data
+        conn = db.connect()
+        conn.execute("DELETE FROM hr_employees WHERE emp_no IN ('TEST-IMP-01', 'TEST-IMP-02')")
+        conn.commit()
+        conn.close()
+
+        # 3. Create a test Excel workbook
+        import openpyxl
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "دليل_الموظفين"
+
+        headers = [
+            "الرقم الوظيفي", "اسم الموظف الكامل", "الهوية الوطنية / الإقامة", "الجنسية",
+            "الجنس", "المسمى الوظيفي", "الإدارة", "القسم", "الحالة الوظيفية",
+            "نوع العقد", "رقم الجوال", "البريد الإلكتروني", "تاريخ الالتحاق",
+            "تاريخ انتهاء العقد", "تاريخ انتهاء الهوية/الإقامة", "الراتب الأساسي",
+            "بدل السكن", "بدل النقل", "بدلات أخرى", "اسم البنك", "رقم الآيبان (IBAN)",
+            "فصيلة الدم", "جهة الاتصال في الطوارئ", "ملاحظات"
+        ]
+        ws.append(headers)
+
+        row1 = [
+            "TEST-IMP-01", "عبدالله خالد المنصور", "1088888888", "سعودي",
+            "ذكر", "مهندس موقع", "مشاريع", "التنفيذ", "على رأس العمل",
+            "دوام كامل", "0511111111", "test1@example.com", "2023-01-15",
+            "2026-01-15", "2026-12-31", 9000,
+            2250, 500, 0, "مصرف الراجحي", "SA1280000000000000000001",
+            "O+", "0522222222", "استيراد تجريبي أول"
+        ]
+        row2 = [
+            "TEST-IMP-02", "فهد ناصر الشمري", "1099999999", "سعودي",
+            "ذكر", "منسق إداري", "الموارد البشرية", "الشؤون الإدارية", "على رأس العمل",
+            "دوام كامل", "0533333333", "test2@example.com", "2022-06-01",
+            "2025-06-01", "2025-11-30", 6000,
+            1500, 500, 200, "البنك الأهلي", "SA1280000000000000000002",
+            "A+", "0544444444", "استيراد تجريبي ثان"
+        ]
+        ws.append(row1)
+        ws.append(row2)
+
+        file_buf = io.BytesIO()
+        wb.save(file_buf)
+        file_buf.seek(0)
+
+        # 4. Upload and import Excel file
+        resp_import = self.client.post('/hr/import', data={
+            'file': (file_buf, 'employees_import.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        }, content_type='multipart/form-data', follow_redirects=True)
+        self.assertEqual(resp_import.status_code, 200)
+
+        # 5. Check database insertions
+        conn = db.connect()
+        emp1 = conn.execute("SELECT * FROM hr_employees WHERE emp_no='TEST-IMP-01'").fetchone()
+        emp2 = conn.execute("SELECT * FROM hr_employees WHERE emp_no='TEST-IMP-02'").fetchone()
+
+        self.assertIsNotNone(emp1, "TEST-IMP-01 should be inserted")
+        self.assertEqual(emp1['full_name'], "عبدالله خالد المنصور")
+        self.assertEqual(emp1['administration'], "إدارة المشاريع")  # Canonicalized from 'مشاريع'
+        self.assertEqual(emp1['department'], "التنفيذ")
+        self.assertEqual(float(emp1['basic_salary']), 9000.0)
+
+        self.assertIsNotNone(emp2, "TEST-IMP-02 should be inserted")
+        self.assertEqual(emp2['full_name'], "فهد ناصر الشمري")
+        self.assertEqual(emp2['administration'], "الموارد البشرية")
+        self.assertEqual(float(emp2['basic_salary']), 6000.0)
+
+        # 6. Test UPSERT: update TEST-IMP-01 with updated salary in a second file
+        wb_update = openpyxl.Workbook()
+        ws_up = wb_update.active
+        ws_up.append(headers)
+        row1_updated = list(row1)
+        row1_updated[15] = 10500  # Updated basic salary
+        ws_up.append(row1_updated)
+
+        update_buf = io.BytesIO()
+        wb_update.save(update_buf)
+        update_buf.seek(0)
+
+        resp_update = self.client.post('/hr/import', data={
+            'file': (update_buf, 'employees_update.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+        }, content_type='multipart/form-data', follow_redirects=True)
+        self.assertEqual(resp_update.status_code, 200)
+
+        emp1_updated = conn.execute("SELECT basic_salary FROM hr_employees WHERE emp_no='TEST-IMP-01'").fetchone()
+        self.assertEqual(float(emp1_updated['basic_salary']), 10500.0)
+
+        # 7. Cleanup
+        conn.execute("DELETE FROM hr_employees WHERE emp_no IN ('TEST-IMP-01', 'TEST-IMP-02')")
         conn.commit()
         conn.close()
 

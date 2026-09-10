@@ -1502,6 +1502,8 @@ def required_perm_for_request() -> str | None:
         "hr_comprehensive_report": "section.hr",
         "hr_comprehensive_report_excel": "section.hr",
         "hr_comprehensive_report_pdf": "section.hr",
+        "hr_template_excel": "section.hr",
+        "hr_import_excel": "section.hr",
         "contracts_admin_home": "section.contracts",
         "contracts_whatsapp": "section.contracts",
         "contracts_whatsapp_save": "section.contracts",
