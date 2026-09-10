@@ -1,0 +1,259 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'hr_employees' %}
+{% include "_hr_subnav.html" %}
+
+{% set emp = dossier.employee %}
+<div class="card" style="margin-bottom:14px;">
+  <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+    <div style="display:flex;align-items:center;gap:14px;">
+      <div style="width:54px;height:54px;border-radius:50%;background:rgba(59,130,246,0.15);color:var(--accent,#3b82f6);display:flex;align-items:center;justify-content:center;font-size:1.8rem;">
+        👤
+      </div>
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <h2 class="section-title" style="margin:0;">{{ emp.full_name }}</h2>
+          <span class="badge {% if emp.status == 'على رأس العمل' %}ok{% elif emp.status == 'إجازة' %}warning{% else %}danger{% endif %}" style="font-size:0.85rem;">
+            {{ emp.status or _('غير محدد') }}
+          </span>
+        </div>
+        <div class="meta" style="margin-top:4px;">
+          {{ emp.job_title or _('بدون مسمى') }} · {{ emp.department or _('بدون قسم') }} · {{ _('الرقم الوظيفي:') }} <strong>{{ emp.emp_no or '—' }}</strong>
+        </div>
+      </div>
+    </div>
+
+    <div class="actions" style="flex-wrap:wrap;gap:8px;">
+      {% if can('hr.employee.print') or can('section.hr') %}
+      <a class="btn primary" href="{{ url_for('hr_employee_pdf', emp_id=emp.id) }}" target="_blank">🖨️ {{ _('طباعة بطاقة الموظف (PDF)') }}</a>
+      {% endif %}
+      {% if can('button.module.hr_employees.edit') or can('modules.write') %}
+      <a class="btn ghost" href="{{ url_for('module_edit', name='hr_employees', row_id=emp.id) }}">✏️ {{ _('تعديل البيانات') }}</a>
+      {% endif %}
+      {% if can('button.module.hr_leaves.add') or can('section.hr') %}
+      <a class="btn ghost" href="{{ url_for('module_new', name='hr_leaves') }}?employee_name={{ emp.full_name }}">🏖️ {{ _('طلب إجازة') }}</a>
+      {% endif %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='hr_employees') }}">↩️ {{ _('رجوع لقائمة الموظفين') }}</a>
+    </div>
+  </div>
+</div>
+
+<!-- شبكة تفاصيل ملف الموظف -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;margin-bottom:14px;">
+  
+  <!-- 1. البيانات الشخصية والمهنية -->
+  <div class="card">
+    <h3 class="section-title" style="margin:0 0 12px 0;font-size:1.05rem;">📋 {{ _('البيانات الشخصية والمهنية') }}</h3>
+    <table class="table" style="min-width:0;">
+      <tbody>
+        <tr><td style="width:40%;color:var(--meta,#64748b);">{{ _('الرقم الوظيفي') }}</td><td><strong>{{ emp.emp_no or '—' }}</strong></td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('الاسم الكامل') }}</td><td><strong>{{ emp.full_name }}</strong></td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('الجنسية') }}</td><td>{{ emp.nationality or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('المهنة في الإقامة') }}</td><td>{{ emp.profession or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('المسمى الوظيفي') }}</td><td>{{ emp.job_title or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('القسم / الإدارة') }}</td><td>{{ emp.department or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('تاريخ الالتحاق') }}</td><td dir="ltr" style="text-align:right;">{{ emp.join_date or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('رقم الجوال') }}</td><td dir="ltr" style="text-align:right;">{% if emp.phone %}<a href="tel:{{ emp.phone }}" style="color:inherit;">📞 {{ emp.phone }}</a>{% else %}—{% endif %}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 2. الوثائق الرسمية وتواريخ السريان -->
+  <div class="card">
+    <h3 class="section-title" style="margin:0 0 12px 0;font-size:1.05rem;">🛡️ {{ _('الوثائق الرسمية والانتهاء') }}</h3>
+    <table class="table" style="min-width:0;">
+      <tbody>
+        <tr>
+          <td style="width:40%;color:var(--meta,#64748b);">{{ _('رقم الهوية / الإقامة') }}</td>
+          <td><strong dir="ltr">{{ emp.id_number or '—' }}</strong></td>
+        </tr>
+        <tr>
+          <td style="color:var(--meta,#64748b);">{{ _('انتهاء الإقامة / الهوية') }}</td>
+          <td>
+            {% if emp.id_expiry_date %}
+            <span dir="ltr"><strong>{{ emp.id_expiry_date }}</strong></span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--meta,#64748b);">{{ _('رقم رخصة القيادة') }}</td>
+          <td><span dir="ltr">{{ emp.driving_license_no or '—' }}</span></td>
+        </tr>
+        <tr>
+          <td style="color:var(--meta,#64748b);">{{ _('انتهاء رخصة القيادة') }}</td>
+          <td>
+            {% if emp.license_expiry_date %}
+            <span dir="ltr"><strong>{{ emp.license_expiry_date }}</strong></span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--meta,#64748b);">{{ _('انتهاء التأمين الطبي') }}</td>
+          <td>
+            {% if emp.insurance_expiry_date %}
+            <span dir="ltr"><strong>{{ emp.insurance_expiry_date }}</strong></span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--meta,#64748b);">{{ _('تاريخ نهاية العقد') }}</td>
+          <td>
+            {% if emp.contract_end_date %}
+            <span dir="ltr"><strong>{{ emp.contract_end_date }}</strong></span>
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 3. البيانات المالية وحماية الأجور -->
+  <div class="card">
+    <h3 class="section-title" style="margin:0 0 12px 0;font-size:1.05rem;">💰 {{ _('البيانات المالية والبنكية (WPS)') }}</h3>
+    <table class="table" style="min-width:0;">
+      <tbody>
+        <tr><td style="width:40%;color:var(--meta,#64748b);">{{ _('الراتب الأساسي') }}</td><td><strong>{{ emp.basic_salary|money if emp.basic_salary else '0.00 ر.س' }}</strong></td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('بدل السكن') }}</td><td>{{ emp.housing_allowance|money if emp.housing_allowance else '0.00 ر.س' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('بدلات أخرى (نقل/إعاشة)') }}</td><td>{{ emp.other_allowances|money if emp.other_allowances else '0.00 ر.س' }}</td></tr>
+        <tr style="background:rgba(16,185,129,0.05);"><td style="color:var(--text,#1e293b);font-weight:700;">{{ _('إجمالي الراتب الشهري') }}</td><td><strong style="color:#10b981;font-size:1.05rem;">{{ dossier.total_salary|money }}</strong></td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('اسم البنك') }}</td><td>{{ emp.bank_name or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('رقم الآيبان (IBAN)') }}</td><td dir="ltr" style="text-align:right;font-family:monospace;font-size:0.85rem;">{{ emp.iban or '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- 4. الطوارئ والفرقة والسيارة -->
+  <div class="card">
+    <h3 class="section-title" style="margin:0 0 12px 0;font-size:1.05rem;">📍 {{ _('الموقع والفرقة وحالات الطوارئ') }}</h3>
+    <table class="table" style="min-width:0;">
+      <tbody>
+        <tr>
+          <td style="width:40%;color:var(--meta,#64748b);">{{ _('الفرقة الميدانية') }}</td>
+          <td>
+            {% if dossier.team %}
+            <span class="badge ok">⚡ {{ dossier.team.name }}</span> ({{ dossier.team.area or 'خريص' }})
+            {% else %}
+            <span class="meta">{{ _('غير مسند لفرقة محددة') }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr>
+          <td style="color:var(--meta,#64748b);">{{ _('السيارة المخصصة') }}</td>
+          <td>
+            {% if dossier.car %}
+            🚗 <strong>{{ dossier.car.plate_no }}</strong> ({{ dossier.car.car_type }})
+            {% else %}
+            <span class="meta">{{ _('لا توجد سيارة مسجلة') }}</span>
+            {% endif %}
+          </td>
+        </tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('مسؤول الطوارئ') }}</td><td>{{ emp.emergency_contact_name or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('هاتف الطوارئ') }}</td><td dir="ltr" style="text-align:right;">{% if emp.emergency_contact_phone %}<a href="tel:{{ emp.emergency_contact_phone }}" style="color:inherit;">📞 {{ emp.emergency_contact_phone }}</a>{% else %}—{% endif %}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('ملاحظات إضافية') }}</td><td>{{ emp.notes or '—' }}</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- سجل العهد المسلمة للموظف -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="margin:0;font-size:1.1rem;">📦 {{ _('العهد الميدانية المسلمة للموظف') }}</h3>
+      <div class="meta">{{ _('المواد والأجهزة والمعدات المسجلة كعهدة شخصية طرف الموظف من المستودع.') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('module_list', name='custody') }}">{{ _('سجل العهد العام') }}</a>
+    </div>
+  </div>
+
+  {% if dossier.custodies %}
+  <div class="table-wrap" style="margin-top:10px;">
+    <table class="table" style="min-width:0;">
+      <thead>
+        <tr>
+          <th>{{ _('رقم العهدة') }}</th>
+          <th>{{ _('تاريخ التسليم') }}</th>
+          <th>{{ _('المادة / المعدة') }}</th>
+          <th>{{ _('الكمية والوحدة') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('سند الصرف') }}</th>
+          <th>{{ _('تاريخ الإرجاع') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in dossier.custodies %}
+        <tr>
+          <td dir="ltr"><strong>{{ c.custody_no or c.id }}</strong></td>
+          <td dir="ltr">{{ c.custody_date or '—' }}</td>
+          <td><strong>{{ c.item_name or '—' }}</strong></td>
+          <td>{{ c.qty }} {{ c.unit or '' }}</td>
+          <td>
+            <span class="badge {% if c.status == 'مسلمة' %}warning{% elif c.status == 'مرتجعة' %}ok{% else %}danger{% endif %}">
+              {{ c.status or '—' }}
+            </span>
+          </td>
+          <td dir="ltr">{{ c.issued_voucher_no or '—' }}</td>
+          <td dir="ltr">{{ c.return_date or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="meta" style="padding:10px 0;">{{ _('لا توجد أي عهد مسجلة طرف هذا الموظف حالياً.') }}</p>
+  {% endif %}
+</div>
+
+<!-- سجل الإجازات السابقة -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="margin:0;font-size:1.1rem;">🏖️ {{ _('سجل إجازات الموظف') }}</h3>
+      <div class="meta">{{ _('تاريخ الإجازات السنوية والمرضية والطارئة وتتبع مواعيد السفر والعودة.') }}</div>
+    </div>
+    <div class="actions">
+      {% if can('button.module.hr_leaves.add') or can('section.hr') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='hr_leaves') }}?employee_name={{ emp.full_name }}">➕ {{ _('تسجيل إجازة جديدة') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if dossier.leaves %}
+  <div class="table-wrap" style="margin-top:10px;">
+    <table class="table" style="min-width:0;">
+      <thead>
+        <tr>
+          <th>{{ _('نوع الإجازة') }}</th>
+          <th>{{ _('تاريخ البداية') }}</th>
+          <th>{{ _('تاريخ النهاية') }}</th>
+          <th>{{ _('المدة (أيام)') }}</th>
+          <th>{{ _('الموظف البديل') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('تاريخ العودة الفعلي') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for l in dossier.leaves %}
+        <tr>
+          <td><strong>{{ l.leave_type or '—' }}</strong></td>
+          <td dir="ltr">{{ l.start_date or '—' }}</td>
+          <td dir="ltr">{{ l.end_date or '—' }}</td>
+          <td>{{ l.days_count or '—' }}</td>
+          <td>{{ l.substitute_employee or '—' }}</td>
+          <td>
+            <span class="badge {% if l.status == 'جارية' %}warning{% elif l.status == 'منتهية' %}ok{% elif l.status == 'ملغاة' %}danger{% else %}info{% endif %}">
+              {{ l.status or '—' }}
+            </span>
+          </td>
+          <td dir="ltr">{{ l.actual_return_date or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="meta" style="padding:10px 0;">{{ _('لا يوجد سجل إجازات سابق لهذا الموظف.') }}</p>
+  {% endif %}
+</div>
+{% endblock %}

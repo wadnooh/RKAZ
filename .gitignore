@@ -15,3 +15,11 @@ tools/*.zip
 الجهاز_الرئيسي/backups_inbox/
 الجهاز_الرئيسي/حِفظات/
 الجهاز_الرئيسي/sync_log.txt
+*.apk
+android-apk/
+.deploy_keys/
+tmp/
+tools/android-sdk/
+*.worktrees/
+test_media.py
+

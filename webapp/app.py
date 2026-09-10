@@ -156,6 +156,8 @@ def _csrf_token() -> str:
 
 
 def _csrf_ok() -> bool:
+    if app.config.get("TESTING") and not app.config.get("WTF_CSRF_ENABLED", False):
+        return True
     if request.method not in UNSAFE_METHODS:
         return True
     endpoint = request.endpoint or ""
@@ -234,6 +236,23 @@ def _register_legacy_ticket_endpoints() -> None:
         if endpoint in app.view_functions or target not in app.view_functions:
             continue
         app.add_url_rule(rule, endpoint=endpoint, view_func=app.view_functions[target], methods=methods)
+
+
+if "tickets" not in app.blueprints:
+    try:
+        app.register_blueprint(tickets_bp)
+    except Exception:
+        pass
+if "api" not in app.blueprints:
+    try:
+        app.register_blueprint(api_bp)
+    except Exception:
+        pass
+try:
+    _register_legacy_ticket_endpoints()
+except Exception:
+    pass
+
 
 
 @app.before_request
@@ -3813,7 +3832,64 @@ def maintenance_home():
 @app.route("/hr")
 @login_required
 def hr_home():
-    return _redirect_section_first_child("hr")
+    if not (permissions.can("section.hr") or permissions.can("tab.hr")):
+        flash(_t("ليس لديك صلاحية للوصول إلى هذا القسم."), "danger")
+        return redirect(url_for("ops_home"))
+    db.ensure_schema()
+    stats = db.get_hr_dashboard_stats()
+    tab = (request.args.get("tab") or "").strip().lower()
+    days_threshold = 60 if tab != "expired_only" else 0
+    expiring_docs = db.list_expiring_documents(days_threshold=days_threshold)
+    return render_template(
+        "hr_hub.html",
+        title=_t("الموارد البشرية"),
+        subtitle=_t("لوحة المتابعة الشاملة لملفات الموظفين والوثائق الرسمية والفرق الميدانية."),
+        section="hr",
+        stats=stats,
+        expiring_docs=expiring_docs,
+        tab=tab,
+    )
+
+
+@app.route("/hr/employee/<int:emp_id>/dossier")
+@login_required
+def hr_employee_dossier(emp_id: int):
+    if not (permissions.can("section.hr") or permissions.can("tab.hr") or permissions.can("tab.module.hr_employees")):
+        flash(_t("ليس لديك صلاحية للوصول إلى هذا القسم."), "danger")
+        return redirect(url_for("ops_home"))
+    dossier = db.get_employee_dossier(emp_id)
+    if not dossier:
+        flash(_t("الموظف غير موجود."), "danger")
+        return redirect(url_for("module_list", name="hr_employees"))
+    return render_template(
+        "hr_employee_dossier.html",
+        title=f"{_t('ملف الموظف')} — {dossier['employee']['full_name']}",
+        dossier=dossier,
+        section="hr",
+    )
+
+
+@app.route("/hr/employee/<int:emp_id>/pdf")
+@login_required
+def hr_employee_pdf(emp_id: int):
+    if not (permissions.can("hr.employee.print") or permissions.can("section.hr") or permissions.can("tab.hr")):
+        flash(_t("ليس لديك صلاحية لطباعة ملف الموظف."), "danger")
+        return redirect(url_for("hr_employee_dossier", emp_id=emp_id))
+    dossier = db.get_employee_dossier(emp_id)
+    if not dossier:
+        flash(_t("الموظف غير موجود."), "danger")
+        return redirect(url_for("module_list", name="hr_employees"))
+    from webapp import reports
+    from flask import send_file
+    pdf_buf = reports.generate_employee_dossier_pdf(dossier)
+    emp_no = dossier["employee"].get("emp_no") or str(emp_id)
+    filename = f"Employee_{emp_no}.pdf"
+    return send_file(
+        pdf_buf,
+        mimetype="application/pdf",
+        as_attachment=False,
+        download_name=filename,
+    )
 
 
 @app.route("/contracts-admin")
@@ -5434,6 +5510,15 @@ def module_new(name):
                         "رصيد افتتاحي تأسيسي",
                     ),
                 )
+        if name == "hr_leaves":
+            emp_name = (data.get("employee_name") or "").strip()
+            st = (data.get("status") or "").strip()
+            ret_d = (data.get("actual_return_date") or "").strip()
+            if emp_name:
+                if ret_d or st == "منتهية":
+                    conn.execute("UPDATE hr_employees SET status='على رأس العمل' WHERE full_name=?", (emp_name,))
+                elif st in ("جارية", "معتمدة"):
+                    conn.execute("UPDATE hr_employees SET status='إجازة' WHERE full_name=?", (emp_name,))
         conn.commit()
         new_id = cur.lastrowid
         conn.close()
@@ -5720,6 +5805,15 @@ def module_edit(name, row_id):
         transfer_res = None
         if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
             transfer_res = db.transfer_new_coordination_to_license(row_id, conn=conn)
+        if name == "hr_leaves":
+            emp_name = (data.get("employee_name") or "").strip()
+            st = (data.get("status") or "").strip()
+            ret_d = (data.get("actual_return_date") or "").strip()
+            if emp_name:
+                if ret_d or st == "منتهية":
+                    conn.execute("UPDATE hr_employees SET status='على رأس العمل' WHERE full_name=?", (emp_name,))
+                elif st in ("جارية", "معتمدة"):
+                    conn.execute("UPDATE hr_employees SET status='إجازة' WHERE full_name=?", (emp_name,))
         conn.commit()
         conn.close()
         db.log_audit(current_user_name(), "تعديل", module["title"], row_id, str(data)[:240])
@@ -6194,6 +6288,7 @@ def teams_page():
             conn.execute("DELETE FROM teams WHERE id=?", (request.form.get("id"),))
             conn.commit()
             flash(_t("تم الحذف"), "ok")
+    active_employees = db.list_active_employees_for_select(conn)
     rows = db.rows_to_dicts(conn.execute("SELECT * FROM teams ORDER BY id").fetchall())
     conn.close()
     active_n = sum(1 for r in rows if (r.get("status") or "") == "نشطة")
@@ -6208,7 +6303,7 @@ def teams_page():
             _t("غير جاهزة حالياً"),
         ),
     ]
-    return render_template("teams.html", rows=rows, summary_cards=summary_cards)
+    return render_template("teams.html", rows=rows, summary_cards=summary_cards, employees=active_employees)
 
 
 @app.route("/admin/backups", defaults={"subpath": ""})

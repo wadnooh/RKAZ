@@ -1,0 +1,198 @@
+{% extends "base.html" %}
+{% block content %}
+{% set active = 'hr_hub' if tab != 'radar' else 'hr_radar' %}
+{% include "_hr_subnav.html" %}
+
+<!-- رأس الصفحة والمؤشرات العلوية -->
+<div class="card" style="margin-bottom:14px;">
+  <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 class="section-title">👥 {{ _('إدارة الموارد البشرية والعمالة') }}</h2>
+      <div class="meta">{{ _('لوحة المراقبة الشاملة لملفات الموظفين، متابعة سريان الإقامات والرخص والتأمين، وإدارة الفرق والإجازات.') }}</div>
+    </div>
+    <div class="actions" style="flex-wrap:wrap;gap:8px;">
+      {% if can('button.module.hr_employees.add') or can('section.hr') %}
+      <a class="btn primary" href="{{ url_for('module_new', name='hr_employees') }}">➕ {{ _('إضافة موظف جديد') }}</a>
+      {% endif %}
+      {% if can('button.module.hr_leaves.add') or can('section.hr') %}
+      <a class="btn ghost" href="{{ url_for('module_new', name='hr_leaves') }}">🏖️ {{ _('تسجيل إجازة') }}</a>
+      {% endif %}
+      {% if can('button.module.hr_employees.export') or can('export') %}
+      <a class="btn ghost" href="{{ url_for('module_export_excel', name='hr_employees') }}">📥 {{ _('تصدير كشف الموظفين (Excel)') }}</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- بطاقات الإحصائيات الحيوية -->
+  <div class="stats-grid" style="margin-top:14px;">
+    <div class="stat-card" style="border-right:4px solid var(--accent, #3b82f6);">
+      <div class="meta">{{ _('إجمالي الموظفين') }}</div>
+      <strong style="font-size:1.6rem;color:var(--text, #1e293b);">{{ stats.total_employees }}</strong>
+      <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('مسجلين بالنظام') }}</div>
+    </div>
+    <div class="stat-card" style="border-right:4px solid #10b981;">
+      <div class="meta">{{ _('على رأس العمل') }}</div>
+      <strong style="font-size:1.6rem;color:#10b981;">{{ stats.active_count }}</strong>
+      <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('مباشرين للمهام') }}</div>
+    </div>
+    <div class="stat-card" style="border-right:4px solid #f59e0b;">
+      <div class="meta">{{ _('في إجازة') }}</div>
+      <strong style="font-size:1.6rem;color:#f59e0b;">{{ stats.leave_count }}</strong>
+      <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ stats.leaves_active }} {{ _('إجازة نشطة') }}</div>
+    </div>
+    <div class="stat-card" style="border-right:4px solid #8b5cf6;">
+      <div class="meta">{{ _('فرق المهام النشطة') }}</div>
+      <strong style="font-size:1.6rem;color:#8b5cf6;">{{ stats.teams_active }}</strong>
+      <div class="meta" style="font-size:0.8rem;margin-top:4px;">{{ _('طوارئ وصيانة') }}</div>
+    </div>
+    <div class="stat-card" style="border-right:4px solid #ef4444;background:rgba(239, 68, 68, 0.05);">
+      <div class="meta" style="color:#ef4444;font-weight:600;">⚠️ {{ _('وثائق منتهية') }}</div>
+      <strong style="font-size:1.6rem;color:#ef4444;">{{ stats.total_expired }}</strong>
+      <div class="meta" style="font-size:0.8rem;margin-top:4px;color:#ef4444;">{{ _('تتطلب تجديداً فورياً') }}</div>
+    </div>
+    <div class="stat-card" style="border-right:4px solid #f97316;background:rgba(249, 115, 22, 0.05);">
+      <div class="meta" style="color:#f97316;font-weight:600;">⏳ {{ _('مستحقة خلال 30 يوم') }}</div>
+      <strong style="font-size:1.6rem;color:#f97316;">{{ stats.total_critical }}</strong>
+      <div class="meta" style="font-size:0.8rem;margin-top:4px;color:#f97316;">{{ _('إجراءات عاجلة') }}</div>
+    </div>
+  </div>
+
+  <!-- ملخص الوثائق التفصيلي -->
+  <div style="margin-top:14px;padding:10px 14px;background:rgba(148,163,184,0.08);border-radius:8px;display:flex;gap:16px;flex-wrap:wrap;align-items:center;font-size:0.9rem;">
+    <div><strong>{{ _('مؤشر الوثائق:') }}</strong></div>
+    <div>🆔 {{ _('الإقامات:') }} <span class="badge danger">{{ stats.docs_summary.iqama.expired }} {{ _('منتهية') }}</span> <span class="badge warning">{{ stats.docs_summary.iqama.critical }} {{ _('حرجة') }}</span></div>
+    <div>🚗 {{ _('رخص القيادة:') }} <span class="badge danger">{{ stats.docs_summary.license.expired }} {{ _('منتهية') }}</span> <span class="badge warning">{{ stats.docs_summary.license.critical }} {{ _('حرجة') }}</span></div>
+    <div>🏥 {{ _('التأمين الطبي:') }} <span class="badge danger">{{ stats.docs_summary.insurance.expired }} {{ _('منتهية') }}</span> <span class="badge warning">{{ stats.docs_summary.insurance.critical }} {{ _('حرجة') }}</span></div>
+    <div>📑 {{ _('عقود العمل:') }} <span class="badge danger">{{ stats.docs_summary.contract.expired }} {{ _('منتهية') }}</span> <span class="badge warning">{{ stats.docs_summary.contract.critical }} {{ _('حرجة') }}</span></div>
+  </div>
+</div>
+
+<!-- رادار الوثائق والتنبيهات (Document Expiry Radar) -->
+<div class="card" id="radar-section" style="margin-bottom:14px;">
+  <div class="toolbar" style="flex-wrap:wrap;gap:8px;">
+    <div>
+      <h3 class="section-title" style="margin:0;font-size:1.15rem;">
+        🛡️ {{ _('رادار الوثائق والتنبيهات الاستباقية') }}
+        {% if expiring_docs %}
+        <span class="badge danger" style="margin-right:8px;font-size:0.85rem;">{{ expiring_docs|length }} {{ _('وثيقة مستحقة') }}</span>
+        {% endif %}
+      </h3>
+      <div class="meta">{{ _('جدول تفاعلي يرصد الوثائق الرسمية المنتهية أو التي توشك على الانتهاء خلال 60 يوماً لاتخاذ إجراءات التجديد.') }}</div>
+    </div>
+    <div class="actions">
+      <a class="btn ghost" href="{{ url_for('module_list', name='hr_employees') }}">{{ _('عرض كل الموظفين') }}</a>
+    </div>
+  </div>
+
+  {% if expiring_docs %}
+  <div class="table-wrap" style="margin-top:10px;">
+    <table class="table" style="min-width:0;">
+      <thead>
+        <tr>
+          <th>{{ _('الموظف') }}</th>
+          <th>{{ _('نوع الوثيقة') }}</th>
+          <th>{{ _('رقم الوثيقة') }}</th>
+          <th>{{ _('القسم والوظيفة') }}</th>
+          <th>{{ _('تاريخ الانتهاء') }}</th>
+          <th>{{ _('الحالة والمتبقي') }}</th>
+          <th>{{ _('الجوال') }}</th>
+          <th>{{ _('إجراءات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for doc in expiring_docs %}
+        <tr style="{% if doc.urgency == 'expired' %}background:rgba(239,68,68,0.04);{% elif doc.urgency == 'critical' %}background:rgba(249,115,22,0.03);{% endif %}">
+          <td>
+            <strong>{{ doc.employee_name }}</strong>
+            <div class="meta" style="font-size:0.75rem;">{{ _('رقم:') }} {{ doc.emp_no }}</div>
+          </td>
+          <td>
+            {% if 'إقامة' in doc.doc_type %}🆔{% elif 'رخصة' in doc.doc_type %}🚗{% elif 'تأمين' in doc.doc_type %}🏥{% else %}📑{% endif %}
+            <strong>{{ doc.doc_type }}</strong>
+          </td>
+          <td dir="ltr" style="text-align:right;">{{ doc.doc_no or '—' }}</td>
+          <td>{{ doc.department }} — {{ doc.job_title }}</td>
+          <td dir="ltr"><strong>{{ doc.expiry_date }}</strong></td>
+          <td>
+            {% if doc.urgency == 'expired' %}
+            <span class="badge danger" style="font-weight:700;">⚠️ {{ _('منتهية منذ') }} {{ doc.days_diff|abs }} {{ _('يوم') }}</span>
+            {% elif doc.urgency == 'critical' %}
+            <span class="badge warning" style="font-weight:700;">⏳ {{ _('يتبقى') }} {{ doc.days_diff }} {{ _('يوم') }}</span>
+            {% else %}
+            <span class="badge ok">{{ _('يتبقى') }} {{ doc.days_diff }} {{ _('يوم') }}</span>
+            {% endif %}
+          </td>
+          <td dir="ltr">
+            {% if doc.phone %}
+            <a href="tel:{{ doc.phone }}" style="color:inherit;text-decoration:none;">📞 {{ doc.phone }}</a>
+            {% else %}—{% endif %}
+          </td>
+          <td class="actions">
+            <a class="btn ghost" href="{{ url_for('hr_employee_dossier', emp_id=doc.employee_id) }}" title="{{ _('ملف الموظف الكامل') }}">👤 {{ _('الملف') }}</a>
+            <a class="btn primary" href="{{ url_for('module_edit', name='hr_employees', row_id=doc.employee_id) }}" title="{{ _('تعديل وتحديث التاريخ') }}">✏️ {{ _('تحديث') }}</a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="text-align:center;padding:30px 10px;color:#10b981;">
+    <div style="font-size:2.2rem;margin-bottom:8px;">✅</div>
+    <strong style="font-size:1.1rem;">{{ _('ممتاز! جميع وثائق الموظفين سارية ومحدثة.') }}</strong>
+    <p class="meta" style="margin-top:4px;">{{ _('لا توجد أي إقامات أو رخص قيادة أو وثائق تأمين منتهية أو مستحقة التجديد خلال الـ 60 يوماً القادمة.') }}</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- توزيع الأقسام والفرق الميدانية -->
+<div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;">
+  <!-- توزيع الموظفين حسب الأقسام -->
+  <div class="card">
+    <h3 class="section-title" style="margin:0 0 10px 0;font-size:1.05rem;">🏢 {{ _('توزيع الكادر الوظيفي حسب الأقسام') }}</h3>
+    {% if stats.dept_counts %}
+    <div class="table-wrap">
+      <table class="table" style="min-width:0;">
+        <thead>
+          <tr><th>{{ _('القسم') }}</th><th>{{ _('عدد الموظفين') }}</th><th>{{ _('النسبة') }}</th></tr>
+        </thead>
+        <tbody>
+          {% for dept, count in stats.dept_counts.items() %}
+          <tr>
+            <td><strong>{{ dept }}</strong></td>
+            <td><span class="badge ok">{{ count }}</span></td>
+            <td>
+              {% if stats.total_employees > 0 %}
+              {{ ((count / stats.total_employees) * 100)|round(1) }}%
+              {% else %}0%{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="meta">{{ _('لا توجد سجلات موظفين بعد.') }}</p>
+    {% endif %}
+  </div>
+
+  <!-- روابط الوصول السريع وأدوات الموارد البشرية -->
+  <div class="card">
+    <h3 class="section-title" style="margin:0 0 10px 0;font-size:1.05rem;">⚡ {{ _('خدمات وروابط الموارد البشرية السريعة') }}</h3>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-top:12px;">
+      <a class="btn ghost" href="{{ url_for('module_list', name='hr_employees') }}" style="justify-content:flex-start;padding:12px 14px;text-align:right;">
+        👥 <div style="margin-right:10px;"><strong>{{ _('سجل الموظفين الكامل') }}</strong><div class="meta" style="font-size:0.75rem;">{{ _('عرض وفلترة وتعديل كافة بيانات الموظفين والرواتب والوثائق') }}</div></div>
+      </a>
+      <a class="btn ghost" href="{{ url_for('module_list', name='hr_leaves') }}" style="justify-content:flex-start;padding:12px 14px;text-align:right;">
+        🏖️ <div style="margin-right:10px;"><strong>{{ _('إدارة الإجازات والمغادرات') }}</strong><div class="meta" style="font-size:0.75rem;">{{ _('تسجيل الإجازات السنوية والمرضية وتتبع مواعيد السفر والعودة') }}</div></div>
+      </a>
+      <a class="btn ghost" href="{{ url_for('teams_page') }}" style="justify-content:flex-start;padding:12px 14px;text-align:right;">
+        ⚡ <div style="margin-right:10px;"><strong>{{ _('فرق المهام والطوارئ بمكتب خريص') }}</strong><div class="meta" style="font-size:0.75rem;">{{ _('متابعة قادة الفرق والسائقين والفنيين والسيارات الميدانية') }}</div></div>
+      </a>
+      <a class="btn ghost" href="{{ url_for('external_purchases_home') }}" style="justify-content:flex-start;padding:12px 14px;text-align:right;">
+        📦 <div style="margin-right:10px;"><strong>{{ _('العهد الميدانية المسلمة') }}</strong><div class="meta" style="font-size:0.75rem;">{{ _('متابعة عهد الأجهزة والعدد والسيارات المرتبطة بالموظفين') }}</div></div>
+      </a>
+    </div>
+  </div>
+</div>
+{% endblock %}

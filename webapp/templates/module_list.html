@@ -273,6 +273,9 @@
             {% if name == 'reinforcement_works' %}
             <a class="btn primary" href="{{ url_for('reinforcement_work_view', row_id=r.id) }}">{{ _('فتح المعاملة') }}</a>
             {% endif %}
+            {% if name == 'hr_employees' %}
+            <a class="btn ghost" href="{{ url_for('hr_employee_dossier', emp_id=r.id) }}" title="{{ _('ملف الموظف الكامل') }}">👤 {{ _('الملف') }}</a>
+            {% endif %}
             {% if can_mod_write and can('button.module.' ~ name ~ '.edit') %}<a class="btn ghost" href="{{ url_for('module_edit', name=name, row_id=r.id) }}{% if name == 'warehouse_tx' %}?from=warehouses{% if source_filter %}&source={{ source_filter }}{% endif %}{% endif %}">{{ _('تعديل') }}</a>{% endif %}
             {% if can_mod_write and can('button.quality.transfer') and name == 'new_coordinations' and r.status != 'تم الإصدار' %}
             <form method="post" action="{{ url_for('new_coordination_transfer', row_id=r.id) }}" style="display:inline">

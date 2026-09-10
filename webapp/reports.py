@@ -1190,3 +1190,105 @@ def build_general_report_pdf(report: dict) -> bytes:
 
     story.extend(_archive_block(styles, width_mm=report_width))
     return _build_pdf(story, pagesize=landscape(A4), subtitle="التقرير العام")
+
+
+def generate_employee_dossier_pdf(dossier: dict) -> io.BytesIO:
+    """توليد ملف PDF رسمي وأنيق لبطاقة الموظف الشاملة وبياناته وعهده."""
+    font_name = _font_name()
+    styles = _styles(font_name)
+    emp = dossier.get("employee") or {}
+    custodies = dossier.get("custodies") or []
+    leaves = dossier.get("leaves") or []
+    car = dossier.get("car")
+    team = dossier.get("team")
+    total_salary = dossier.get("total_salary", 0.0)
+
+    width_mm = 186
+
+    emp_name = emp.get("full_name") or "موظف"
+    emp_no = emp.get("emp_no") or "—"
+    subtitle = f"بطاقة موظف — {emp_name} ({emp_no})"
+
+    story = [
+        _p("المملكة العربية السعودية · شركة ركاز المتقدمة للمقاولات", styles["kicker"]),
+        _p("بطاقة وبيان موظف رسمي", styles["title"]),
+        _p(f"الرقم الوظيفي: {emp_no}  ·  تاريخ الطباعة: {datetime.now().strftime('%Y-%m-%d %H:%M')}", styles["meta"]),
+        Spacer(1, 10),
+    ]
+
+    # 1. البيانات الأساسية
+    story.extend(_section_band(styles, "البيانات الأساسية والوظيفية", width_mm=width_mm))
+    info_data = [
+        [_p("الاسم الكامل", styles["head"]), _p(emp.get("full_name") or "—", styles["body"]), _p("الرقم الوظيفي", styles["head"]), _p(emp.get("emp_no") or "—", styles["body"])],
+        [_p("المسمى الوظيفي", styles["head"]), _p(emp.get("job_title") or "—", styles["body"]), _p("القسم / الإدارة", styles["head"]), _p(emp.get("department") or "—", styles["body"])],
+        [_p("الجنسية", styles["head"]), _p(emp.get("nationality") or "—", styles["body"]), _p("المهنة في الإقامة", styles["head"]), _p(emp.get("profession") or "—", styles["body"])],
+        [_p("الحالة الوظيفية", styles["head"]), _p(emp.get("status") or "على رأس العمل", styles["body"]), _p("تاريخ الالتحاق", styles["head"]), _p(emp.get("join_date") or "—", styles["body"])],
+        [_p("رقم الجوال", styles["head"]), _p(emp.get("phone") or "—", styles["body"]), _p("هاتف الطوارئ", styles["head"]), _p(emp.get("emergency_contact_phone") or "—", styles["body"])],
+    ]
+    t_info = Table(info_data, colWidths=[38 * mm, 55 * mm, 38 * mm, 55 * mm], hAlign="CENTER")
+    t_info.setStyle(_luxury_table_style())
+    story.append(t_info)
+    story.append(Spacer(1, 10))
+
+    # 2. الوثائق الرسمية
+    story.extend(_section_band(styles, "الوثائق الرسمية وتواريخ السريان", width_mm=width_mm))
+    docs_data = [
+        [_p("الوثيقة", styles["head"]), _p("الرقم", styles["head"]), _p("تاريخ الانتهاء", styles["head"])],
+        [_p("الهوية الوطنية / الإقامة", styles["body"]), _p(emp.get("id_number") or "—", styles["body"]), _p(emp.get("id_expiry_date") or "—", styles["body"])],
+        [_p("رخصة القيادة", styles["body"]), _p(emp.get("driving_license_no") or "—", styles["body"]), _p(emp.get("license_expiry_date") or "—", styles["body"])],
+        [_p("التأمين الطبي", styles["body"]), _p("وثيقة الشركة", styles["body"]), _p(emp.get("insurance_expiry_date") or "—", styles["body"])],
+        [_p("عقد العمل", styles["body"]), _p("عقد سنوي", styles["body"]), _p(emp.get("contract_end_date") or "—", styles["body"])],
+    ]
+    t_docs = Table(docs_data, colWidths=[60 * mm, 66 * mm, 60 * mm], hAlign="CENTER")
+    t_docs.setStyle(_luxury_table_style())
+    story.append(t_docs)
+    story.append(Spacer(1, 10))
+
+    # 3. البيانات المالية (WPS)
+    story.extend(_section_band(styles, "البيانات المالية وحماية الأجور (WPS)", width_mm=width_mm))
+    fin_data = [
+        [_p("الراتب الأساسي", styles["head"]), _p(money(emp.get("basic_salary")), styles["body"]), _p("بدل السكن", styles["head"]), _p(money(emp.get("housing_allowance")), styles["body"])],
+        [_p("بدلات أخرى", styles["head"]), _p(money(emp.get("other_allowances")), styles["body"]), _p("إجمالي الراتب", styles["head"]), _p(money(total_salary), styles["body"])],
+        [_p("اسم البنك", styles["head"]), _p(emp.get("bank_name") or "—", styles["body"]), _p("الآيبان البنكي", styles["head"]), _p(emp.get("iban") or "—", styles["body"])],
+    ]
+    t_fin = Table(fin_data, colWidths=[38 * mm, 55 * mm, 38 * mm, 55 * mm], hAlign="CENTER")
+    t_fin.setStyle(_luxury_table_style())
+    story.append(t_fin)
+    story.append(Spacer(1, 10))
+
+    # 4. التكليف الميداني والسيارة
+    team_label = f"{team['name']} ({team.get('area') or 'خريص'})" if team else "غير مسند لفرقة"
+    car_label = f"{car['plate_no']} ({car.get('car_type') or 'سيارة'})" if car else "لا توجد سيارة مسجلة"
+    story.extend(_section_band(styles, "التكليف الميداني والسيارة", width_mm=width_mm))
+    assign_data = [
+        [_p("الفرقة الميدانية", styles["head"]), _p(team_label, styles["body"]), _p("السيارة المخصصة", styles["head"]), _p(car_label, styles["body"])],
+    ]
+    t_assign = Table(assign_data, colWidths=[38 * mm, 55 * mm, 38 * mm, 55 * mm], hAlign="CENTER")
+    t_assign.setStyle(_luxury_table_style())
+    story.append(t_assign)
+    story.append(Spacer(1, 10))
+
+    # 5. العهد المسلمة للموظف
+    if custodies:
+        story.extend(_section_band(styles, f"العهد الميدانية المسلمة ({len(custodies)})", width_mm=width_mm))
+        c_data = [[_p("رقم العهدة", styles["head"]), _p("التاريخ", styles["head"]), _p("المادة / المعدة", styles["head"]), _p("الكمية", styles["head"]), _p("الحالة", styles["head"])]]
+        for c in custodies[:10]:
+            c_data.append([
+                _p(str(c.get("custody_no") or c.get("id") or "—"), styles["body"]),
+                _p(str(c.get("custody_date") or "—"), styles["body"]),
+                _p(str(c.get("item_name") or "—"), styles["body"]),
+                _p(f"{c.get('qty') or 0} {c.get('unit') or ''}", styles["body"]),
+                _p(str(c.get("status") or "مسلمة"), styles["body"]),
+            ])
+        t_cust = Table(c_data, colWidths=[32 * mm, 30 * mm, 64 * mm, 30 * mm, 30 * mm], hAlign="CENTER")
+        t_cust.setStyle(_luxury_table_style())
+        story.append(t_cust)
+        story.append(Spacer(1, 10))
+
+    story.extend(_archive_block(styles, width_mm=width_mm))
+
+    raw_pdf = _build_pdf(story, pagesize=A4, subtitle=subtitle)
+    buf = io.BytesIO(raw_pdf)
+    buf.seek(0)
+    return buf
+

@@ -84,6 +84,10 @@ DEFAULT_LISTS = {
     "yes_no_active": ["نشط", "موقوف"],
     "hr_departments": ["العمليات", "المستودعات", "الجودة", "السلامة", "المالية", "الموارد البشرية", "الإدارة"],
     "hr_status": ["على رأس العمل", "إجازة", "منتهي"],
+    "leave_types": ["سنوية", "مرضية", "طارئة", "بدون راتب", "خروج وعودة"],
+    "leave_status": ["معتمدة", "جارية", "منتهية", "ملغاة"],
+    "nationalities": ["سعودي", "مصري", "هندي", "باكستاني", "سوداني", "يمني", "فلبيني", "بنغلاديشي", "نيبالي", "أخرى"],
+    "driving_license_types": ["خصوصي", "عمومي خفيف", "عمومي ثقيل", "معدات ثقيلة", "دراجة نارية", "لا يوجد"],
     "user_roles": ["admin", "مشرف", "مدخل بيانات", "محاسب", "الموارد البشرية", "مراقبي المواقع"],
     "project_types": ["خاصة", "كهرباء"],
     "project_status": ["جديد", "قيد التنفيذ", "موقوف", "مكتمل", "مغلق"],
@@ -188,7 +192,40 @@ EXTRA_TABLE_DDL = {
             phone TEXT,
             status TEXT,
             join_date TEXT,
-            notes TEXT
+            id_number TEXT,
+            id_expiry_date TEXT,
+            nationality TEXT,
+            profession TEXT,
+            driving_license_no TEXT,
+            license_expiry_date TEXT,
+            insurance_expiry_date TEXT,
+            contract_end_date TEXT,
+            basic_salary REAL DEFAULT 0,
+            housing_allowance REAL DEFAULT 0,
+            other_allowances REAL DEFAULT 0,
+            bank_name TEXT,
+            iban TEXT,
+            emergency_contact_name TEXT,
+            emergency_contact_phone TEXT,
+            notes TEXT,
+            attachments TEXT
+        )
+    """,
+    "hr_leaves": """
+        CREATE TABLE IF NOT EXISTS hr_leaves (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER,
+            employee_name TEXT,
+            leave_type TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            days_count INTEGER,
+            substitute_employee TEXT,
+            status TEXT DEFAULT 'معتمدة',
+            actual_return_date TEXT,
+            notes TEXT,
+            attachments TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP
         )
     """,
     "projects": """
@@ -776,6 +813,30 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "tickets" in existing or "tickets" in created:
             if _ensure_column(conn, "tickets", "has_excavation"):
                 created.append("tickets.has_excavation")
+        if "hr_employees" in existing or "hr_employees" in created:
+            for col, dtype in (
+                ("id_number", "TEXT"),
+                ("id_expiry_date", "TEXT"),
+                ("nationality", "TEXT"),
+                ("profession", "TEXT"),
+                ("driving_license_no", "TEXT"),
+                ("license_expiry_date", "TEXT"),
+                ("insurance_expiry_date", "TEXT"),
+                ("contract_end_date", "TEXT"),
+                ("basic_salary", "REAL DEFAULT 0"),
+                ("housing_allowance", "REAL DEFAULT 0"),
+                ("other_allowances", "REAL DEFAULT 0"),
+                ("bank_name", "TEXT"),
+                ("iban", "TEXT"),
+                ("emergency_contact_name", "TEXT"),
+                ("emergency_contact_phone", "TEXT"),
+                ("attachments", "TEXT"),
+            ):
+                if _ensure_column(conn, "hr_employees", col, dtype):
+                    created.append(f"hr_employees.{col}")
+        if "hr_leaves" in existing or "hr_leaves" in created:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_hr_leaves_emp ON hr_leaves(employee_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_hr_leaves_status ON hr_leaves(status)")
         # ربط معاملات الحفر بالتنسيقات لبدء إجراءات الإخلاء
         n_exc = link_excavation_transactions_to_coordination(conn)
         if n_exc:
@@ -2720,6 +2781,13 @@ def get_lists(conn=None):
                     break
             merged.insert(insert_at, val)
         data[key] = merged
+    try:
+        emp_rows = conn.execute(
+            "SELECT full_name FROM hr_employees WHERE status != 'منتهي' OR status IS NULL ORDER BY full_name"
+        ).fetchall()
+        data["employees"] = [r[0] for r in emp_rows if r[0] and r[0].strip()]
+    except Exception:
+        pass
     if own:
         conn.close()
     return data
@@ -6239,3 +6307,269 @@ def delete_external_record(name: str, row_id: int, conn) -> str:
     conn.execute(f"DELETE FROM {lines_table} WHERE {parent_key}=?", (row_id,))
     conn.execute(f"DELETE FROM {name} WHERE id=?", (row_id,))
     return str(record.get(reference_key) or row_id)
+
+
+def get_hr_dashboard_stats(conn: sqlite3.Connection | None = None) -> dict:
+    """إحصائيات شاملة للوحة مؤشرات الموارد البشرية مع تفصيل حالات الوثائق والأقسام."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        from datetime import date, datetime, timedelta
+        today = date.today()
+        today_str = today.isoformat()
+        in_30_str = (today + timedelta(days=30)).isoformat()
+        in_60_str = (today + timedelta(days=60)).isoformat()
+
+        emp_rows = rows_to_dicts(conn.execute("SELECT * FROM hr_employees").fetchall())
+        total_employees = len(emp_rows)
+        active_count = sum(1 for e in emp_rows if (e.get("status") or "") == "على رأس العمل")
+        leave_count = sum(1 for e in emp_rows if (e.get("status") or "") == "إجازة")
+        terminated_count = sum(1 for e in emp_rows if (e.get("status") or "") == "منتهي")
+
+        def _doc_status(val: str | None) -> str | None:
+            if not val or not str(val).strip():
+                return None
+            v = str(val).strip()[:10]
+            if v < today_str:
+                return "expired"
+            elif v <= in_30_str:
+                return "critical"
+            elif v <= in_60_str:
+                return "warning"
+            return "valid"
+
+        docs_summary = {
+            "iqama": {"expired": 0, "critical": 0, "warning": 0, "valid": 0},
+            "license": {"expired": 0, "critical": 0, "warning": 0, "valid": 0},
+            "insurance": {"expired": 0, "critical": 0, "warning": 0, "valid": 0},
+            "contract": {"expired": 0, "critical": 0, "warning": 0, "valid": 0},
+        }
+
+        for e in emp_rows:
+            st = _doc_status(e.get("id_expiry_date"))
+            if st:
+                docs_summary["iqama"][st] += 1
+            st = _doc_status(e.get("license_expiry_date"))
+            if st:
+                docs_summary["license"][st] += 1
+            st = _doc_status(e.get("insurance_expiry_date"))
+            if st:
+                docs_summary["insurance"][st] += 1
+            st = _doc_status(e.get("contract_end_date"))
+            if st:
+                docs_summary["contract"][st] += 1
+
+        total_expired = sum(v["expired"] for v in docs_summary.values())
+        total_critical = sum(v["critical"] for v in docs_summary.values())
+        total_warning = sum(v["warning"] for v in docs_summary.values())
+
+        dept_counts: dict[str, int] = {}
+        for e in emp_rows:
+            d = (e.get("department") or "").strip() or "غير محدد"
+            dept_counts[d] = dept_counts.get(d, 0) + 1
+
+        leaves_active = 0
+        try:
+            row_l = conn.execute("SELECT COUNT(*) FROM hr_leaves WHERE status='جارية' OR status='معتمدة'").fetchone()
+            leaves_active = int(row_l[0]) if row_l else 0
+        except Exception:
+            pass
+
+        teams_active = 0
+        try:
+            row_t = conn.execute("SELECT COUNT(*) FROM teams WHERE status='نشطة'").fetchone()
+            teams_active = int(row_t[0]) if row_t else 0
+        except Exception:
+            pass
+
+        return {
+            "total_employees": total_employees,
+            "active_count": active_count,
+            "leave_count": leave_count,
+            "terminated_count": terminated_count,
+            "total_expired": total_expired,
+            "total_critical": total_critical,
+            "total_warning": total_warning,
+            "docs_summary": docs_summary,
+            "dept_counts": dept_counts,
+            "leaves_active": leaves_active,
+            "teams_active": teams_active,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+def list_expiring_documents(conn: sqlite3.Connection | None = None, days_threshold: int = 60) -> list[dict]:
+    """قائمة الوثائق المنتهية أو القريبة من الانتهاء مرتبة حسب الأولوية وتاريخ الانتهاء."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        from datetime import date, datetime, timedelta
+        today = date.today()
+        today_str = today.isoformat()
+        threshold_date = (today + timedelta(days=days_threshold)).isoformat()
+
+        emp_rows = rows_to_dicts(conn.execute("SELECT * FROM hr_employees WHERE status != 'منتهي' OR status IS NULL").fetchall())
+        docs: list[dict] = []
+
+        doc_fields = [
+            ("id_expiry_date", "إقامة / هوية وطنية", "id_number"),
+            ("license_expiry_date", "رخصة قيادة", "driving_license_no"),
+            ("insurance_expiry_date", "تأمين طبي", None),
+            ("contract_end_date", "عقد عمل", None),
+        ]
+
+        for emp in emp_rows:
+            for field, doc_label, num_field in doc_fields:
+                val = (emp.get(field) or "").strip()
+                if not val:
+                    continue
+                d_str = val[:10]
+                if d_str <= threshold_date:
+                    try:
+                        exp_d = datetime.strptime(d_str, "%Y-%m-%d").date()
+                        diff_days = (exp_d - today).days
+                    except Exception:
+                        diff_days = 0
+
+                    if diff_days < 0:
+                        urgency = "expired"
+                        urgency_label = "منتهية"
+                        color_class = "danger"
+                    elif diff_days <= 30:
+                        urgency = "critical"
+                        urgency_label = "حرجة (خلال 30 يوم)"
+                        color_class = "warning"
+                    else:
+                        urgency = "warning"
+                        urgency_label = "مستحقة قريباً"
+                        color_class = "info"
+
+                    docs.append({
+                        "employee_id": emp["id"],
+                        "emp_no": emp.get("emp_no") or "—",
+                        "employee_name": emp.get("full_name") or "—",
+                        "job_title": emp.get("job_title") or "—",
+                        "department": emp.get("department") or "—",
+                        "phone": emp.get("phone") or "",
+                        "doc_type": doc_label,
+                        "doc_field": field,
+                        "doc_no": emp.get(num_field) if num_field else "—",
+                        "expiry_date": d_str,
+                        "days_diff": diff_days,
+                        "urgency": urgency,
+                        "urgency_label": urgency_label,
+                        "color_class": color_class,
+                    })
+
+        docs.sort(key=lambda x: x["days_diff"])
+        return docs
+    finally:
+        if own:
+            conn.close()
+
+
+def get_employee_dossier(employee_id: int, conn: sqlite3.Connection | None = None) -> dict | None:
+    """ملف الموظف الرقمي الشامل بما فيه الوثائق، العهد المسلمة، سيارة العمل، الفرقة، وسجل الإجازات."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        row = conn.execute("SELECT * FROM hr_employees WHERE id=?", (employee_id,)).fetchone()
+        if not row:
+            return None
+        emp = dict(row)
+
+        full_name = (emp.get("full_name") or "").strip()
+        emp_no = (emp.get("emp_no") or "").strip()
+
+        custodies = []
+        try:
+            c_rows = conn.execute(
+                """
+                SELECT * FROM custody
+                WHERE (trim(employee) = ? OR trim(employee) = ?)
+                ORDER BY custody_date DESC
+                """,
+                (full_name, emp_no),
+            ).fetchall()
+            custodies = rows_to_dicts(c_rows)
+        except Exception:
+            pass
+
+        car = None
+        try:
+            car_row = conn.execute(
+                "SELECT * FROM workshop_cars WHERE trim(driver) = ? LIMIT 1",
+                (full_name,),
+            ).fetchone()
+            if car_row:
+                car = dict(car_row)
+        except Exception:
+            pass
+
+        team = None
+        try:
+            team_row = conn.execute(
+                "SELECT * FROM teams WHERE trim(leader) = ? OR trim(driver) = ? LIMIT 1",
+                (full_name, full_name),
+            ).fetchone()
+            if team_row:
+                team = dict(team_row)
+        except Exception:
+            pass
+
+        leaves = []
+        try:
+            l_rows = conn.execute(
+                """
+                SELECT * FROM hr_leaves
+                WHERE employee_id = ? OR trim(employee_name) = ?
+                ORDER BY start_date DESC
+                """,
+                (employee_id, full_name),
+            ).fetchall()
+            leaves = rows_to_dicts(l_rows)
+        except Exception:
+            pass
+
+        basic = float(emp.get("basic_salary") or 0)
+        housing = float(emp.get("housing_allowance") or 0)
+        other = float(emp.get("other_allowances") or 0)
+        total_salary = basic + housing + other
+
+        return {
+            "employee": emp,
+            "custodies": custodies,
+            "car": car,
+            "team": team,
+            "leaves": leaves,
+            "total_salary": total_salary,
+        }
+    finally:
+        if own:
+            conn.close()
+
+
+def list_active_employees_for_select(conn: sqlite3.Connection | None = None) -> list[dict]:
+    """قائمة موظفين مختصرة للاستخدام في القوائم المنسدلة."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        ensure_schema(conn)
+        rows = conn.execute(
+            """
+            SELECT id, emp_no, full_name, job_title, department
+            FROM hr_employees
+            WHERE status != 'منتهي' OR status IS NULL
+            ORDER BY full_name
+            """
+        ).fetchall()
+        return rows_to_dicts(rows)
+    finally:
+        if own:
+            conn.close()
+

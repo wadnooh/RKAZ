@@ -13,11 +13,24 @@
   {% if can('teams.write') %}
   <form method="post" class="form-grid">
     <input type="hidden" name="action" value="add">
-    <div class="field"><label>{{ _('الفرقة') }}</label><input name="name" required></div>
-    <div class="field"><label>{{ _('قائد الفرقة') }}</label><input name="leader"></div>
+    <div class="field"><label>{{ _('الفرقة') }}</label><input name="name" required placeholder="{{ _('مثال: فرقة 1') }}"></div>
+    <div class="field">
+      <label>{{ _('قائد الفرقة') }}</label>
+      <input name="leader" list="employees_datalist" placeholder="{{ _('اختر موظفاً أو اكتب الاسم...') }}">
+    </div>
     <div class="field"><label>{{ _('عدد الفنيين') }}</label><input type="number" name="technicians" value="4"></div>
-    <div class="field"><label>{{ _('السائق') }}</label><input name="driver"></div>
-    <div class="field"><label>{{ _('السيارة') }}</label><input name="vehicle"></div>
+    <div class="field">
+      <label>{{ _('السائق') }}</label>
+      <input name="driver" list="employees_datalist" placeholder="{{ _('اختر موظفاً أو اكتب الاسم...') }}">
+    </div>
+    {% if employees %}
+    <datalist id="employees_datalist">
+      {% for emp in employees %}
+      <option value="{{ emp.full_name }}">{{ emp.full_name }} ({{ emp.job_title or emp.department or emp.emp_no }})</option>
+      {% endfor %}
+    </datalist>
+    {% endif %}
+    <div class="field"><label>{{ _('السيارة') }}</label><input name="vehicle" placeholder="{{ _('مثال: دينا غمارتين') }}"></div>
     <div class="field"><label>{{ _('المنطقة') }}</label><input name="area" value="خريص"></div>
     <div class="field">
       <label>{{ _('الحالة') }}</label>

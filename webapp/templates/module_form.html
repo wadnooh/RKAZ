@@ -253,9 +253,17 @@
         </select>
       {% elif ftype.startswith('list:') %}
         {% set list_key = ftype.split(':')[1] %}
+        {% set current_val = (row[key] or '')|string %}
+        {% set found_val = namespace(found=false) %}
         <select name="{{ key }}">
           <option value="">—</option>
-          {% for x in lists[list_key] %}<option value="{{ x }}" {% if row[key]==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}
+          {% for x in lists.get(list_key) or [] %}
+            {% if current_val == (x|string) %}{% set found_val.found = true %}{% endif %}
+            <option value="{{ x }}" {% if current_val == (x|string) %}selected{% endif %}>{{ tv(x) }}</option>
+          {% endfor %}
+          {% if current_val and not found_val.found %}
+            <option value="{{ current_val }}" selected>{{ current_val }}</option>
+          {% endif %}
         </select>
       {% elif ftype == 'textarea' %}
         <textarea name="{{ key }}">{{ row[key] or '' }}</textarea>
