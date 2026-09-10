@@ -147,19 +147,19 @@
 
 <!-- توزيع الأقسام والفرق الميدانية -->
 <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(320px, 1fr));gap:14px;">
-  <!-- توزيع الموظفين حسب الأقسام -->
+  <!-- توزيع الموظفين حسب الإدارات -->
   <div class="card">
-    <h3 class="section-title" style="margin:0 0 10px 0;font-size:1.05rem;">🏢 {{ _('توزيع الكادر الوظيفي حسب الأقسام') }}</h3>
-    {% if stats.dept_counts %}
+    <h3 class="section-title" style="margin:0 0 10px 0;font-size:1.05rem;">🏢 {{ _('توزيع الكادر الوظيفي حسب الإدارات') }}</h3>
+    {% if stats.admin_counts %}
     <div class="table-wrap">
       <table class="table" style="min-width:0;">
         <thead>
-          <tr><th>{{ _('القسم') }}</th><th>{{ _('عدد الموظفين') }}</th><th>{{ _('النسبة') }}</th></tr>
+          <tr><th>{{ _('الإدارة') }}</th><th>{{ _('عدد الموظفين') }}</th><th>{{ _('النسبة') }}</th></tr>
         </thead>
         <tbody>
-          {% for dept, count in stats.dept_counts.items() %}
+          {% for adm, count in stats.admin_counts.items() %}
           <tr>
-            <td><strong>{{ dept }}</strong></td>
+            <td><strong>{{ adm }}</strong></td>
             <td><span class="badge ok">{{ count }}</span></td>
             <td>
               {% if stats.total_employees > 0 %}

@@ -82,6 +82,7 @@ DEFAULT_LISTS = {
     "equipment_status": ["جاهزة", "صيانة", "تخريد"],
     "contract_status": ["ساري", "منتهي", "موقوف"],
     "yes_no_active": ["نشط", "موقوف"],
+    "hr_administrations": ["الإدارة العامة", "إدارة المشاريع", "الموارد البشرية", "الإدارة المالية"],
     "hr_departments": ["العمليات", "المستودعات", "الجودة", "السلامة", "المالية", "الموارد البشرية", "الإدارة"],
     "hr_status": ["على رأس العمل", "إجازة", "منتهي"],
     "leave_types": ["سنوية", "مرضية", "طارئة", "بدون راتب", "خروج وعودة"],
@@ -188,6 +189,7 @@ EXTRA_TABLE_DDL = {
             emp_no TEXT,
             full_name TEXT,
             job_title TEXT,
+            administration TEXT,
             department TEXT,
             phone TEXT,
             status TEXT,
@@ -815,6 +817,7 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("tickets.has_excavation")
         if "hr_employees" in existing or "hr_employees" in created:
             for col, dtype in (
+                ("administration", "TEXT"),
                 ("id_number", "TEXT"),
                 ("id_expiry_date", "TEXT"),
                 ("nationality", "TEXT"),
@@ -834,6 +837,19 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             ):
                 if _ensure_column(conn, "hr_employees", col, dtype):
                     created.append(f"hr_employees.{col}")
+            # التحديث التلقائي للإدارة من القسم إن كانت الإدارة فارغة
+            conn.execute("""
+                UPDATE hr_employees
+                SET administration = CASE
+                    WHEN department IN ('الإدارة العامة', 'الإدارة') THEN 'الإدارة العامة'
+                    WHEN department IN ('إدارة المشاريع', 'المشاريع', 'العمليات') THEN 'إدارة المشاريع'
+                    WHEN department IN ('الموارد البشرية', 'شؤون الموظفين') THEN 'الموارد البشرية'
+                    WHEN department IN ('الإدارة المالية', 'المالية', 'المحاسبة') THEN 'الإدارة المالية'
+                    ELSE administration
+                END
+                WHERE (administration IS NULL OR trim(administration) = '')
+                  AND department IS NOT NULL AND trim(department) <> ''
+            """)
         if "hr_leaves" in existing or "hr_leaves" in created:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hr_leaves_emp ON hr_leaves(employee_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_hr_leaves_status ON hr_leaves(status)")
@@ -6365,7 +6381,10 @@ def get_hr_dashboard_stats(conn: sqlite3.Connection | None = None) -> dict:
         total_warning = sum(v["warning"] for v in docs_summary.values())
 
         dept_counts: dict[str, int] = {}
+        admin_counts: dict[str, int] = {}
         for e in emp_rows:
+            adm = (e.get("administration") or "").strip() or "غير محدد"
+            admin_counts[adm] = admin_counts.get(adm, 0) + 1
             d = (e.get("department") or "").strip() or "غير محدد"
             dept_counts[d] = dept_counts.get(d, 0) + 1
 
@@ -6392,6 +6411,7 @@ def get_hr_dashboard_stats(conn: sqlite3.Connection | None = None) -> dict:
             "total_critical": total_critical,
             "total_warning": total_warning,
             "docs_summary": docs_summary,
+            "admin_counts": admin_counts,
             "dept_counts": dept_counts,
             "leaves_active": leaves_active,
             "teams_active": teams_active,

@@ -51,7 +51,8 @@
         <tr><td style="color:var(--meta,#64748b);">{{ _('الجنسية') }}</td><td>{{ emp.nationality or '—' }}</td></tr>
         <tr><td style="color:var(--meta,#64748b);">{{ _('المهنة في الإقامة') }}</td><td>{{ emp.profession or '—' }}</td></tr>
         <tr><td style="color:var(--meta,#64748b);">{{ _('المسمى الوظيفي') }}</td><td>{{ emp.job_title or '—' }}</td></tr>
-        <tr><td style="color:var(--meta,#64748b);">{{ _('القسم / الإدارة') }}</td><td>{{ emp.department or '—' }}</td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('الإدارة') }}</td><td><strong style="color:var(--accent,#2563eb);">{{ emp.administration or '—' }}</strong></td></tr>
+        <tr><td style="color:var(--meta,#64748b);">{{ _('القسم') }}</td><td>{{ emp.department or '—' }}</td></tr>
         <tr><td style="color:var(--meta,#64748b);">{{ _('تاريخ الالتحاق') }}</td><td dir="ltr" style="text-align:right;">{{ emp.join_date or '—' }}</td></tr>
         <tr><td style="color:var(--meta,#64748b);">{{ _('رقم الجوال') }}</td><td dir="ltr" style="text-align:right;">{% if emp.phone %}<a href="tel:{{ emp.phone }}" style="color:inherit;">📞 {{ emp.phone }}</a>{% else %}—{% endif %}</td></tr>
       </tbody>

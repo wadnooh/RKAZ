@@ -36,7 +36,7 @@ class HRSystemTestCase(unittest.TestCase):
         leave_cols = [r[1] for r in conn.execute("PRAGMA table_info(hr_leaves)").fetchall()]
         conn.close()
 
-        for expected in ['id_number', 'id_expiry_date', 'nationality', 'profession',
+        for expected in ['administration', 'id_number', 'id_expiry_date', 'nationality', 'profession',
                          'driving_license_no', 'license_expiry_date', 'insurance_expiry_date',
                          'contract_end_date', 'basic_salary', 'housing_allowance',
                          'other_allowances', 'bank_name', 'iban', 'emergency_contact_name']:
@@ -79,6 +79,7 @@ class HRSystemTestCase(unittest.TestCase):
         stats = db.get_hr_dashboard_stats(conn)
         self.assertGreaterEqual(stats['total_employees'], 2)
         self.assertGreaterEqual(stats['total_critical'], 1)
+        self.assertIn('admin_counts', stats)
 
         expiring = db.list_expiring_documents(conn, days_threshold=60)
         found = any(d['emp_no'] == 'TEST-01' and d['urgency'] == 'critical' for d in expiring)

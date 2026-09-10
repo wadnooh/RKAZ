@@ -1220,10 +1220,11 @@ def generate_employee_dossier_pdf(dossier: dict) -> io.BytesIO:
     story.extend(_section_band(styles, "البيانات الأساسية والوظيفية", width_mm=width_mm))
     info_data = [
         [_p("الاسم الكامل", styles["head"]), _p(emp.get("full_name") or "—", styles["body"]), _p("الرقم الوظيفي", styles["head"]), _p(emp.get("emp_no") or "—", styles["body"])],
-        [_p("المسمى الوظيفي", styles["head"]), _p(emp.get("job_title") or "—", styles["body"]), _p("القسم / الإدارة", styles["head"]), _p(emp.get("department") or "—", styles["body"])],
+        [_p("المسمى الوظيفي", styles["head"]), _p(emp.get("job_title") or "—", styles["body"]), _p("الحالة الوظيفية", styles["head"]), _p(emp.get("status") or "على رأس العمل", styles["body"])],
+        [_p("الإدارة", styles["head"]), _p(emp.get("administration") or "—", styles["body"]), _p("القسم", styles["head"]), _p(emp.get("department") or "—", styles["body"])],
         [_p("الجنسية", styles["head"]), _p(emp.get("nationality") or "—", styles["body"]), _p("المهنة في الإقامة", styles["head"]), _p(emp.get("profession") or "—", styles["body"])],
-        [_p("الحالة الوظيفية", styles["head"]), _p(emp.get("status") or "على رأس العمل", styles["body"]), _p("تاريخ الالتحاق", styles["head"]), _p(emp.get("join_date") or "—", styles["body"])],
-        [_p("رقم الجوال", styles["head"]), _p(emp.get("phone") or "—", styles["body"]), _p("هاتف الطوارئ", styles["head"]), _p(emp.get("emergency_contact_phone") or "—", styles["body"])],
+        [_p("تاريخ الالتحاق", styles["head"]), _p(emp.get("join_date") or "—", styles["body"]), _p("رقم الجوال", styles["head"]), _p(emp.get("phone") or "—", styles["body"])],
+        [_p("مسؤول الطوارئ", styles["head"]), _p(emp.get("emergency_contact_name") or "—", styles["body"]), _p("هاتف الطوارئ", styles["head"]), _p(emp.get("emergency_contact_phone") or "—", styles["body"])],
     ]
     t_info = Table(info_data, colWidths=[38 * mm, 55 * mm, 38 * mm, 55 * mm], hAlign="CENTER")
     t_info.setStyle(_luxury_table_style())

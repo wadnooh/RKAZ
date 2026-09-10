@@ -1390,6 +1390,13 @@ VALUE_EN = {
     'مجموع كميات الحركات المعروضة': 'Sum of displayed movement quantities',
     'من': 'From',
     'إلى': 'To',
+    'الإدارة': 'Administration',
+    'القسم': 'Department',
+    'الإدارة العامة': 'General Administration',
+    'إدارة المشاريع': 'Projects Administration',
+    'الموارد البشرية': 'Human Resources',
+    'الإدارة المالية': 'Financial Administration',
+    'توزيع الكادر الوظيفي حسب الإدارات': 'Staff distribution by administration',
 }
 
 def tr(lang, key, **kwargs):
