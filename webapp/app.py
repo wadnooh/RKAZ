@@ -7271,6 +7271,44 @@ def main():
         app.run(host=host, port=port, debug=False)
 
 
+def _project_management_links():
+    entries = [
+        ('tab.constructions', 'nav_constructions', 'constructions_home'),
+        ('tab.projects', 'nav_projects', 'projects_home'),
+        ('tab.ops', 'nav_ops', 'tickets_list' if permissions.can('tickets.read') else 'ops_primary_teams'),
+        ('tab.contractors', 'nav_contractors', 'contractors_home'),
+        ('tab.quality', 'nav_quality', 'quality_home'),
+        ('tab.safety', 'nav_safety', 'safety_home'),
+        ('tab.warehouses', 'nav_warehouses', 'warehouse_movements_summary'),
+        ('tab.external', 'nav_external', 'external_purchases_home'),
+    ]
+    return [dict(label=helpers.tr(label), href=url_for(endpoint)) for perm, label, endpoint in entries
+            if permissions.can(perm) or (perm == 'tab.ops' and (permissions.can('tab.reinforcement') or permissions.can('section.reinforcement')))]
+
+
+@app.context_processor
+def project_management_navigation():
+    if not session.get('user_id'):
+        return dict(project_management_links=[], project_management_active=False)
+    path = request.path
+    section = (MODULES.get((request.view_args or {}).get('name')) or {}).get('section')
+    active = section in {'constructions','projects','ops','reinforcement','contractors','quality','safety','warehouses','external'}
+    active = active or path == '/' or any(path == prefix or path.startswith(prefix + '/') for prefix in (
+        '/project-management','/constructions','/projects','/ops','/tickets','/teams','/reinforcement',
+        '/contractors','/quality','/new-coordinations','/safety','/warehouses','/external-purchases',
+        '/tabs/ops','/tabs/constructions','/tabs/projects','/tabs/contractors','/tabs/quality','/tabs/safety','/tabs/warehouses','/tabs/external'))
+    return dict(project_management_links=_project_management_links(), project_management_active=active)
+
+
+@app.route('/project-management')
+@login_required
+def project_management_home():
+    links = _project_management_links()
+    if not links:
+        abort(403)
+    return render_template('project_management.html', links=links)
+
+
 from webapp.fixed_assets import register as register_fixed_assets
 register_fixed_assets(app, login_required)
 

@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="card">
+  <div class="toolbar"><div><h2 class="section-title">{{ _('إدارة المشاريع') }}</h2><div class="meta">{{ _('اختر القسم لفتح صفحاته ومعاملاته') }}</div></div></div>
+  <div class="stats-grid">
+    {% for item in links %}
+    <a class="stat-card" href="{{ item.href }}" style="text-decoration:none;color:inherit"><strong>{{ item.label }}</strong><div class="meta">{{ _('فتح القسم') }} ←</div></a>
+    {% endfor %}
+  </div>
+</div>
+{% endblock %}
