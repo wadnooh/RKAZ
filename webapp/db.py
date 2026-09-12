@@ -652,6 +652,8 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
     conn = conn or connect()
     created: list[str] = []
     try:
+        from webapp.payroll import ensure_schema as ensure_payroll_schema
+        ensure_payroll_schema(conn)
         from webapp.fixed_assets import ensure_schema as ensure_assets_schema
         ensure_assets_schema(conn)
         existing = {

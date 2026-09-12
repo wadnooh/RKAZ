@@ -260,6 +260,11 @@ PERM_LABELS = {
     'users.manage': 'إدارة المستخدمين',
 }
 
+PERM_LABELS.update({
+    'hr.payroll.view': 'عرض مسيرات الرواتب',
+    'hr.payroll.write': 'إدخال وتعديل مسيرات الرواتب',
+    'hr.payroll.export': 'تصدير وطباعة مسيرات الرواتب',
+})
 ALL_PERMS = set(PERM_LABELS)
 
 _PERMISSION_PAGE_OVERRIDES = {
@@ -1198,6 +1203,7 @@ _ROLE_PERMS["الموارد البشرية"] = {
     "teams.write",
     "hr.employee.print",
 }
+_ROLE_PERMS['الموارد البشرية'].update({'hr.payroll.view','hr.payroll.write','hr.payroll.export'})
 for _role_name, _perms in _ROLE_PERMS.items():
     if _role_name not in {"admin", "محاسب"}:
         _perms.discard("button.financial.amounts")

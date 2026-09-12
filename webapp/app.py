@@ -6092,6 +6092,10 @@ def module_delete(name, row_id):
         return _reject_bad_delete_password(fallback)
     conn = db.connect()
     deleted_ref = ""
+    if name == "hr_employees" and conn.execute("SELECT id FROM payroll_rows WHERE employee_id=? LIMIT 1", (row_id,)).fetchone():
+        conn.close()
+        flash("الموظف مرتبط بمسير رواتب محفوظ؛ لا يمكن حذفه حفاظاً على السجل.", "danger")
+        return redirect(url_for("module_list", name=name))
     if name in {"workshop_cars", "workshop_equipment"}:
         field = "car_id" if name == "workshop_cars" else "equipment_id"
         if conn.execute(f"SELECT id FROM fixed_assets WHERE {field}=?", (row_id,)).fetchone():
@@ -7311,6 +7315,8 @@ def project_management_home():
 
 from webapp.fixed_assets import register as register_fixed_assets
 register_fixed_assets(app, login_required)
+from webapp.payroll import register as register_payroll
+register_payroll(app, login_required)
 
 
 if __name__ == "__main__":
