@@ -1,0 +1,268 @@
+{% extends "base.html" %}
+{% block content %}
+{% set warehouse_active = 'work_orders_movements' %}
+{% include "_warehouse_subnav.html" %}
+<div class="card">
+  <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 class="section-title">📦 {{ _('كشف حركة جميع المواد لأوامر العمل') }}</h2>
+      <div class="meta">{{ _('استخراج وتحليل حركات المواد (وارد / منصرف / مرتجع) لجميع أوامر العمل في العمليات والإنشاءات والمشاريع.') }}</div>
+    </div>
+    <div class="actions" style="flex-wrap:wrap;gap:8px;">
+      <a class="btn primary" href="{{ url_for('warehouse_work_orders_movements_excel', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode=view_mode or 'detail') }}">📥 {{ _('تصدير Excel') }}</a>
+      <button class="btn ghost" onclick="window.print()">🖨️ {{ _('طباعة') }}</button>
+      <a class="btn ghost" href="{{ url_for('warehouse_materials_report') }}">📋 {{ _('كشف أرصدة المواد') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">⚖️ {{ _('أرصدة المواد') }}</a>
+    </div>
+  </div>
+
+  <!-- فلاتر البحث والاستخراج المتقدم -->
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:14px 0;background:var(--bg-subtle, #f8fafc);padding:14px;border-radius:12px;border:1px solid var(--border,#e2e8f0);">
+    <input type="hidden" name="view_mode" value="{{ view_mode or 'detail' }}">
+    <div class="field" style="flex:1;min-width:180px;">
+      <label style="font-weight:600;font-size:0.85rem;">{{ _('بحث عام') }}</label>
+      <input type="search" name="q" value="{{ q or '' }}" placeholder="{{ _('أمر عمل، مادة، سند، عطل...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
+    </div>
+    <div class="field" style="min-width:180px;">
+      <label style="font-weight:600;font-size:0.85rem;">{{ _('أمر العمل') }}</label>
+      <select name="work_order" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
+        <option value="">{{ _('جميع أوامر العمل') }} ({{ all_work_orders|length }})</option>
+        {% for wo in all_work_orders %}
+        <option value="{{ wo }}" {% if wo == wo_filter %}selected{% endif %}>{{ wo }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width:150px;">
+      <label style="font-weight:600;font-size:0.85rem;">{{ _('نوع الحركة') }}</label>
+      <select name="tx_type" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
+        <option value="">{{ _('جميع الحركات') }}</option>
+        {% for tt in tx_types %}
+        <option value="{{ tt }}" {% if tt == tx_type_filter %}selected{% endif %}>{{ tt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width:140px;">
+      <label style="font-weight:600;font-size:0.85rem;">{{ _('القسم المصدر') }}</label>
+      <select name="source" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
+        <option value="">{{ _('جميع الأقسام') }}</option>
+        <option value="ops" {% if source_filter == 'ops' %}selected{% endif %}>{{ _('العمليات والصيانة') }}</option>
+        <option value="constructions" {% if source_filter == 'constructions' %}selected{% endif %}>{{ _('الإنشاءات') }}</option>
+        <option value="projects" {% if source_filter == 'projects' %}selected{% endif %}>{{ _('المشاريع') }}</option>
+        <option value="reinforcement" {% if source_filter == 'reinforcement' %}selected{% endif %}>{{ _('التعزيز') }}</option>
+        <option value="external" {% if source_filter == 'external' %}selected{% endif %}>{{ _('المشتريات والعهد') }}</option>
+      </select>
+    </div>
+    <div class="field" style="min-width:130px;">
+      <label style="font-weight:600;font-size:0.85rem;">{{ _('من تاريخ') }}</label>
+      <input type="date" name="from_date" value="{{ from_date or '' }}" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
+    </div>
+    <div class="field" style="min-width:130px;">
+      <label style="font-weight:600;font-size:0.85rem;">{{ _('إلى تاريخ') }}</label>
+      <input type="date" name="to_date" value="{{ to_date or '' }}" style="padding:7px 10px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
+    </div>
+    <div class="actions">
+      <button class="btn primary" type="submit">🔍 {{ _('تطبيق الفلتر') }}</button>
+      {% if q or wo_filter or tx_type_filter or source_filter or from_date or to_date %}
+      <a class="btn ghost" href="{{ url_for('warehouse_work_orders_movements', view_mode=view_mode or 'detail') }}">{{ _('مسح الفلاتر') }}</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <!-- بطاقات الملخص الإحصائي -->
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
+
+  <!-- أشرطة التبويب الداخلي: تفصيلي / ملخص حسب أمر العمل -->
+  <div class="actions" style="margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px;gap:8px;">
+    <a class="btn ghost{% if view_mode != 'summary' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode='detail') }}">
+      📑 {{ _('كشف الحركات التفصيلي') }} ({{ rows|length }})
+    </a>
+    <a class="btn ghost{% if view_mode == 'summary' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode='summary') }}">
+      📊 {{ _('ملخص المواد حسب أمر العمل') }} ({{ wo_summaries|length }})
+    </a>
+  </div>
+
+  {% if view_mode == 'summary' %}
+  <!-- جدول ملخص حسب أمر العمل -->
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>{{ _('رقم أمر العمل') }}</th>
+          <th>{{ _('القسم / المرجع') }}</th>
+          <th>{{ _('عدد الحركات') }}</th>
+          <th>{{ _('أصناف المواد') }}</th>
+          <th>{{ _('إجمالي المنصرف') }}</th>
+          <th>{{ _('إجمالي الوارد/المرتجع') }}</th>
+          <th>{{ _('صافي المستهلك') }}</th>
+          <th style="min-width:280px;">{{ _('تفصيل المواد المستهلكة') }}</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in wo_summaries %}
+        <tr>
+          <td style="color:var(--text-muted);font-size:0.85rem;">{{ loop.index }}</td>
+          <td>
+            <strong style="color:var(--primary,#1F4E79);font-size:1.02rem;">{{ s.work_order }}</strong>
+          </td>
+          <td>
+            {% if s.source_label %}
+            <span class="badge ok" style="font-size:0.75rem;">{{ s.source_label }}</span>
+            {% endif %}
+            {% if s.ticket_no %}
+            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:2px;">{{ _('عطل') }}: {{ s.ticket_no }}</div>
+            {% endif %}
+          </td>
+          <td><span class="badge ok">{{ s.tx_count }}</span></td>
+          <td>{{ s.items_count }} {{ _('صنف') }}</td>
+          <td style="color:#f59e0b;font-weight:700;">{{ "%.2f"|format(s.outbound_qty) }}</td>
+          <td style="color:#10b981;font-weight:700;">{{ "%.2f"|format(s.inbound_qty) }}</td>
+          <td>
+            {% if s.net_qty > 0 %}
+            <strong style="color:var(--text);font-size:1rem;">{{ "%.2f"|format(s.net_qty) }}</strong>
+            {% else %}
+            <span style="color:var(--text-muted);">{{ "%.2f"|format(s.net_qty) }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;padding-right:4px;">
+              {% for it in s.items_list %}
+              <div style="font-size:0.82rem;line-height:1.3;display:flex;justify-content:space-between;border-bottom:1px dashed rgba(0,0,0,0.06);padding:2px 0;">
+                <span title="{{ it.item_name }}">{{ it.item_name[:36] }}{% if it.item_name|length > 36 %}...{% endif %}</span>
+                <span style="font-weight:600;white-space:nowrap;margin-right:6px;">
+                  {{ "%.2f"|format(it.net_qty) }} {{ it.unit }}
+                </span>
+              </div>
+              {% endfor %}
+            </div>
+          </td>
+          <td>
+            <a class="btn ghost" href="{{ url_for('warehouse_work_orders_movements', work_order=s.work_order, view_mode='detail') }}" style="font-size:0.82rem;padding:4px 8px;">🔍 {{ _('عرض الحركات') }}</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="10" class="meta" style="text-align:center;padding:30px;">
+            {{ _('لا توجد أوامر عمل مطابقة للفلاتر.') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if wo_summaries %}
+      <tfoot>
+        <tr style="background:var(--bg-subtle,#f1f5f9);font-weight:800;font-size:0.95rem;">
+          <td colspan="3" style="text-align:center;">{{ _('الإجمالي العام') }} ({{ wo_summaries|length }} {{ _('أمر عمل') }})</td>
+          <td>{{ totals.tx_count }}</td>
+          <td>{{ totals.unique_items }} {{ _('صنف') }}</td>
+          <td style="color:#f59e0b;">{{ "%.2f"|format(totals.outbound_qty) }}</td>
+          <td style="color:#10b981;">{{ "%.2f"|format(totals.inbound_qty) }}</td>
+          <td>{{ "%.2f"|format(totals.net_qty) }}</td>
+          <td colspan="2"></td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+
+  {% else %}
+  <!-- جدول كشف الحركات التفصيلي -->
+  <div class="table-wrap">
+    <table class="table" id="work-orders-movements-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>{{ _('رقم أمر العمل') }}</th>
+          <th>{{ _('رقم السند') }}</th>
+          <th>{{ _('التاريخ') }}</th>
+          <th>{{ _('نوع الحركة') }}</th>
+          <th>{{ _('رقم المادة') }}</th>
+          <th class="col-item-name">{{ _('اسم المادة') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th>{{ _('الكمية') }}</th>
+          <th>{{ _('القسم') }}</th>
+          <th>{{ _('العطل / المرجع') }}</th>
+          <th>{{ _('المستلم / المسلم') }}</th>
+          <th>{{ _('ملاحظات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td style="color:var(--text-muted);font-size:0.85rem;">{{ loop.index }}</td>
+          <td>
+            {% if r.work_order %}
+            <strong style="color:var(--primary,#1F4E79);">{{ r.work_order }}</strong>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.voucher_no %}
+            <a href="{{ url_for('warehouse_voucher_detail', voucher_no=r.voucher_no) }}" style="font-weight:600;text-decoration:none;">{{ r.voucher_no }}</a>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td style="white-space:nowrap;font-size:0.88rem;">{{ r.tx_date or '—' }}</td>
+          <td>
+            {% if r.direction == 'out' %}
+            <span class="badge warning" style="font-weight:600;">{{ r.tx_type }}</span>
+            {% elif r.direction == 'return' %}
+            <span class="badge info" style="font-weight:600;background:rgba(59,130,246,0.12);color:#2563eb;">{{ r.tx_type }}</span>
+            {% else %}
+            <span class="badge ok" style="font-weight:600;">{{ r.tx_type }}</span>
+            {% endif %}
+          </td>
+          <td><strong>{{ r.item_no }}</strong></td>
+          <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
+          <td>{{ r.unit or '—' }}</td>
+          <td style="font-weight:700;font-size:0.95rem;{% if r.direction == 'out' %}color:#d97706;{% elif r.direction == 'return' %}color:#2563eb;{% else %}color:#059669;{% endif %}">
+            {{ "%.2f"|format(r.qty or 0) }}
+          </td>
+          <td>
+            <span class="badge ghost" style="font-size:0.75rem;">{{ r.source_label or r.source_section or '—' }}</span>
+          </td>
+          <td style="font-size:0.85rem;">
+            {% if r.ticket_no %}
+            <a href="{{ url_for('ticket_view', ticket_id=r.ticket_id or 0) if r.ticket_id else 'javascript:void(0)' }}" style="text-decoration:none;">{{ r.ticket_no }}</a>
+            {% elif r.source_ref %}
+            <span>{{ r.source_ref }}</span>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td style="font-size:0.82rem;line-height:1.3;">
+            {% if r.recipient %}<div><strong style="color:var(--text-muted);">{{ _('مستلم') }}:</strong> {{ r.recipient }}</div>{% endif %}
+            {% if r.sender %}<div><strong style="color:var(--text-muted);">{{ _('مسلّم') }}:</strong> {{ r.sender }}</div>{% endif %}
+            {% if not r.recipient and not r.sender %}—{% endif %}
+          </td>
+          <td style="font-size:0.82rem;color:var(--text-muted);max-width:180px;">{{ r.notes or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="13" class="meta" style="text-align:center;padding:30px;">
+            {{ _('لا توجد حركات مواد مطابقة للفلاتر المحددة.') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        <tr style="background:var(--bg-subtle,#f1f5f9);font-weight:800;font-size:0.95rem;">
+          <td colspan="4" style="text-align:center;">{{ _('الإجمالي') }} ({{ rows|length }} {{ _('حركة') }})</td>
+          <td colspan="4">{{ _('أوامر العمل') }}: {{ totals.unique_work_orders }} | {{ _('المواد') }}: {{ totals.unique_items }}</td>
+          <td style="color:#d97706;" title="{{ _('إجمالي المنصرف') }}">{{ "%.2f"|format(totals.outbound_qty) }}</td>
+          <td colspan="4" style="font-size:0.88rem;color:var(--text-muted);">
+            {{ _('الوارد/المرتجع') }}: <span style="color:#059669;font-weight:700;">{{ "%.2f"|format(totals.inbound_qty) }}</span> | 
+            {{ _('الصافي') }}: <span style="color:var(--text);font-weight:700;">{{ "%.2f"|format(totals.net_qty) }}</span>
+          </td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

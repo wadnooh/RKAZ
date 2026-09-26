@@ -22,8 +22,17 @@
   </div>
 
   <div class="actions" style="margin-bottom:14px;flex-wrap:wrap;gap:8px;">
+    <a class="btn primary" href="{{ url_for('warehouse_materials_report', q=q or '') }}" style="font-weight:700;">
+      📋 {{ _('كشف جميع المواد') }}
+    </a>
+    <a class="btn ghost" href="{{ url_for('warehouse_materials_report_excel', q=q or '') }}">
+      📥 {{ _('تصدير كشف المواد Excel') }}
+    </a>
+    <a class="btn ghost" href="{{ url_for('warehouse_work_orders_movements') }}">
+      📦 {{ _('حركة مواد أوامر العمل') }}
+    </a>
     {% if can('modules.write') or can('section.warehouses') %}
-    <button class="btn primary" type="button" onclick="document.getElementById('quick-add-item-modal').style.display='flex'" style="font-weight:700;">
+    <button class="btn ghost" type="button" onclick="document.getElementById('quick-add-item-modal').style.display='flex'" style="font-weight:600;">
       ➕ {{ _('إضافة صنف / رصيد جديد') }}
     </button>
     {% endif %}

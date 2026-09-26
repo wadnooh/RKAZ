@@ -1486,6 +1486,10 @@ def required_perm_for_request() -> str | None:
         "safety_home": "section.safety",
         "warehouses_home": "section.warehouses",
         "warehouse_balances": "section.warehouses",
+        "warehouse_materials_report": "section.warehouses",
+        "warehouse_materials_report_excel": "section.warehouses",
+        "warehouse_work_orders_movements": "section.warehouses",
+        "warehouse_work_orders_movements_excel": "section.warehouses",
         "warehouse_item_quick_add": "section.warehouses",
         "warehouse_movements_summary": "section.warehouses",
         "external_purchases_home": "section.external",
@@ -1605,7 +1609,7 @@ def required_perm_for_request() -> str | None:
             return button_perm
         return None if has_perm("export") or has_perm("modules.read") else "modules.read"
 
-    if ep in {"export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf"}:
+    if ep in {"export_primary_teams_excel", "export_primary_teams_pdf", "warehouse_specialty_pdf", "warehouse_materials_report_excel", "warehouse_work_orders_movements_excel"}:
         return None if has_perm("export") else "export"
 
     if ep in {"global_search", "transaction_trace"}:

@@ -6697,6 +6697,792 @@ def warehouse_balances_clear():
     return redirect(url_for("warehouse_balances"))
 
 
+def _materials_report_data():
+    """بيانات كشف المواد مع الفلاتر — مشترك بين العرض والتصدير."""
+    q = (request.args.get("q") or "").strip().lower()
+    cat_filter = (request.args.get("category") or "").strip()
+    stock_filter = (request.args.get("stock") or "").strip().lower()
+
+    conn = db.connect()
+    items = db.rows_to_dicts(conn.execute("SELECT * FROM warehouse_items ORDER BY item_no").fetchall())
+    conn.close()
+
+    categories = sorted(set(r.get("category") or "" for r in items if r.get("category")))
+
+    for item in items:
+        item["unit"] = db.normalize_warehouse_unit(item.get("unit"))
+        detail = db.warehouse_balance_detail(item.get("item_no"))
+        item.update(detail)
+
+    # فلتر البحث
+    if q:
+        items = [
+            r for r in items
+            if q in (r.get("item_no") or "").lower()
+            or q in (r.get("item_name") or "").lower()
+            or q in (r.get("category") or "").lower()
+        ]
+    # فلتر التصنيف
+    if cat_filter:
+        items = [r for r in items if (r.get("category") or "") == cat_filter]
+    # فلتر الأرصدة
+    if stock_filter == "low":
+        items = [
+            r for r in items
+            if (r.get("available_balance") if r.get("available_balance") is not None else r.get("balance") or 0) <= (r.get("min_qty") or 0)
+        ]
+    elif stock_filter == "zero":
+        items = [
+            r for r in items
+            if (r.get("available_balance") if r.get("available_balance") is not None else r.get("balance") or 0) <= 0
+        ]
+    elif stock_filter == "available":
+        items = [
+            r for r in items
+            if (r.get("available_balance") if r.get("available_balance") is not None else r.get("balance") or 0) > 0
+        ]
+
+    # حساب الإجماليات
+    totals = {
+        "inbound": sum(float(r.get("inbound") or 0) for r in items),
+        "outbound": sum(float(r.get("outbound") or 0) for r in items),
+        "balance": sum(float(r.get("balance") or 0) for r in items),
+        "reserved": sum(float(r.get("reserved") or 0) for r in items),
+        "available": sum(
+            float(r.get("available_balance") if r.get("available_balance") is not None else r.get("balance") or 0)
+            for r in items
+        ),
+        "tx_count": sum(int(r.get("tx_count") or 0) for r in items),
+        "low_count": sum(
+            1 for r in items
+            if (r.get("available_balance") if r.get("available_balance") is not None else r.get("balance") or 0) <= (r.get("min_qty") or 0)
+        ),
+    }
+
+    return items, categories, totals, q, cat_filter, stock_filter
+
+
+@app.route("/warehouses/materials-report")
+@login_required
+def warehouse_materials_report():
+    """كشف مواد أرصدة المستودع الشامل."""
+    items, categories, totals, q, cat_filter, stock_filter = _materials_report_data()
+
+    hint = _t("حسب الفلاتر المحددة") if (q or cat_filter or stock_filter) else _t("جميع المواد")
+    summary_cards = [
+        _summary_card(_t("عدد الأصناف"), len(items), hint),
+        _summary_card(_t("إجمالي الوارد"), f"{totals['inbound']:.2f}", hint),
+        _summary_card(_t("إجمالي المنصرف"), f"{totals['outbound']:.2f}", hint),
+        _summary_card(_t("إجمالي الرصيد"), f"{totals['balance']:.2f}", _t("الوارد − المنصرف")),
+        _summary_card(_t("المتاح"), f"{totals['available']:.2f}", _t("الرصيد − حجوزات العهد")),
+        _summary_card(
+            _t("أصناف منخفضة/نفدت"),
+            totals["low_count"],
+            _t("تحتاج توريد"),
+        ),
+    ]
+
+    return render_template(
+        "warehouse_materials_report.html",
+        rows=items,
+        categories=categories,
+        totals=totals,
+        q=q,
+        cat_filter=cat_filter,
+        stock_filter=stock_filter,
+        warehouse_active="materials_report",
+        summary_cards=summary_cards,
+    )
+
+
+@app.route("/warehouses/materials-report.xlsx")
+@login_required
+def warehouse_materials_report_excel():
+    """تصدير كشف مواد أرصدة المستودع إلى Excel."""
+    from openpyxl import Workbook
+    from webapp import excel_brand as brand
+
+    items, categories, totals, q, cat_filter, stock_filter = _materials_report_data()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "كشف المواد"
+
+    headers = [
+        "#",
+        "رقم المادة",
+        "اسم المادة",
+        "الوحدة",
+        "التصنيف",
+        "الوارد",
+        "المنصرف",
+        "الرصيد",
+        "محجوز عهد",
+        "المتاح",
+        "حد أدنى",
+        "الحالة",
+        "عدد الحركات",
+    ]
+    ncol = len(headers)
+
+    # الفلاتر النشطة كبيانات وصفية
+    meta = []
+    if q:
+        meta.append(f"بحث: {q}")
+    if cat_filter:
+        meta.append(f"التصنيف: {cat_filter}")
+    if stock_filter:
+        labels = {"low": "تحت الحد الأدنى", "zero": "رصيد صفري", "available": "متوفرة فقط"}
+        meta.append(f"الأرصدة: {labels.get(stock_filter, stock_filter)}")
+
+    header_row = brand.apply_brand_header(
+        ws,
+        title="كشف مواد أرصدة المستودع",
+        ncol=ncol,
+        meta_lines=meta or None,
+        summary_lines=[
+            f"عدد الأصناف: {len(items)}  |  إجمالي الوارد: {totals['inbound']:.2f}  |  إجمالي المنصرف: {totals['outbound']:.2f}",
+            f"إجمالي الرصيد: {totals['balance']:.2f}  |  المتاح: {totals['available']:.2f}  |  أصناف منخفضة/نفدت: {totals['low_count']}",
+        ],
+    )
+
+    widths = {
+        "#": 6,
+        "رقم المادة": 16,
+        "اسم المادة": 42,
+        "الوحدة": 10,
+        "التصنيف": 18,
+        "الوارد": 12,
+        "المنصرف": 12,
+        "الرصيد": 12,
+        "محجوز عهد": 12,
+        "المتاح": 12,
+        "حد أدنى": 10,
+        "الحالة": 12,
+        "عدد الحركات": 12,
+    }
+    brand.write_header_row(ws, headers, header_row, widths=widths)
+
+    for idx, r in enumerate(items, start=1):
+        row_num = header_row + idx
+        available = r.get("available_balance") if r.get("available_balance") is not None else r.get("balance") or 0
+        if available <= 0:
+            status = "نفذ"
+        elif available <= (r.get("min_qty") or 0):
+            status = "منخفض"
+        else:
+            status = "متوفر"
+
+        vals = [
+            idx,
+            r.get("item_no") or "",
+            r.get("item_name") or "",
+            r.get("unit") or "",
+            r.get("category") or "",
+            float(r.get("inbound") or 0),
+            float(r.get("outbound") or 0),
+            float(r.get("balance") or 0),
+            float(r.get("reserved") or 0),
+            float(available),
+            float(r.get("min_qty") or 0),
+            status,
+            int(r.get("tx_count") or 0),
+        ]
+        for col, val in enumerate(vals, start=1):
+            ws.cell(row=row_num, column=col, value=val)
+
+    end_row = header_row + len(items)
+    brand.style_data_rows(ws, start_row=header_row + 1, end_row=end_row, ncol=ncol)
+
+    # صف الإجماليات
+    if items:
+        total_row = end_row + 1
+        ws.cell(row=total_row, column=1, value="")
+        ws.merge_cells(start_row=total_row, start_column=1, end_row=total_row, end_column=5)
+        ws.cell(row=total_row, column=1, value=f"الإجمالي ({len(items)} صنف)")
+        ws.cell(row=total_row, column=6, value=totals["inbound"])
+        ws.cell(row=total_row, column=7, value=totals["outbound"])
+        ws.cell(row=total_row, column=8, value=totals["balance"])
+        ws.cell(row=total_row, column=9, value=totals["reserved"])
+        ws.cell(row=total_row, column=10, value=totals["available"])
+        ws.cell(row=total_row, column=13, value=totals["tx_count"])
+
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        for col in range(1, ncol + 1):
+            cell = ws.cell(row=total_row, column=col)
+            cell.font = Font(name="Arial", size=11, bold=True, color="002060")
+            cell.fill = PatternFill("solid", fgColor="FFFDF8")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(
+                top=Side(style="medium", color="1F4E79"),
+                bottom=Side(style="medium", color="1F4E79"),
+                left=Side(style="thin", color="D0D5DD"),
+                right=Side(style="thin", color="D0D5DD"),
+            )
+
+    ws.auto_filter.ref = f"A{header_row}:{chr(64 + ncol)}{end_row}"
+
+    data = brand.save_workbook_bytes(wb)
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=f"كشف_مواد_المستودع_{datetime.now().strftime('%Y%m%d')}.xlsx",
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
+def _warehouse_work_orders_movements_data():
+    """بيانات حركة المواد لجميع أوامر العمل مع الفلاتر والتجميع — مشترك بين العرض والتصدير."""
+    q = (request.args.get("q") or "").strip().lower()
+    wo_filter = (request.args.get("work_order") or "").strip()
+    tx_type_filter = (request.args.get("tx_type") or "").strip()
+    source_filter = (request.args.get("source") or "").strip().lower()
+    from_date = (request.args.get("from_date") or "").strip()
+    to_date = (request.args.get("to_date") or "").strip()
+    view_mode = (request.args.get("view_mode") or "detail").strip().lower()
+    if view_mode not in ("detail", "summary"):
+        view_mode = "detail"
+
+    db.backfill_warehouse_tx_sources()
+    db.ensure_schema()
+    conn = db.connect()
+    try:
+        txs = db.rows_to_dicts(
+            conn.execute("SELECT * FROM warehouse_tx ORDER BY tx_date DESC, id DESC").fetchall()
+        )
+        db.enrich_warehouse_txs_work_order(txs, conn)
+
+        ticket_map = {}
+        for t in conn.execute("SELECT id, ticket_no, rekaz_code FROM tickets").fetchall():
+            if t["ticket_no"]:
+                ticket_map[str(t["ticket_no"]).strip()] = t["id"]
+            if t["rekaz_code"]:
+                ticket_map[str(t["rekaz_code"]).strip().lower()] = t["id"]
+
+        all_wo_set = set()
+        for r in txs:
+            wo = (r.get("work_order") or "").strip()
+            if wo:
+                all_wo_set.add(wo)
+        for row in conn.execute("SELECT work_order FROM tickets WHERE coalesce(trim(work_order),'')<>''").fetchall():
+            all_wo_set.add(str(row[0]).strip())
+        tables = [t[0] for t in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "primary_team_orders" in tables:
+            for row in conn.execute("SELECT work_order FROM primary_team_orders WHERE coalesce(trim(work_order),'')<>''").fetchall():
+                all_wo_set.add(str(row[0]).strip())
+    finally:
+        conn.close()
+
+    all_work_orders = sorted(all_wo_set)
+    tx_types = sorted(set((r.get("tx_type") or "").strip() for r in txs if (r.get("tx_type") or "").strip()))
+
+    for r in txs:
+        r["unit"] = db.normalize_warehouse_unit(r.get("unit"))
+        r["work_order"] = (r.get("work_order") or "").strip()
+        ttype = (r.get("tx_type") or "").strip()
+        if any(w in ttype for w in ("منصرف", "صرف", "خروج")):
+            r["direction"] = "out"
+        elif any(w in ttype for w in ("إرجاع", "مرتجع", "رد")):
+            r["direction"] = "return"
+        else:
+            r["direction"] = "in"
+        r["source_label"] = _warehouse_source_label(r.get("source_section"))
+        tno = str(r.get("ticket_no") or "").strip()
+        code = str(r.get("rekaz_code") or "").strip().lower()
+        r["ticket_id"] = ticket_map.get(tno) or ticket_map.get(code)
+
+    filtered = txs
+    if wo_filter:
+        filtered = [r for r in filtered if (r.get("work_order") or "").strip() == wo_filter]
+    if tx_type_filter:
+        filtered = [r for r in filtered if (r.get("tx_type") or "").strip() == tx_type_filter]
+    if source_filter:
+        filtered = [r for r in filtered if (r.get("source_section") or "").strip().lower() == source_filter]
+    if from_date:
+        filtered = [r for r in filtered if (r.get("tx_date") or "") >= from_date]
+    if to_date:
+        filtered = [r for r in filtered if (r.get("tx_date") or "") <= to_date]
+    if q:
+        filtered = [
+            r for r in filtered
+            if q in (r.get("work_order") or "").lower()
+            or q in (r.get("item_no") or "").lower()
+            or q in (r.get("item_name") or "").lower()
+            or q in (r.get("voucher_no") or "").lower()
+            or q in (r.get("ticket_no") or "").lower()
+            or q in (r.get("rekaz_code") or "").lower()
+            or q in (r.get("recipient") or "").lower()
+            or q in (r.get("sender") or "").lower()
+            or q in (r.get("notes") or "").lower()
+            or q in (r.get("source_label") or "").lower()
+        ]
+
+    out_qty = sum(float(r.get("qty") or 0) for r in filtered if r.get("direction") == "out")
+    in_qty = sum(float(r.get("qty") or 0) for r in filtered if r.get("direction") in ("in", "return"))
+    unique_wos = sorted(set(r.get("work_order") for r in filtered if r.get("work_order")))
+    unique_items = sorted(set(r.get("item_no") for r in filtered if r.get("item_no")))
+
+    totals = {
+        "tx_count": len(filtered),
+        "unique_work_orders": len(unique_wos),
+        "unique_items": len(unique_items),
+        "outbound_qty": out_qty,
+        "inbound_qty": in_qty,
+        "net_qty": out_qty - in_qty,
+    }
+
+    wo_groups = {}
+    for r in filtered:
+        wo_key = (r.get("work_order") or "").strip() or "غير محدد"
+        if wo_key not in wo_groups:
+            wo_groups[wo_key] = {
+                "work_order": wo_key,
+                "tx_count": 0,
+                "outbound_qty": 0.0,
+                "inbound_qty": 0.0,
+                "source_labels": set(),
+                "tickets": set(),
+                "items_map": {},
+            }
+        g = wo_groups[wo_key]
+        g["tx_count"] += 1
+        qty = float(r.get("qty") or 0)
+        dir_ = r.get("direction")
+        if dir_ == "out":
+            g["outbound_qty"] += qty
+        else:
+            g["inbound_qty"] += qty
+        if r.get("source_label"):
+            g["source_labels"].add(r["source_label"])
+        if r.get("ticket_no"):
+            g["tickets"].add(str(r["ticket_no"]))
+
+        item_key = (r.get("item_no") or "").strip()
+        if item_key:
+            if item_key not in g["items_map"]:
+                g["items_map"][item_key] = {
+                    "item_no": item_key,
+                    "item_name": r.get("item_name") or item_key,
+                    "unit": r.get("unit") or "عدد",
+                    "out_qty": 0.0,
+                    "in_qty": 0.0,
+                    "net_qty": 0.0,
+                }
+            it = g["items_map"][item_key]
+            if dir_ == "out":
+                it["out_qty"] += qty
+            else:
+                it["in_qty"] += qty
+            it["net_qty"] = it["out_qty"] - it["in_qty"]
+
+    wo_summaries = []
+    for k, g in wo_groups.items():
+        items_list = list(g["items_map"].values())
+        items_list.sort(key=lambda x: x["out_qty"], reverse=True)
+        wo_summaries.append({
+            "work_order": g["work_order"],
+            "tx_count": g["tx_count"],
+            "items_count": len(g["items_map"]),
+            "outbound_qty": g["outbound_qty"],
+            "inbound_qty": g["inbound_qty"],
+            "net_qty": g["outbound_qty"] - g["inbound_qty"],
+            "source_label": "، ".join(sorted(g["source_labels"])) if g["source_labels"] else "",
+            "ticket_no": "، ".join(sorted(g["tickets"])) if g["tickets"] else "",
+            "items_list": items_list,
+        })
+    wo_summaries.sort(key=lambda x: x["tx_count"], reverse=True)
+
+    return (
+        filtered,
+        wo_summaries,
+        totals,
+        all_work_orders,
+        tx_types,
+        q,
+        wo_filter,
+        tx_type_filter,
+        source_filter,
+        from_date,
+        to_date,
+        view_mode,
+    )
+
+
+@app.route("/warehouses/work-orders-movements")
+@login_required
+def warehouse_work_orders_movements():
+    """كشف واستخراج حركة جميع المواد لجميع أوامر العمل."""
+    (
+        rows,
+        wo_summaries,
+        totals,
+        all_work_orders,
+        tx_types,
+        q,
+        wo_filter,
+        tx_type_filter,
+        source_filter,
+        from_date,
+        to_date,
+        view_mode,
+    ) = _warehouse_work_orders_movements_data()
+
+    hint = _t("حسب الفلاتر المحددة") if (q or wo_filter or tx_type_filter or source_filter or from_date or to_date) else _t("جميع أوامر العمل")
+    summary_cards = [
+        _summary_card(_t("أوامر العمل"), totals["unique_work_orders"], hint),
+        _summary_card(_t("إجمالي الحركات"), totals["tx_count"], hint),
+        _summary_card(_t("الكميات المنصرفة"), f"{totals['outbound_qty']:.2f}", _t("صرف لأوامر العمل")),
+        _summary_card(_t("الوارد / المرتجع"), f"{totals['inbound_qty']:.2f}", _t("مرتجع للكهرباء / المستودع")),
+        _summary_card(_t("صافي المستهلك"), f"{totals['net_qty']:.2f}", _t("المنصرف − المرتجع")),
+        _summary_card(_t("أصناف المواد"), totals["unique_items"], _t("مواد مستخدمة")),
+    ]
+
+    return render_template(
+        "warehouse_work_orders_movements.html",
+        rows=rows,
+        wo_summaries=wo_summaries,
+        totals=totals,
+        all_work_orders=all_work_orders,
+        tx_types=tx_types,
+        q=q,
+        wo_filter=wo_filter,
+        tx_type_filter=tx_type_filter,
+        source_filter=source_filter,
+        from_date=from_date,
+        to_date=to_date,
+        view_mode=view_mode,
+        warehouse_active="work_orders_movements",
+        summary_cards=summary_cards,
+    )
+
+
+@app.route("/warehouses/work-orders-movements.xlsx")
+@login_required
+def warehouse_work_orders_movements_excel():
+    """تصدير كشف حركة جميع المواد لجميع أوامر العمل إلى ملف Excel متقدم ومتعدد الأوراق."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from webapp import excel_brand as brand
+
+    (
+        rows,
+        wo_summaries,
+        totals,
+        all_work_orders,
+        tx_types,
+        q,
+        wo_filter,
+        tx_type_filter,
+        source_filter,
+        from_date,
+        to_date,
+        view_mode,
+    ) = _warehouse_work_orders_movements_data()
+
+    wb = Workbook()
+
+    # --- الورقة الأولى: تفصيل حركات أوامر العمل ---
+    ws1 = wb.active
+    ws1.title = "حركات أوامر العمل"
+
+    headers1 = [
+        "#",
+        "رقم أمر العمل",
+        "رقم السند",
+        "تاريخ الحركة",
+        "نوع الحركة",
+        "الاتجاه",
+        "رقم المادة",
+        "اسم المادة",
+        "الوحدة",
+        "الكمية",
+        "القسم المصدر",
+        "رقم العطل",
+        "كود ركاز",
+        "المستلم",
+        "المسلم",
+        "المنطقة",
+        "ملاحظات",
+    ]
+    ncol1 = len(headers1)
+
+    meta1 = []
+    if wo_filter:
+        meta1.append(f"أمر العمل: {wo_filter}")
+    if q:
+        meta1.append(f"بحث: {q}")
+    if tx_type_filter:
+        meta1.append(f"نوع الحركة: {tx_type_filter}")
+    if source_filter:
+        meta1.append(f"القسم: {source_filter}")
+    if from_date or to_date:
+        meta1.append(f"الفترة: {from_date or 'البداية'} إلى {to_date or 'الآن'}")
+
+    hrow1 = brand.apply_brand_header(
+        ws1,
+        title="كشف حركة جميع المواد لأوامر العمل",
+        ncol=ncol1,
+        meta_lines=meta1 or None,
+        summary_lines=[
+            f"عدد الحركات: {len(rows)}  |  أوامر العمل: {totals['unique_work_orders']}  |  أصناف المواد: {totals['unique_items']}",
+            f"إجمالي المنصرف: {totals['outbound_qty']:.2f}  |  إجمالي الوارد/المرتجع: {totals['inbound_qty']:.2f}  |  صافي المستهلك: {totals['net_qty']:.2f}",
+        ],
+    )
+
+    widths1 = {
+        "#": 6,
+        "رقم أمر العمل": 18,
+        "رقم السند": 16,
+        "تاريخ الحركة": 14,
+        "نوع الحركة": 18,
+        "الاتجاه": 12,
+        "رقم المادة": 16,
+        "اسم المادة": 40,
+        "الوحدة": 10,
+        "الكمية": 14,
+        "القسم المصدر": 18,
+        "رقم العطل": 14,
+        "كود ركاز": 12,
+        "المستلم": 20,
+        "المسلم": 20,
+        "المنطقة": 14,
+        "ملاحظات": 26,
+    }
+    brand.write_header_row(ws1, headers1, hrow1, widths=widths1)
+
+    for idx, r in enumerate(rows, start=1):
+        r_num = hrow1 + idx
+        dir_label = "منصرف" if r.get("direction") == "out" else ("مرتجع" if r.get("direction") == "return" else "وارد")
+        vals = [
+            idx,
+            r.get("work_order") or "",
+            r.get("voucher_no") or "",
+            r.get("tx_date") or "",
+            r.get("tx_type") or "",
+            dir_label,
+            r.get("item_no") or "",
+            r.get("item_name") or "",
+            r.get("unit") or "",
+            float(r.get("qty") or 0),
+            r.get("source_label") or r.get("source_section") or "",
+            r.get("ticket_no") or "",
+            r.get("rekaz_code") or "",
+            r.get("recipient") or "",
+            r.get("sender") or "",
+            r.get("region") or "",
+            r.get("notes") or "",
+        ]
+        for col, val in enumerate(vals, start=1):
+            ws1.cell(row=r_num, column=col, value=val)
+
+    end_row1 = hrow1 + len(rows)
+    brand.style_data_rows(ws1, start_row=hrow1 + 1, end_row=end_row1, ncol=ncol1)
+
+    if rows:
+        tot_row1 = end_row1 + 1
+        ws1.merge_cells(start_row=tot_row1, start_column=1, end_row=tot_row1, end_column=9)
+        ws1.cell(row=tot_row1, column=1, value=f"الإجمالي العام ({len(rows)} حركة | {totals['unique_work_orders']} أمر عمل)")
+        ws1.cell(row=tot_row1, column=10, value=totals["outbound_qty"])
+
+        for col in range(1, ncol1 + 1):
+            cell = ws1.cell(row=tot_row1, column=col)
+            cell.font = Font(name="Arial", size=11, bold=True, color="002060")
+            cell.fill = PatternFill("solid", fgColor="FFFDF8")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(
+                top=Side(style="medium", color="1F4E79"),
+                bottom=Side(style="medium", color="1F4E79"),
+                left=Side(style="thin", color="D0D5DD"),
+                right=Side(style="thin", color="D0D5DD"),
+            )
+        ws1.auto_filter.ref = f"A{hrow1}:Q{end_row1}"
+
+    # --- الورقة الثانية: ملخص المواد حسب أمر العمل ---
+    ws2 = wb.create_sheet(title="ملخص أوامر العمل والمواد")
+    headers2 = [
+        "#",
+        "رقم أمر العمل",
+        "رقم المادة",
+        "اسم المادة",
+        "الوحدة",
+        "إجمالي المنصرف",
+        "إجمالي الوارد/المرتجع",
+        "صافي المستهلك",
+        "القسم المصدر",
+        "رقم العطل",
+    ]
+    ncol2 = len(headers2)
+
+    hrow2 = brand.apply_brand_header(
+        ws2,
+        title="ملخص المواد المستهلكة حسب أوامر العمل",
+        ncol=ncol2,
+        meta_lines=meta1 or None,
+        summary_lines=[
+            f"أوامر العمل: {len(wo_summaries)}  |  إجمالي المنصرف: {totals['outbound_qty']:.2f}  |  صافي المستهلك: {totals['net_qty']:.2f}"
+        ],
+    )
+
+    widths2 = {
+        "#": 6,
+        "رقم أمر العمل": 18,
+        "رقم المادة": 16,
+        "اسم المادة": 40,
+        "الوحدة": 10,
+        "إجمالي المنصرف": 16,
+        "إجمالي الوارد/المرتجع": 18,
+        "صافي المستهلك": 16,
+        "القسم المصدر": 20,
+        "رقم العطل": 14,
+    }
+    brand.write_header_row(ws2, headers2, hrow2, widths=widths2)
+
+    flat_wo_items = []
+    for s in wo_summaries:
+        for it in s.get("items_list", []):
+            flat_wo_items.append({
+                "work_order": s["work_order"],
+                "item_no": it["item_no"],
+                "item_name": it["item_name"],
+                "unit": it["unit"],
+                "out_qty": it["out_qty"],
+                "in_qty": it["in_qty"],
+                "net_qty": it["net_qty"],
+                "source_label": s["source_label"],
+                "ticket_no": s["ticket_no"],
+            })
+
+    for idx, fwi in enumerate(flat_wo_items, start=1):
+        r_num = hrow2 + idx
+        vals = [
+            idx,
+            fwi["work_order"],
+            fwi["item_no"],
+            fwi["item_name"],
+            fwi["unit"],
+            float(fwi["out_qty"]),
+            float(fwi["in_qty"]),
+            float(fwi["net_qty"]),
+            fwi["source_label"],
+            fwi["ticket_no"],
+        ]
+        for col, val in enumerate(vals, start=1):
+            ws2.cell(row=r_num, column=col, value=val)
+
+    end_row2 = hrow2 + len(flat_wo_items)
+    brand.style_data_rows(ws2, start_row=hrow2 + 1, end_row=end_row2, ncol=ncol2)
+
+    if flat_wo_items:
+        tot_row2 = end_row2 + 1
+        ws2.merge_cells(start_row=tot_row2, start_column=1, end_row=tot_row2, end_column=5)
+        ws2.cell(row=tot_row2, column=1, value=f"الإجمالي ({len(wo_summaries)} أمر عمل)")
+        ws2.cell(row=tot_row2, column=6, value=totals["outbound_qty"])
+        ws2.cell(row=tot_row2, column=7, value=totals["inbound_qty"])
+        ws2.cell(row=tot_row2, column=8, value=totals["net_qty"])
+
+        for col in range(1, ncol2 + 1):
+            cell = ws2.cell(row=tot_row2, column=col)
+            cell.font = Font(name="Arial", size=11, bold=True, color="002060")
+            cell.fill = PatternFill("solid", fgColor="FFFDF8")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(
+                top=Side(style="medium", color="1F4E79"),
+                bottom=Side(style="medium", color="1F4E79"),
+                left=Side(style="thin", color="D0D5DD"),
+                right=Side(style="thin", color="D0D5DD"),
+            )
+        ws2.auto_filter.ref = f"A{hrow2}:J{end_row2}"
+
+    # --- الورقة الثالثة: بطاقات إجمالي أوامر العمل ---
+    ws3 = wb.create_sheet(title="إجمالي أوامر العمل")
+    headers3 = [
+        "#",
+        "رقم أمر العمل",
+        "عدد الحركات",
+        "أصناف المواد",
+        "إجمالي المنصرف",
+        "إجمالي الوارد/المرتجع",
+        "صافي المستهلك",
+        "القسم المصدر",
+        "رقم العطل",
+    ]
+    ncol3 = len(headers3)
+
+    hrow3 = brand.apply_brand_header(
+        ws3,
+        title="ملخص أوامر العمل وحركات المواد",
+        ncol=ncol3,
+        meta_lines=meta1 or None,
+        summary_lines=[
+            f"عدد أوامر العمل: {len(wo_summaries)}  |  إجمالي الحركات: {totals['tx_count']}  |  صافي الكميات: {totals['net_qty']:.2f}"
+        ],
+    )
+
+    widths3 = {
+        "#": 6,
+        "رقم أمر العمل": 20,
+        "عدد الحركات": 14,
+        "أصناف المواد": 14,
+        "إجمالي المنصرف": 16,
+        "إجمالي الوارد/المرتجع": 18,
+        "صافي المستهلك": 16,
+        "القسم المصدر": 22,
+        "رقم العطل": 16,
+    }
+    brand.write_header_row(ws3, headers3, hrow3, widths=widths3)
+
+    for idx, s in enumerate(wo_summaries, start=1):
+        r_num = hrow3 + idx
+        vals = [
+            idx,
+            s["work_order"],
+            int(s["tx_count"]),
+            int(s["items_count"]),
+            float(s["outbound_qty"]),
+            float(s["inbound_qty"]),
+            float(s["net_qty"]),
+            s["source_label"],
+            s["ticket_no"],
+        ]
+        for col, val in enumerate(vals, start=1):
+            ws3.cell(row=r_num, column=col, value=val)
+
+    end_row3 = hrow3 + len(wo_summaries)
+    brand.style_data_rows(ws3, start_row=hrow3 + 1, end_row=end_row3, ncol=ncol3)
+
+    if wo_summaries:
+        tot_row3 = end_row3 + 1
+        ws3.merge_cells(start_row=tot_row3, start_column=1, end_row=tot_row3, end_column=2)
+        ws3.cell(row=tot_row3, column=1, value=f"الإجمالي ({len(wo_summaries)} أمر عمل)")
+        ws3.cell(row=tot_row3, column=3, value=totals["tx_count"])
+        ws3.cell(row=tot_row3, column=4, value=totals["unique_items"])
+        ws3.cell(row=tot_row3, column=5, value=totals["outbound_qty"])
+        ws3.cell(row=tot_row3, column=6, value=totals["inbound_qty"])
+        ws3.cell(row=tot_row3, column=7, value=totals["net_qty"])
+
+        for col in range(1, ncol3 + 1):
+            cell = ws3.cell(row=tot_row3, column=col)
+            cell.font = Font(name="Arial", size=11, bold=True, color="002060")
+            cell.fill = PatternFill("solid", fgColor="FFFDF8")
+            cell.alignment = Alignment(horizontal="center", vertical="center")
+            cell.border = Border(
+                top=Side(style="medium", color="1F4E79"),
+                bottom=Side(style="medium", color="1F4E79"),
+                left=Side(style="thin", color="D0D5DD"),
+                right=Side(style="thin", color="D0D5DD"),
+            )
+        ws3.auto_filter.ref = f"A{hrow3}:I{end_row3}"
+
+    data = brand.save_workbook_bytes(wb)
+    filename = f"حركة_مواد_أوامر_العمل_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    return send_file(
+        io.BytesIO(data),
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+
 @app.route("/warehouses/tx/import", methods=["POST"])
 @login_required
 def warehouse_tx_import():

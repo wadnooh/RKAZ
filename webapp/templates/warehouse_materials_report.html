@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block content %}
+{% set warehouse_active = 'materials_report' %}
+{% include "_warehouse_subnav.html" %}
+<div class="card">
+  <div class="toolbar" style="flex-wrap:wrap;gap:12px;">
+    <div>
+      <h2 class="section-title">📋 {{ _('كشف مواد أرصدة المستودع') }}</h2>
+      <div class="meta">{{ _('كشف شامل بجميع المواد في المستودع مع تفاصيل الأرصدة والحركات — مناسب للطباعة والتصدير.') }}</div>
+    </div>
+    <div class="actions" style="flex-wrap:wrap;gap:8px;">
+      <a class="btn primary" href="{{ url_for('warehouse_materials_report_excel', q=q or '', category=cat_filter or '', stock=stock_filter or '') }}">📥 {{ _('تصدير Excel') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_work_orders_movements') }}">📦 {{ _('حركة مواد أوامر العمل') }}</a>
+      <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">⚖️ {{ _('أرصدة المواد') }}</a>
+      <button class="btn ghost" onclick="window.print()">🖨️ {{ _('طباعة') }}</button>
+    </div>
+  </div>
+
+  <!-- فلاتر البحث والتصنيف -->
+  <form method="get" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:14px 0;">
+    <div class="field" style="flex:1;min-width:200px;">
+      <label>{{ _('بحث') }}</label>
+      <input type="search" name="q" value="{{ q or '' }}" placeholder="{{ _('رقم المادة أو الاسم...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;width:100%;box-sizing:border-box;">
+    </div>
+    <div class="field" style="min-width:160px;">
+      <label>{{ _('التصنيف') }}</label>
+      <select name="category" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;width:100%;box-sizing:border-box;">
+        <option value="">{{ _('الكل') }}</option>
+        {% for cat in categories %}
+        <option value="{{ cat }}" {% if cat == cat_filter %}selected{% endif %}>{{ cat }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="field" style="min-width:140px;">
+      <label>{{ _('الأرصدة') }}</label>
+      <select name="stock" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;width:100%;box-sizing:border-box;">
+        <option value="">{{ _('الكل') }}</option>
+        <option value="low" {% if stock_filter == 'low' %}selected{% endif %}>{{ _('تحت الحد الأدنى') }}</option>
+        <option value="zero" {% if stock_filter == 'zero' %}selected{% endif %}>{{ _('رصيد صفري') }}</option>
+        <option value="available" {% if stock_filter == 'available' %}selected{% endif %}>{{ _('متوفرة فقط') }}</option>
+      </select>
+    </div>
+    <div class="actions">
+      <button class="btn ghost" type="submit">🔍 {{ _('بحث') }}</button>
+      {% if q or cat_filter or stock_filter %}
+      <a class="btn ghost" href="{{ url_for('warehouse_materials_report') }}">{{ _('مسح الفلاتر') }}</a>
+      {% endif %}
+    </div>
+  </form>
+
+  <!-- بطاقات الملخص -->
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
+
+  <!-- جدول الكشف -->
+  <div class="table-wrap">
+    <table class="table" id="materials-report-table">
+      <thead>
+        <tr>
+          <th style="width:40px;">#</th>
+          <th>{{ _('رقم المادة') }}</th>
+          <th class="col-item-name">{{ _('اسم المادة') }}</th>
+          <th>{{ _('الوحدة') }}</th>
+          <th>{{ _('التصنيف') }}</th>
+          <th>{{ _('الوارد') }}</th>
+          <th>{{ _('المنصرف') }}</th>
+          <th>{{ _('الرصيد') }}</th>
+          <th>{{ _('محجوز عهد') }}</th>
+          <th>{{ _('المتاح') }}</th>
+          <th>{{ _('حد أدنى') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('عدد الحركات') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="{% if (r.available_balance if r.available_balance is not none else r.balance) <= 0 %}background:rgba(239,68,68,0.04);{% elif (r.available_balance if r.available_balance is not none else r.balance) <= (r.min_qty or 0) %}background:rgba(249,115,22,0.03);{% endif %}">
+          <td style="color:var(--text-muted);font-size:0.85rem;">{{ loop.index }}</td>
+          <td><strong>{{ r.item_no }}</strong></td>
+          <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
+          <td>{{ r.unit or '—' }}</td>
+          <td><span class="badge ok" style="font-size:0.78rem;">{{ r.category or '—' }}</span></td>
+          <td style="color:#10b981;font-weight:600;">{{ r.inbound or 0 }}</td>
+          <td style="color:#f59e0b;font-weight:600;">{{ r.outbound or 0 }}</td>
+          <td>
+            {% if (r.balance or 0) <= 0 %}
+            <span class="badge danger" style="font-weight:700;">{{ r.balance }}</span>
+            {% elif (r.balance or 0) <= (r.min_qty or 0) %}
+            <span class="badge warning" style="font-weight:700;">{{ r.balance }}</span>
+            {% else %}
+            <span class="badge ok" style="font-weight:700;">{{ r.balance }}</span>
+            {% endif %}
+          </td>
+          <td>{{ r.reserved or 0 }}</td>
+          <td>
+            {% set available = r.available_balance if r.available_balance is not none else r.balance %}
+            {% if (available or 0) <= 0 %}
+            <span class="badge danger" style="font-weight:700;">{{ available }}</span>
+            {% elif (available or 0) <= (r.min_qty or 0) %}
+            <span class="badge warning" style="font-weight:700;">{{ available }}</span>
+            {% else %}
+            <span class="badge ok" style="font-weight:700;">{{ available }}</span>
+            {% endif %}
+          </td>
+          <td>{{ r.min_qty or 0 }}</td>
+          <td>
+            {% set available = r.available_balance if r.available_balance is not none else r.balance %}
+            {% if (available or 0) <= 0 %}
+            <span class="badge danger">{{ _('نفذ') }}</span>
+            {% elif (available or 0) <= (r.min_qty or 0) %}
+            <span class="badge warning">{{ _('منخفض') }}</span>
+            {% else %}
+            <span class="badge ok">{{ _('متوفر') }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <a class="btn ghost" href="{{ url_for('module_list', name='warehouse_tx', item_no=r.item_no) }}" style="font-size:0.85rem;">{{ r.tx_count or 0 }} {{ _('حركة') }}</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="13" class="meta" style="text-align:center;padding:30px;">
+            {{ _('لا توجد مواد مطابقة للفلاتر المحددة.') }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+      {% if rows %}
+      <tfoot>
+        <tr style="background:var(--bg-subtle,#f1f5f9);font-weight:800;font-size:0.95rem;">
+          <td colspan="5" style="text-align:center;">{{ _('الإجمالي') }} ({{ rows|length }} {{ _('صنف') }})</td>
+          <td style="color:#10b981;">{{ "%.2f"|format(totals.inbound) }}</td>
+          <td style="color:#f59e0b;">{{ "%.2f"|format(totals.outbound) }}</td>
+          <td>{{ "%.2f"|format(totals.balance) }}</td>
+          <td>{{ "%.2f"|format(totals.reserved) }}</td>
+          <td>{{ "%.2f"|format(totals.available) }}</td>
+          <td></td>
+          <td>
+            {% if totals.low_count > 0 %}
+            <span class="badge danger">{{ totals.low_count }} {{ _('منخفض/نفذ') }}</span>
+            {% else %}
+            <span class="badge ok">{{ _('كل المواد متوفرة') }}</span>
+            {% endif %}
+          </td>
+          <td>{{ totals.tx_count }} {{ _('حركة') }}</td>
+        </tr>
+      </tfoot>
+      {% endif %}
+    </table>
+  </div>
+</div>
+{% endblock %}
