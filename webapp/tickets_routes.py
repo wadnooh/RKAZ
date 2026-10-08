@@ -31,7 +31,7 @@ TICKET_FIELDS = [
     "station_no", "feeder_no", "location", "fault_type", "classification", "team",
     "dispatch_time", "arrival_time", "status", "execution_date", "photographed",
     "quantities_done", "asphalt_clearance", "has_excavation", "metering_status", "consultant_approval",
-    "invoice_status", "work_order", "invoice_no", "sap_status", "items_value", "notes",
+    "invoice_status", "work_order", "invoice_no", "invoice_id", "sap_status", "items_value", "notes",
 ]
 
 def ticket_from_form():
@@ -39,6 +39,14 @@ def ticket_from_form():
     data["status"] = db.normalize_ticket_status(data.get("status"))
     iv = data.get("items_value")
     data["items_value"] = float(iv) if iv not in ("", None) else None
+    inv_no = data.get("invoice_no") or ""
+    inv_id = data.get("invoice_id") or ""
+    if inv_no and not inv_id:
+        data["invoice_id"] = inv_no
+    elif inv_id and not inv_no:
+        data["invoice_no"] = inv_id
+    if (inv_no or inv_id) and (not data.get("invoice_status") or data.get("invoice_status") in ("لم يرفع", "—")):
+        data["invoice_status"] = "فاتورة صادرة"
     return data
 
 def _load_filtered_tickets(
@@ -205,6 +213,10 @@ def new():
                 f"{data.get('ticket_no')} / {data.get('rekaz_code')}",
             )
             new_id = cur.lastrowid
+            if data.get("invoice_no") or data.get("invoice_id"):
+                inv_res = db.sync_ticket_to_invoices(data["ticket_no"], conn=conn)
+                if inv_res and inv_res.get("synced"):
+                    flash(helpers.t("تم إجبار ونقل المعاملة إلى المتابعات المالية (المستخلصات و SAP) — رقم المستخلص: {no}", no=data.get("invoice_no") or data.get("invoice_id")), "ok")
             try:
                 from webapp import whatsapp
                 data_copy = dict(data)
@@ -232,6 +244,8 @@ def _wizard_steps():
     ]
     if permissions.can("section.warehouses"):
         steps.append(("warehouse", helpers.t("المستودع")))
+    if permissions.can("section.financial"):
+        steps.append(("financial", helpers.t("المتابعات المالية")))
     steps.append(("done", helpers.t("الاكتمال")))
     return steps
 
@@ -276,6 +290,12 @@ def view(ticket_id):
         "issued_licenses": db.rows_to_dicts(
             conn.execute("SELECT * FROM issued_licenses WHERE ticket_no=? ORDER BY id DESC", (tno,)).fetchall()
         ),
+        "invoices": db.rows_to_dicts(
+            conn.execute(
+                "SELECT * FROM invoices WHERE ticket_no=? OR (work_order<>'' AND work_order=?) ORDER BY id DESC",
+                (tno, ticket.get("work_order") or ""),
+            ).fetchall()
+        ),
     }
     boq_file = db.active_contract_boq_file(conn)
     has_boq = db.has_boq_catalog(conn)
@@ -298,6 +318,10 @@ def view(ticket_id):
         q["total"] = float(q.get("qty") or 0) * float(q.get("unit_price") or 0)
     for p in related["photos"]:
         p["complete"] = helpers.t("مكتمل") if media_svc.photos_complete(p) else helpers.t("ناقص")
+    for inv in related["invoices"]:
+        val = float(inv.get("value") or 0)
+        coll = float(inv.get("collected") or 0)
+        inv["remaining"] = val - coll
     boq_base = sum(float(x.get("line_total") or 0) for x in related["boq_lines"])
     settings = db.get_settings()
     settings_ratio = float(settings.get("emergency_ratio") or 0)
@@ -354,14 +378,18 @@ def edit(ticket_id):
             f"UPDATE tickets SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?",
             [data[f] for f in TICKET_FIELDS] + [ticket_id],
         )
+        tno_final = data.get("ticket_no") or dict(row).get("ticket_no") or ""
         db.sync_ticket_work_order_to_related(
-            data.get("ticket_no") or dict(row).get("ticket_no") or "",
+            tno_final,
             data.get("work_order") or "", data.get("rekaz_code") or "", conn,
         )
+        inv_sync_res = None
+        if data.get("invoice_no") or data.get("invoice_id"):
+            inv_sync_res = db.sync_ticket_to_invoices(tno_final, conn=conn)
         db.ensure_excavation_safety_permits(conn)
         conn.commit()
         link_res = helpers.link_excavation_if_needed(
-            data.get("ticket_no") or dict(row).get("ticket_no") or "",
+            tno_final,
             reason="ربط تلقائي بعد حفظ العطل — حفر/إخلاء أسفلت", conn=conn,
         )
         if link_res and (link_res.get("created_coord") or link_res.get("created_clearance")):
@@ -379,6 +407,8 @@ def edit(ticket_id):
                 pass
         db.log_audit(helpers.current_user_name(), "تعديل", "عطل", ticket_id, data.get("ticket_no"))
         flash(helpers.t("تم حفظ المعاملة"), "ok")
+        if inv_sync_res and inv_sync_res.get("synced"):
+            flash(helpers.t("تم إجبار ونقل المعاملة إلى المتابعات المالية (المستخلصات و SAP) — رقم المستخلص: {no}", no=data.get("invoice_no") or data.get("invoice_id")), "ok")
         helpers.flash_excavation_link(link_res)
         helpers.after_data_change()
         stay = (request.form.get("step") or request.args.get("step") or "data").strip()
@@ -387,6 +417,26 @@ def edit(ticket_id):
         return _edit_redirect(ticket_id, stay)
     conn.close()
     return _edit_redirect(ticket_id, request.args.get("step") or "data")
+
+@tickets_bp.route("/<int:ticket_id>/sync-financial", methods=["POST"])
+@permissions.require_perm("tickets.write")
+def sync_financial(ticket_id):
+    conn = db.connect()
+    row = conn.execute("SELECT * FROM tickets WHERE id=?", (ticket_id,)).fetchone()
+    if not row:
+        conn.close()
+        flash(helpers.t("العطل غير موجود"), "danger")
+        return redirect(url_for(".list_all"))
+    ticket = dict(row)
+    tno = ticket.get("ticket_no") or ""
+    res = db.sync_ticket_to_invoices(tno, conn=conn)
+    conn.commit()
+    conn.close()
+    if res.get("synced"):
+        flash(helpers.t("تم إجبار ونقل المعاملة {tno} بنجاح إلى المتابعات المالية (المستخلصات و SAP)", tno=tno), "ok")
+    else:
+        flash(helpers.t("يرجى إدخال رقم المستخلص أولاً لنقل المعاملة إلى المتابعات المالية"), "warning")
+    return _edit_redirect(ticket_id, "financial")
 
 @tickets_bp.route("/<int:ticket_id>/delete", methods=["POST"])
 @permissions.require_perm("tickets.delete")
@@ -463,6 +513,7 @@ def boq_add(ticket_id):
     )
     db.sync_ticket_items_value(ticket_id, conn)
     db.sync_metering_approved_value_for_ticket(ticket["ticket_no"], conn)
+    db.sync_ticket_to_invoices(ticket["ticket_no"], conn=conn)
     db.ensure_excavation_safety_permits(conn)
     link_res = None
     if db.is_excavation_text(desc, notes, item_no):
@@ -499,6 +550,7 @@ def boq_delete(ticket_id, line_id):
     db.sync_ticket_items_value(ticket_id, conn)
     if line:
         db.sync_metering_approved_value_for_ticket(line["ticket_no"], conn)
+        db.sync_ticket_to_invoices(line["ticket_no"], conn=conn)
     db.ensure_excavation_safety_permits(conn)
     conn.commit()
     conn.close()

@@ -7,7 +7,7 @@
     {% if can('tab.warehouse.constructions') %}<a class="btn ghost{% if wh_active=='constructions' %} primary{% endif %}" href="{{ url_for('warehouse_constructions') }}">{{ _('الإنشاءات') }}</a>{% endif %}
     {% if can('tab.warehouse.ops') %}<a class="btn ghost{% if wh_active=='ops' %} primary{% endif %}" href="{{ url_for('warehouse_ops') }}">{{ _('العمليات والصيانة') }}</a>{% endif %}
     {% if can('tab.warehouse.projects') %}<a class="btn ghost{% if wh_active=='projects' %} primary{% endif %}" href="{{ url_for('warehouse_projects') }}">{{ _('المشاريع') }}</a>{% endif %}
-    {% if can('tab.warehouse.contractors') %}<a class="btn ghost{% if wh_active=='contractors' %} primary{% endif %}" href="{{ url_for('module_list', name='contractor_supplies') }}">{{ _('مواد موردة من مقاول') }}</a>{% endif %}
+    {% if can('tab.warehouse.contractors') %}<a class="btn ghost{% if wh_active=='contractors' %} primary{% endif %}" href="{{ url_for('warehouse_contractors') }}">{{ _('مواد موردة من مقاول') }}</a>{% endif %}
     {% if can('tab.warehouse.balances') %}<a class="btn ghost{% if wh_active=='balances' %} primary{% endif %}" href="{{ url_for('warehouse_balances') }}">{{ _('أرصدة المواد') }}</a>{% endif %}
     {% if can('tab.warehouse.balances') %}<a class="btn ghost{% if wh_active=='materials_report' %} primary{% endif %}" href="{{ url_for('warehouse_materials_report') }}">📋 {{ _('كشف المواد') }}</a>{% endif %}
     {% if can('tab.warehouse.balances') %}<a class="btn ghost{% if wh_active=='work_orders_movements' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements') }}">📦 {{ _('حركة مواد أوامر العمل') }}</a>{% endif %}

@@ -169,7 +169,11 @@
       <label>{{ _('حالة المستخلص') }}</label>
       <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if ticket.invoice_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
-    <div class="field"><label>{{ _('رقم الفاتورة') }}</label><input name="invoice_no" value="{{ ticket.invoice_no or '' }}"></div>
+    <div class="field">
+      <label>{{ _('رقم المستخلص') }}</label>
+      <input name="invoice_id" value="{{ ticket.invoice_id or ticket.invoice_no or '' }}" placeholder="{{ _('مثال: 8501715635') }}">
+      <span class="meta" style="font-size:0.75rem;color:var(--text-muted);display:block;margin-top:2px;">{{ _('إدخال الرقم ينقل المعاملة تلقائياً إلى المتابعات المالية') }}</span>
+    </div>
     <div class="field">
       <label>{{ _('حالة SAP') }}</label>
       <select name="sap_status"><option value="">—</option>{% for x in lists.sap_status %}<option value="{{ x }}" {% if ticket.sap_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
@@ -202,7 +206,10 @@
     <div class="meta-item"><div class="k">{{ _('تم التصوير') }}</div><div class="v">{{ tv(ticket.photographed) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('الكميات مكتملة') }}</div><div class="v">{{ tv(ticket.quantities_done) or '—' }}</div></div>
     <div class="meta-item"><div class="k">{{ _('حالة التمتير') }}</div><div class="v">{{ tv(ticket.metering_status) or '—' }}</div></div>
-    <div class="meta-item"><div class="k">{{ _('معاملة بها حفر') }}</div><div class="v">{% if ticket.has_excavation %}<span class="badge ok">{{ tv('نعم') }}</span>{% else %}<span class="badge">{{ tv('لا') }}</span>{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('رقم المستخلص') }}</div><div class="v">{% if ticket.invoice_no or ticket.invoice_id %}<a href="{{ url_for('module_list', name='invoices', ticket_no=ticket.ticket_no) }}" class="badge ok" style="font-size:0.95rem;text-decoration:none;" title="{{ _('عرض في المتابعات المالية') }}"><strong>{{ ticket.invoice_no or ticket.invoice_id }} 🔗</strong></a>{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('حالة المستخلص') }}</div><div class="v">{% if ticket.invoice_status %}<span class="badge">{{ tv(ticket.invoice_status) }}</span>{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('حالة SAP') }}</div><div class="v">{% if ticket.sap_status %}<span class="badge ok">{{ tv(ticket.sap_status) }}</span>{% else %}—{% endif %}</div></div>
+    <div class="meta-item"><div class="k">{{ _('اعتماد الاستشاري') }}</div><div class="v">{{ tv(ticket.consultant_approval) or '—' }}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('الموقع') }}</div><div class="v">{% if ticket.location %}<a href="{{ ticket.location }}" target="_blank">{{ ticket.location }}</a>{% else %}—{% endif %}</div></div>
     <div class="meta-item" style="grid-column:1/-1"><div class="k">{{ _('ملاحظات') }}</div><div class="v">{{ ticket.notes or '—' }}</div></div>
   </div>
@@ -564,6 +571,91 @@
   {% endif %}
 </div>
 {% endif %}
+
+{# —— المتابعات المالية (المستخلصات و SAP) —— #}
+<div class="card{% if editing and step=='financial' %} ticket-step-panel is-active{% endif %}" id="step-financial" style="margin-top:14px;">
+  <div class="toolbar">
+    <div>
+      <h3 class="section-title" style="font-size:1.05rem;margin:0;">💳 {{ _('المتابعات المالية (المستخلصات و SAP)') }}</h3>
+      <div class="meta">
+        {% if editing and step=='financial' %}<strong>{{ _('الخطوة الحالية: المتابعات المالية') }}</strong> — {% endif %}
+        {% if ticket.invoice_id or ticket.invoice_no %}
+          <span class="badge ok">{{ _('رقم المستخلص:') }} {{ ticket.invoice_id or ticket.invoice_no }}</span> — 
+        {% else %}
+          <span class="badge warn">{{ _('لم يتم إدخال رقم مستخلص بعد') }}</span> — 
+        {% endif %}
+        {{ related.invoices|length }} {{ _('سجل مالي مربوط بهذه المعاملة') }}
+      </div>
+    </div>
+    <div class="actions">
+      {% if can('modules.read') %}
+      <a class="btn ghost" href="{{ url_for('module_list', name='invoices', ticket_no=ticket.ticket_no) }}" target="_blank">{{ _('فتح شاشة المتابعات المالية') }}</a>
+      {% endif %}
+      {% if can('tickets.write') and can('modules.write') %}
+      <form method="post" action="{{ url_for('sync_financial', ticket_id=ticket.id) }}" style="display:inline;margin:0;">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button class="btn primary" type="submit" title="{{ _('تحديث ونقل فوري لجدول المتابعات المالية') }}">⚡ {{ _('نقل وتحديث في المتابعات المالية') }}</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table class="table" style="min-width:0">
+      <thead>
+        <tr>
+          <th>{{ _('رقم المستخلص') }}</th>
+          <th>{{ _('تاريخ المستخلص') }}</th>
+          <th>{{ _('الحالة') }}</th>
+          <th>{{ _('اعتماد الاستشاري') }}</th>
+          <th>{{ _('حالة SAP') }}</th>
+          <th>{{ _('القيمة') }}</th>
+          <th>{{ _('المحصل') }}</th>
+          <th>{{ _('المتبقي') }}</th>
+          {% if editing and can('tickets.write') and can('modules.write') %}<th></th>{% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for inv in related.invoices %}
+        <tr>
+          <td><strong>{{ inv.invoice_id or inv.invoice_no or '—' }}</strong></td>
+          <td>{{ inv.invoice_date or '—' }}</td>
+          <td>{% if inv.status or ticket.invoice_status %}<span class="badge ok">{{ tv(inv.status or ticket.invoice_status) }}</span>{% else %}—{% endif %}</td>
+          <td>{{ tv(ticket.consultant_approval) or '—' }}</td>
+          <td>{% if inv.sap_status or ticket.sap_status %}<span class="badge ok">{{ tv(inv.sap_status or ticket.sap_status) }}</span>{% else %}—{% endif %}</td>
+          <td>{{ inv.value|money if inv.value is not none else '—' }}</td>
+          <td>{{ inv.collected|money if inv.collected is not none else '—' }}</td>
+          <td>{{ inv.remaining|money if inv.remaining is not none else '—' }}</td>
+          {% if editing and can('tickets.write') and can('modules.write') %}
+          <td class="actions">
+            <a class="btn ghost" href="{{ url_for('module_edit', name='invoices', row_id=inv.id) }}">{{ _('تعديل في المالية') }}</a>
+          </td>
+          {% endif %}
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="9" class="meta" style="padding:16px;text-align:center;">
+            {% if ticket.invoice_id or ticket.invoice_no %}
+              {{ _('يوجد رقم مستخلص للمعاملة (') }}{{ ticket.invoice_id or ticket.invoice_no }}{{ _(') لكن السجل لم يُنشأ بعد في جدول المالية.') }}
+              <form method="post" action="{{ url_for('sync_financial', ticket_id=ticket.id) }}" style="display:inline-block;margin-inline-start:8px;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button class="btn primary sm" type="submit">{{ _('اضغط هنا للنقل والربط التلقائي فوراً') }}</button>
+              </form>
+            {% else %}
+              {{ _('لا يوجد مستخلص مالي مرتبط. أدخل رقم المستخلص في المعاملة أعلاه ليتم نقله وإجباره تلقائياً إلى المتابعات المالية.') }}
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if editing and step=='financial' and next_step %}
+  <div class="actions" style="margin-top:12px;">
+    <a class="btn primary" href="{{ url_for('ticket_view', ticket_id=ticket.id, edit=1, step=next_step) }}#step-{{ next_step }}">{{ _('التالي') }}: {{ step_labels.get(next_step, next_step) }}</a>
+  </div>
+  {% endif %}
+</div>
 
 {# —— اكتمال / روابط —— #}
 <div class="card{% if editing and step=='done' %} ticket-step-panel is-active{% endif %}" id="step-done" style="margin-top:14px;">

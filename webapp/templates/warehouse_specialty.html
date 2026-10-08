@@ -9,9 +9,25 @@
       <h2 class="section-title">{{ title }}</h2>
       <div class="meta">{{ subtitle }}</div>
     </div>
-    <div class="actions" data-tab-strip="1">
+    <div class="actions" data-tab-strip="1" style="flex-wrap:wrap;gap:8px;">
       {% if can('export') %}
       <a class="btn ghost" href="{{ url_for('warehouse_specialty_pdf', source=source, view=view, q=q or none, status=status or none, department=department_filter or none) }}">{{ _('تصدير PDF') }}</a>
+      {% endif %}
+      {% if can('modules.write') %}
+      <form method="post" action="{{ url_for('warehouse_repair_work_orders') }}" style="display:inline;" onsubmit="return confirm('{{ _('هل تريد فحص وإصلاح المعاملات التي ليس لها أمر عمل وجلب الأوامر تلقائياً من الجذور؟') }}');">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="btn primary" type="submit" title="{{ _('جلب وربط أوامر العمل من الأعطال والإنشاءات والفرق والتعزيز والمشاريع') }}">🔧 {{ _('إصلاح وربط أوامر العمل') }}</button>
+      </form>
+      <form method="post" action="{{ url_for('warehouse_add_disbursed') }}" style="display:inline;">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="btn ghost" type="submit" title="{{ _('إضافة المنصرف للتي لم يدخل لها مع حماية تامة لبيانات موظفي المستودع') }}">📦 {{ _('إضافة المنصرف للناقص') }}</button>
+      </form>
+      <form method="post" action="{{ url_for('warehouse_add_disbursed') }}" style="display:inline;" onsubmit="return confirm('{{ _('تأكيد الإذن: هل تريد منح الإذن لتحديث المنصرف بما يشمل سجلات موظفي المستودع (عبدالله/نصير/عارف)؟') }}');">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <input type="hidden" name="force_staff" value="1">
+        <button class="btn ghost" type="submit" style="font-size:0.82rem;opacity:0.85;" title="{{ _('تأكيد الإذن بخطوة واحدة') }}">⚡ {{ _('إذن تحديث شامل') }}</button>
+      </form>
+      <button class="btn secondary" type="button" onclick="openQuickTxModal()" style="font-weight:700;">⚡ {{ _('تسجيل حركة سريعة (دخول / خروج)') }}</button>
       {% endif %}
       {% if source == 'ops' %}
       <a class="btn ghost{% if view == 'tickets' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='tickets') }}">{{ _('الأعطال') }}</a>
@@ -28,6 +44,10 @@
       {% elif source == 'projects' %}
       <a class="btn ghost{% if view == 'projects' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='projects') }}">{{ _('المشاريع') }}</a>
       <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
+      {% elif source == 'contractors' %}
+      <a class="btn ghost{% if view == 'supplies' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='supplies') }}">{{ _('طلبات التوريد') }}</a>
+      <a class="btn ghost{% if view == 'works' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='works') }}">{{ _('معاملات المقاولين') }}</a>
+      <a class="btn ghost{% if view == 'movements' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('حركات المواد') }} ({{ tx_count }})</a>
       {% endif %}
     </div>
   </div>
@@ -35,10 +55,21 @@
   {% if view == 'movements' %}
   <form method="get" class="actions" style="margin-bottom:12px;">
     <input type="hidden" name="view" value="movements">
+    <input type="hidden" name="wo_status" value="{{ wo_status or '' }}">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث بالسند / أمر العمل / المادة / العطل...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
     <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
     <a class="btn ghost" href="{{ url_for(list_endpoint, view='movements') }}">{{ _('مسح') }}</a>
   </form>
+
+  <div class="actions" style="margin-bottom:12px;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span class="meta" style="font-weight:600;">{{ _('أمر العمل:') }}</span>
+    <a class="btn ghost{% if not wo_status or wo_status == 'all' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements', q=q or none, wo_status='all') }}">{{ _('الكل') }}</a>
+    <a class="btn ghost{% if wo_status == 'has_wo' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements', q=q or none, wo_status='has_wo') }}">✅ {{ _('لها أمر عمل') }}</a>
+    <a class="btn ghost{% if wo_status == 'no_wo' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='movements', q=q or none, wo_status='no_wo') }}">⚠️ {{ _('بدون أمر عمل') }}{% if no_wo_count %} ({{ no_wo_count }}){% endif %}</a>
+    {% if no_wo_count and wo_status != 'no_wo' %}
+    <span class="badge warning" style="margin-inline-start:auto;">💡 {{ _('يوجد %s حركة بدون أمر عمل — تم عزلها لعدم الزحمة', no_wo_count) }}</span>
+    {% endif %}
+  </div>
   {% set summary_cards_style = 'margin-bottom:14px;' %}
   {% include "_summary_cards.html" %}
   <div class="table-wrap">
@@ -47,18 +78,21 @@
         <tr>
           <th>{{ _('السند') }}</th>
           <th>{{ _('التاريخ') }}</th>
-          <th>{{ _('النوع') }}</th>
           <th>{{ _('رقم أمر العمل') }}</th>
           <th class="col-item-name">{{ _('المادة') }}</th>
-          <th>{{ _('الكمية') }}</th>
+          <th style="color:#059669;">📥 {{ _('دخول (وارد)') }}</th>
+          <th style="color:#d97706;">📤 {{ _('خروج (منصرف)') }}</th>
+          <th>{{ _('نوع الحركة') }}</th>
           <th>{{ _('رقم العطل') }}</th>
-          <th>{{ _('المستلم') }}</th>
-          <th>{{ _('المسلم') }}</th>
-          <th></th>
+          <th>{{ _('المستلم / المسلم') }}</th>
+          <th>{{ _('إجراءات') }}</th>
         </tr>
       </thead>
       <tbody>
         {% for w in tx_rows %}
+        {% set is_out = ('منصرف' in (w.tx_type or '')) %}
+        {% set is_in = ('وارد' in (w.tx_type or '')) %}
+        {% set is_ret = ('إرجاع' in (w.tx_type or '')) %}
         <tr>
           <td>
             {% if w.voucher_no %}
@@ -66,23 +100,48 @@
             {% else %}—{% endif %}
           </td>
           <td>{{ w.tx_date or '—' }}</td>
-          <td>{{ w.tx_type or '—' }}</td>
-          <td><strong>{{ w.work_order or '—' }}</strong></td>
+          <td>
+            {% if w.work_order %}
+            <strong style="color:var(--primary,#1F4E79);">{{ w.work_order }}</strong>
+            {% else %}
+            <span class="badge warning" style="font-size:0.75rem;">{{ _('بدون أمر') }}</span>
+            {% endif %}
+          </td>
           <td class="col-item-name" title="{{ (w.item_no or '') ~ (' — ' if w.item_no or w.item_name else '') ~ (w.item_name or '') }}">{{ w.item_no or '—' }}{% if w.item_name %} — {{ w.item_name }}{% endif %}</td>
-          <td>{{ w.qty if w.qty is not none else '—' }}</td>
+          <td>
+            {% if is_in %}
+            <strong style="color:#059669;font-size:0.95rem;">{{ "%.2f"|format(w.qty or 0) }}</strong>
+            {% elif is_ret %}
+            <span style="color:#2563eb;font-weight:600;">{{ "%.2f"|format(w.qty or 0) }} <small class="badge info">{{ _('مرتجع') }}</small></span>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if is_out %}
+            <strong style="color:#d97706;font-size:0.95rem;">{{ "%.2f"|format(w.qty or 0) }}</strong>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {{ 'warning' if is_out else ('info' if is_ret else 'success') }}" style="font-size:0.78rem;">{{ w.tx_type or '—' }}</span>
+          </td>
           <td>{{ w.ticket_no or '—' }}</td>
-          <td>{{ w.recipient or '—' }}</td>
-          <td>{{ w.sender or '—' }}</td>
-          <td class="actions">
+          <td>{{ w.recipient or w.sender or '—' }}</td>
+          <td class="actions" style="gap:4px;">
+            {% if is_in and can('modules.write') and w.work_order %}
+            <button class="btn ghost" type="button" style="padding:3px 6px;font-size:0.78rem;" onclick="openQuickTxModal('{{ w.work_order }}', '{{ w.ticket_no or '' }}', '{{ w.source_ref or '' }}')" title="{{ _('تسجيل صرف مقابل') }}">📤 {{ _('صرف') }}</button>
+            {% endif %}
             {% if w.voucher_no %}
-            <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}">{{ _('عرض') }}</a>
+            <a class="btn ghost" href="{{ url_for('warehouse_voucher_detail', voucher_no=w.voucher_no) }}" style="padding:3px 6px;font-size:0.78rem;">{{ _('عرض') }}</a>
             {% endif %}
             {% if can('modules.write') %}
-            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses&source={{ source }}">{{ _('تعديل') }}</a>
+            <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_tx', row_id=w.id) }}?from=warehouses&source={{ source }}" style="padding:3px 6px;font-size:0.78rem;">{{ _('تعديل') }}</a>
             <form method="post" action="{{ url_for('warehouse_tx_delete', row_id=w.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف مادة الحركة') }}" style="display:inline">
               <input type="hidden" name="next" value="{{ url_for(list_endpoint, view='movements') }}">
               <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+              <button class="btn danger" type="button" data-delete-confirm style="padding:3px 6px;font-size:0.78rem;">{{ _('حذف') }}</button>
             </form>
             {% endif %}
           </td>
@@ -354,7 +413,205 @@
         {% endfor %}
       </tbody>
     </table>
+  {% elif view == 'supplies' %}
+  <form method="get" class="actions" style="margin-bottom:12px;flex-wrap:wrap;gap:8px;">
+    <input type="hidden" name="view" value="supplies">
+    <input type="hidden" name="wo_status" value="{{ wo_status or '' }}">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="{{ _('بحث برقم التوريد / المقاول / أمر العمل / العطل...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;min-width:240px;">
+    <select name="status" style="padding:8px 12px;border:1px solid var(--border);border-radius:10px;">
+      <option value="">{{ _('كل الحالات') }}</option>
+      {% for s in ('جديد', 'معتمد', 'تم التوريد', 'ملغي') %}
+      <option value="{{ s }}" {% if status==s %}selected{% endif %}>{{ s }}</option>
+      {% endfor %}
+    </select>
+    <button class="btn ghost" type="submit">{{ _('بحث') }}</button>
+    <a class="btn ghost" href="{{ url_for(list_endpoint, view='supplies') }}">{{ _('مسح') }}</a>
+  </form>
+
+  <div class="actions" style="margin-bottom:12px;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span class="meta" style="font-weight:600;">{{ _('تصفية أوامر العمل:') }}</span>
+    <a class="btn ghost{% if not wo_status or wo_status == 'all' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='supplies', q=q or none, status=status or none, wo_status='all') }}">{{ _('الكل') }}</a>
+    <a class="btn ghost{% if wo_status == 'has_wo' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='supplies', q=q or none, status=status or none, wo_status='has_wo') }}">✅ {{ _('لها أمر عمل') }}</a>
+    <a class="btn ghost{% if wo_status == 'no_wo' %} primary{% endif %}" href="{{ url_for(list_endpoint, view='supplies', q=q or none, status=status or none, wo_status='no_wo') }}">⚠️ {{ _('بدون أمر عمل') }}{% if no_wo_count %} ({{ no_wo_count }}){% endif %}</a>
+    {% if no_wo_count and wo_status != 'no_wo' %}
+    <span class="badge warning" style="margin-inline-start:auto;">💡 {{ _('يوجد %s طلب توريد بدون أمر عمل — تم عزلها لعدم الزحمة', no_wo_count) }}</span>
+    {% endif %}
+  </div>
+
+  {% set summary_cards_style = 'margin-bottom:14px;' %}
+  {% include "_summary_cards.html" %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>{{ _('رقم التوريد') }}</th>
+          <th>{{ _('أمر العمل') }}</th>
+          <th>{{ _('المقاول / العطل') }}</th>
+          <th style="color:#059669;">📥 {{ _('الدخول (الوارد)') }}</th>
+          <th style="color:#d97706;">📤 {{ _('الخروج (المنصرف)') }}</th>
+          <th>⚖️ {{ _('الرصيد / الفرق') }}</th>
+          <th>{{ _('حالة الحركة') }}</th>
+          <th>{{ _('آخر تحديث') }}</th>
+          <th>{{ _('إجراءات سريعة داخل الصفحة') }}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td><strong>{{ r.supply_no or r.id }}</strong></td>
+          <td>
+            {% if r.work_no %}
+            <span class="badge success" style="font-weight:700;">{{ r.work_no }}</span>
+            {% else %}
+            <span class="badge warning">{{ _('بدون أمر عمل') }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <div>{{ r.contractor or '—' }}</div>
+            {% if r.ticket_no %}
+            <div style="font-size:0.78rem;color:var(--text-muted);"><a href="{{ url_for('tickets_list', q=r.ticket_no) }}">{{ _('عطل') }}: {{ r.ticket_no }}</a></div>
+            {% endif %}
+          </td>
+          <td>
+            <div style="font-weight:700;color:#059669;font-size:0.98rem;">{{ "%.2f"|format(r.in_qty or 0) }}</div>
+            {% if r.received_voucher_no %}
+            <div style="font-size:0.78rem;">
+              <a href="{{ url_for('warehouse_voucher_detail', voucher_no=r.received_voucher_no) }}">{{ _('سند') }}: {{ r.received_voucher_no }}</a>
+            </div>
+            {% else %}
+            <span class="meta" style="font-size:0.75rem;">{{ _('لم يُستلم') }}</span>
+            {% endif %}
+            {% if r.in_date %}<div class="meta" style="font-size:0.72rem;">{{ r.in_date }}</div>{% endif %}
+          </td>
+          <td>
+            <div style="font-weight:700;color:#d97706;font-size:0.98rem;">{{ "%.2f"|format(r.out_qty or 0) }}</div>
+            {% if r.out_voucher %}
+            <div style="font-size:0.78rem;color:var(--text-muted);">{{ _('سند') }}: {{ r.out_voucher }}</div>
+            {% else %}
+            <span class="meta" style="font-size:0.75rem;">{{ _('لم يُصرف') }}</span>
+            {% endif %}
+            {% if r.out_date %}<div class="meta" style="font-size:0.72rem;">{{ r.out_date }}</div>{% endif %}
+          </td>
+          <td>
+            {% if r.balance_qty == 0 and (r.in_qty or 0) > 0 %}
+            <span class="badge success" style="font-weight:700;">0.00 ({{ _('مسوّى') }})</span>
+            {% elif (r.balance_qty or 0) > 0 %}
+            <span class="badge warning" style="font-weight:700;">{{ _('باقي') }} {{ "%.2f"|format(r.balance_qty) }}</span>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            <span class="badge {{ r.mv_class or 'secondary' }}">{{ r.mv_label or r.status or 'جديد' }}</span>
+          </td>
+          <td style="font-size:0.8rem;" title="{{ r.last_action or '' }}">
+            <div>{{ r.updated_at or '—' }}</div>
+            {% if r.last_action %}<div class="meta" style="font-size:0.73rem;">{{ r.last_action }}</div>{% endif %}
+          </td>
+          <td class="actions" style="gap:4px;">
+            {% if not r.received_voucher_no and can('modules.write') %}
+            <form method="post" action="{{ url_for('contractor_supply_receive_warehouse', row_id=r.id) }}" style="display:inline;">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button class="btn primary" type="submit" style="padding:4px 8px;font-size:0.8rem;" title="{{ _('تسجيل دخول (وارد) للمستودع') }}">📥 {{ _('دخول') }}</button>
+            </form>
+            {% endif %}
+            {% if can('modules.write') and (r.balance_qty or 0) > 0 %}
+            <form method="post" action="{{ url_for('warehouse_contractor_supply_disburse', supply_id=r.id) }}" style="display:inline;" onsubmit="return confirm('{{ _('تأكيد الصرف المباشر: هل تريد تسجيل خروج (منصرف للمعاملة) فوراً داخل الصفحة؟') }}');">
+              <input type="hidden" name="next" value="{{ request.full_path }}">
+              <button class="btn secondary" type="submit" style="padding:4px 8px;font-size:0.8rem;" title="{{ _('تسجيل خروج (صرف) فوري داخل الصفحة') }}">📤 {{ _('صرف فوري') }}</button>
+            </form>
+            {% endif %}
+            <button class="btn ghost" type="button" style="padding:4px 8px;font-size:0.8rem;" onclick="openQuickTxModal('{{ r.work_no or '' }}', '{{ r.ticket_no or '' }}', '{{ r.supply_no or r.id }}')" title="{{ _('تسجيل حركة مخصصة في نفس الصفحة') }}">⚡ {{ _('حركة') }}</button>
+            <a class="btn ghost" href="{{ url_for('module_edit', name='contractor_supplies', row_id=r.id) }}?from=wh_contractors" style="padding:4px 8px;font-size:0.8rem;">{{ _('تعديل') }}</a>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="9" class="meta">{{ _('لا توجد طلبات توريد مواد من مقاول مطابقة للبحث أو الفلتر.') }}</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
   {% endif %}
 </div>
+
+<!-- Modal تسجيل حركة سريعة داخل نفس الصفحة دون الخروج منها -->
+<div id="quickTxModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,0.65);z-index:99999;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px);">
+  <div style="background:var(--bg,#fff);border-radius:14px;max-width:580px;width:100%;padding:24px;box-shadow:0 20px 40px rgba(0,0,0,0.2);border:1px solid var(--border,#e2e8f0);position:relative;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid var(--border);padding-bottom:10px;">
+      <h3 style="margin:0;font-size:1.15rem;font-weight:700;">⚡ {{ _('تسجيل حركة مستودع سريعة (دخول / خروج)') }}</h3>
+      <button type="button" onclick="closeQuickTxModal()" style="background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--text-muted);">&times;</button>
+    </div>
+    <form method="post" action="{{ url_for('warehouse_quick_tx') }}">
+      <input type="hidden" name="next" value="{{ request.full_path }}">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('نوع الحركة') }}</label>
+          <select name="tx_type" id="modal_tx_type" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+            <option value="وارد مواد موردة من مقاول">📥 {{ _('دخول — وارد مواد من مقاول') }}</option>
+            <option value="منصرف للمعاملة">📤 {{ _('خروج — منصرف للمعاملة') }}</option>
+            <option value="وارد من موقع العمل">📥 {{ _('دخول — وارد من موقع العمل') }}</option>
+            <option value="إرجاع للمجمعة">🔄 {{ _('إرجاع للمجمعة') }}</option>
+          </select>
+        </div>
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('رقم أمر العمل') }}</label>
+          <input type="text" name="work_order" id="modal_work_order" placeholder="{{ _('أمر العمل (مثال: WO-102)') }}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('المرجع / رقم التوريد') }}</label>
+          <input type="text" name="source_ref" id="modal_source_ref" placeholder="{{ _('رقم التوريد أو المعاملة') }}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('رقم العطل (اختياري)') }}</label>
+          <input type="text" name="ticket_no" id="modal_ticket_no" placeholder="{{ _('رقم العطل إن وجد') }}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr;gap:12px;margin-bottom:12px;">
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('اسم / بيان المادة') }}</label>
+          <input type="text" name="item_name" id="modal_item_name" required placeholder="{{ _('اسم المادة') }}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('الكمية') }}</label>
+          <input type="number" step="any" name="qty" id="modal_qty" required placeholder="0.00" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('الوحدة') }}</label>
+          <input type="text" name="unit" id="modal_unit" placeholder="{{ _('متر/حبه..') }}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('رقم السند (تلقائي إن فارغ)') }}</label>
+          <input type="text" name="voucher_no" placeholder="{{ _('تلقائي') }}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+        <div>
+          <label style="font-weight:600;font-size:0.85rem;display:block;margin-bottom:4px;">{{ _('التاريخ') }}</label>
+          <input type="date" name="tx_date" value="" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;width:100%;">
+        </div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;border-top:1px solid var(--border);padding-top:12px;">
+        <button type="button" class="btn ghost" onclick="closeQuickTxModal()">{{ _('إلغاء') }}</button>
+        <button type="submit" class="btn primary" style="font-weight:700;">💾 {{ _('حفظ الحركة فوراً داخل الصفحة') }}</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function openQuickTxModal(workOrder, ticketNo, sourceRef) {
+  var m = document.getElementById('quickTxModal');
+  if (!m) return;
+  if (workOrder) document.getElementById('modal_work_order').value = workOrder;
+  if (ticketNo) document.getElementById('modal_ticket_no').value = ticketNo;
+  if (sourceRef) document.getElementById('modal_source_ref').value = sourceRef;
+  m.style.display = 'flex';
+}
+function closeQuickTxModal() {
+  var m = document.getElementById('quickTxModal');
+  if (m) m.style.display = 'none';
+}
+</script>
 {% endblock %}

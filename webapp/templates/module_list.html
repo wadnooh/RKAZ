@@ -98,7 +98,7 @@
       {% endif %}
       {% if can_mod_write and can('button.module.' ~ name ~ '.add') and name == 'reinforcement_works' and department_filter %}
         <a class="btn primary" href="{{ url_for('module_new', name=name, department=department_filter) }}">{{ _('+ إضافة معاملة') }}</a>
-      {% elif can_mod_write and can('button.module.' ~ name ~ '.add') and name in ['construction_works', 'projects', 'external_purchases', 'custody'] %}
+      {% elif can_mod_write and can('button.module.' ~ name ~ '.add') and name in ['construction_works', 'projects', 'external_purchases', 'custody', 'invoices'] %}
         <a class="btn primary" href="{{ url_for('module_new', name=name) }}">{{ _('+ إضافة') }}</a>
       {% endif %}
     </div>

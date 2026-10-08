@@ -210,9 +210,12 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         view = "works"
     if source == "projects" and view not in ("projects", "movements"):
         view = "projects"
+    if source == "contractors" and view not in ("supplies", "works", "movements"):
+        view = "supplies"
 
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
+    wo_status = (request.args.get("wo_status") or "").strip().lower()
     conn = db.connect()
     tx_count = db.count_warehouse_tx_by_source(source, conn)
     tx_rows = []
@@ -428,6 +431,18 @@ def projects():
         helpers.t("المشاريع"),
         helpers.t("عرض المشاريع داخل المستودع — بدون الانتقال للصفحة الرئيسية"),
         ".projects",
+    )
+
+
+@warehouse_bp.route("/contractors")
+@permissions.require_perm("section.warehouses", "section.contractors")
+def contractors():
+    return _warehouse_specialty_page(
+        "contractors",
+        "contractors",
+        helpers.t("مواد موردة من مقاول"),
+        helpers.t("عرض معاملات التوريد والمقاولين داخل المستودع مع إصلاح وربط أوامر العمل من الجذور"),
+        ".contractors",
     )
 
 

@@ -5,6 +5,7 @@ venv/
 env/
 instance/
 *.db
+*.sqlite
 .env
 .DS_Store
 نسخة_العميل_للمراجعة/

@@ -116,10 +116,11 @@ def normalize_ticket_status(status):
 
 def connect():
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
+    conn = sqlite3.connect(DB_PATH, timeout=30.0)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
+
 
 
 def _drop_unique_index_for_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
@@ -690,12 +691,26 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
         if "tickets" in existing or "tickets" in created:
             if _ensure_column(conn, "tickets", "rekaz_code"):
                 created.append("tickets.rekaz_code")
+            if _ensure_column(conn, "tickets", "invoice_id"):
+                created.append("tickets.invoice_id")
+            if _ensure_column(conn, "tickets", "invoice_no"):
+                created.append("tickets.invoice_no")
+            if _ensure_column(conn, "tickets", "sap_status"):
+                created.append("tickets.sap_status")
+            if _ensure_column(conn, "tickets", "invoice_status"):
+                created.append("tickets.invoice_status")
             # السماح بتكرار رقم العطل؛ لا يُسمح بتكرار أمر العمل
             _drop_unique_index_for_column(conn, "tickets", "ticket_no")
             _dedupe_duplicate_work_orders(conn, "tickets")
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_work_order_unique ON tickets(work_order) WHERE trim(COALESCE(work_order, '')) <> ''"
             )
+        if "invoices" in existing or "invoices" in created:
+            for col in ("invoice_id", "invoice_no", "ticket_no", "work_order", "value", "status", "sap_status", "support_date", "invoice_date", "period", "collected", "notes"):
+                _ensure_column(conn, "invoices", col)
+            backfilled = backfill_tickets_to_invoices(conn)
+            if backfilled:
+                created.append(f"invoices_backfilled:{backfilled}")
         if "primary_team_orders" in existing or "primary_team_orders" in created:
             _dedupe_duplicate_work_orders(conn, "primary_team_orders")
             conn.execute(
@@ -775,8 +790,14 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             if migrated:
                 created.append(f"custody_lines_migrate:{migrated}")
         if "contractor_supplies" in existing or "contractor_supplies" in created:
-            if _ensure_column(conn, "contractor_supplies", "received_voucher_no"):
-                created.append("contractor_supplies.received_voucher_no")
+            for col in ("received_voucher_no", "work_no", "created_by", "updated_by", "updated_at", "last_action"):
+                if _ensure_column(conn, "contractor_supplies", col):
+                    created.append(f"contractor_supplies.{col}")
+        if "contractor_supply_lines" in existing or "contractor_supply_lines" in created:
+            for col, ddl in (("disbursed_qty", "REAL DEFAULT 0"), ("created_by", "TEXT"), ("updated_at", "TEXT")):
+                if _ensure_column(conn, "contractor_supply_lines", col, ddl):
+                    created.append(f"contractor_supply_lines.{col}")
+
         if "warehouse_items" in existing or "warehouse_items" in created:
             if _ensure_column(conn, "warehouse_items", "opening_qty", "REAL DEFAULT 0"):
                 created.append("warehouse_items.opening_qty")
@@ -872,15 +893,19 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("warehouse_tx.sender")
             if _ensure_column(conn, "warehouse_tx", "work_order"):
                 created.append("warehouse_tx.work_order")
+            for col in ("created_by", "updated_by", "updated_at", "last_action"):
+                if _ensure_column(conn, "warehouse_tx", col):
+                    created.append(f"warehouse_tx.{col}")
             n = backfill_warehouse_tx_sources(conn)
             if n:
                 created.append(f"warehouse_tx.source_backfill:{n}")
-            n_wo = backfill_warehouse_tx_work_orders(conn)
-            if n_wo:
-                created.append(f"warehouse_tx.work_order_backfill:{n_wo}")
+            n_repair = reconcile_and_repair_warehouse_work_orders(conn)
+            if n_repair and (n_repair.get("repaired_tx") or n_repair.get("repaired_supplies")):
+                created.append(f"warehouse_tx.work_order_reconciled:{n_repair['total_repaired']}")
             n_scrub = scrub_ticket_numbers_from_warehouse_work_orders(conn)
             if n_scrub:
                 created.append(f"warehouse_tx.work_order_scrub:{n_scrub}")
+
             n_units = normalize_warehouse_length_units_once(conn)
             if n_units:
                 created.append(f"warehouse.length_units_normalized:{n_units}")
@@ -1973,6 +1998,313 @@ def sync_ticket_work_order_to_related(
         if own:
             conn.commit()
             conn.close()
+
+
+def sync_ticket_to_invoices(
+    ticket_no: str,
+    *,
+    conn=None,
+    data_override: dict | None = None,
+) -> dict:
+    """يربط المعاملة/العطل بالمتابعات المالية، وينقل أي معاملة تم إدخال رقم مستخلص/فاتورة لها
+    إلى جدول المستخلصات و SAP (invoices) إجبارياً وتلقائياً."""
+    tno = str(ticket_no or "").strip()
+    res = {"synced": False, "created": False, "updated": False, "invoice_id": None}
+    if not tno:
+        return res
+    own = conn is None
+    conn = conn or connect()
+    try:
+        t_row = conn.execute("SELECT * FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
+        if not t_row and not data_override:
+            return res
+        ticket = dict(t_row) if t_row else {}
+        if data_override:
+            ticket.update(data_override)
+
+        invoice_no = (ticket.get("invoice_no") or "").strip()
+        invoice_id = (ticket.get("invoice_id") or "").strip()
+
+        # إذا لم يتم إدخال رقم فاتورة أو مستخلص، لا داعي للنقل الإجباري
+        if not invoice_no and not invoice_id:
+            return res
+
+        inv_id = invoice_id or invoice_no
+        inv_no = invoice_no or invoice_id
+        wo = (ticket.get("work_order") or "").strip()
+        sap_status = (ticket.get("sap_status") or "").strip() or "لم يرفع"
+
+        val = None
+        if ticket.get("final_value") is not None:
+            try:
+                val = float(ticket["final_value"])
+            except (ValueError, TypeError):
+                pass
+        if val is None:
+            boq_row = conn.execute(
+                "SELECT SUM(COALESCE(final_total, line_total, 0)) FROM ticket_boq_lines WHERE ticket_no=?",
+                (tno,),
+            ).fetchone()
+            if boq_row and boq_row[0] not in (None, 0, 0.0):
+                val = float(boq_row[0])
+        if val is None and ticket.get("items_value") not in (None, ""):
+            try:
+                val = float(ticket["items_value"])
+            except (ValueError, TypeError):
+                pass
+
+        period = (ticket.get("execution_date") or ticket.get("receive_date") or datetime.now().strftime("%Y-%m-%d"))[:7]
+        support_date = ticket.get("execution_date") or ticket.get("receive_date") or datetime.now().strftime("%Y-%m-%d")
+        invoice_date = ticket.get("execution_date") or datetime.now().strftime("%Y-%m-%d")
+        notes = (ticket.get("notes") or "").strip()
+
+        # تحديد حالة المستخلص: إذا كانت فارغة يتم تعيينها إلى 'فاتورة صادرة'
+        curr_inv_st = (ticket.get("invoice_status") or "").strip()
+        new_inv_st = curr_inv_st
+        if not curr_inv_st or curr_inv_st in ("لم يرفع", "—"):
+            new_inv_st = "فاتورة صادرة"
+        if sap_status in ("مرفوع", "مقبول") and curr_inv_st in ("", "لم يرفع", "فاتورة صادرة"):
+            new_inv_st = "مرفوع SAP"
+
+        # التأكد من وجود الأعمدة في invoices
+        _ensure_column(conn, "invoices", "invoice_id", "TEXT")
+        _ensure_column(conn, "invoices", "invoice_no", "TEXT")
+        _ensure_column(conn, "invoices", "ticket_no", "TEXT")
+        _ensure_column(conn, "invoices", "work_order", "TEXT")
+        _ensure_column(conn, "invoices", "value", "REAL")
+        _ensure_column(conn, "invoices", "status", "TEXT")
+        _ensure_column(conn, "invoices", "sap_status", "TEXT")
+        _ensure_column(conn, "invoices", "support_date", "TEXT")
+        _ensure_column(conn, "invoices", "invoice_date", "TEXT")
+        _ensure_column(conn, "invoices", "period", "TEXT")
+        _ensure_column(conn, "invoices", "notes", "TEXT")
+
+        existing = conn.execute(
+            "SELECT * FROM invoices WHERE ticket_no=? ORDER BY id DESC LIMIT 1",
+            (tno,),
+        ).fetchone()
+        if not existing:
+            existing = conn.execute(
+                "SELECT * FROM invoices WHERE (invoice_id=? AND invoice_id<>'') OR (invoice_no=? AND invoice_no<>'') LIMIT 1",
+                (inv_id, inv_no),
+            ).fetchone()
+
+        if existing:
+            conn.execute(
+                """
+                UPDATE invoices
+                SET invoice_id=?,
+                    invoice_no=?,
+                    ticket_no=?,
+                    work_order=?,
+                    value=COALESCE(?, value),
+                    status=COALESCE(NULLIF(?, ''), status),
+                    sap_status=COALESCE(NULLIF(?, ''), sap_status),
+                    period=COALESCE(NULLIF(?, ''), period),
+                    support_date=COALESCE(NULLIF(?, ''), support_date),
+                    invoice_date=COALESCE(NULLIF(?, ''), invoice_date)
+                WHERE id=?
+                """,
+                (inv_id, inv_no, tno, wo, val, new_inv_st, sap_status, period, support_date, invoice_date, existing["id"]),
+            )
+            res["synced"] = True
+            res["updated"] = True
+            res["invoice_id"] = existing["id"]
+        else:
+            cur = conn.execute(
+                """
+                INSERT INTO invoices(
+                    invoice_id, ticket_no, period, value, support_date,
+                    work_order, invoice_no, invoice_date, status, sap_status, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (inv_id, tno, period, val, support_date, wo, inv_no, invoice_date, new_inv_st, sap_status, notes),
+            )
+            res["synced"] = True
+            res["created"] = True
+            res["invoice_id"] = cur.lastrowid
+
+        _ensure_column(conn, "tickets", "invoice_id", "TEXT")
+        _ensure_column(conn, "tickets", "invoice_no", "TEXT")
+        _ensure_column(conn, "tickets", "invoice_status", "TEXT")
+        conn.execute(
+            """
+            UPDATE tickets
+            SET invoice_status=?,
+                invoice_id=COALESCE(NULLIF(invoice_id, ''), ?),
+                invoice_no=COALESCE(NULLIF(invoice_no, ''), ?)
+            WHERE ticket_no=?
+            """,
+            (new_inv_st, inv_id, inv_no, tno),
+        )
+
+        if own:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return res
+
+
+def sync_invoice_to_ticket(ticket_no: str, invoice_data: dict, *, conn=None) -> bool:
+    """مزامنة عكسية: عند تعديل المستخلص في المتابعات المالية وربطه برقم عطل،
+    يتم تحديث العطل تلقائياً (رقم الفاتورة، المستخلص، أمر العمل، حالة SAP، حالة المستخلص)."""
+    tno = str(ticket_no or "").strip()
+    if not tno:
+        return False
+    own = conn is None
+    conn = conn or connect()
+    try:
+        t_row = conn.execute("SELECT * FROM tickets WHERE ticket_no=?", (tno,)).fetchone()
+        if not t_row:
+            return False
+        ticket = dict(t_row)
+        inv_no = (invoice_data.get("invoice_no") or invoice_data.get("invoice_id") or "").strip()
+        inv_id = (invoice_data.get("invoice_id") or invoice_data.get("invoice_no") or "").strip()
+        wo = (invoice_data.get("work_order") or "").strip()
+        sap_status = (invoice_data.get("sap_status") or "").strip()
+
+        _ensure_column(conn, "tickets", "invoice_id", "TEXT")
+        _ensure_column(conn, "tickets", "invoice_no", "TEXT")
+        _ensure_column(conn, "tickets", "sap_status", "TEXT")
+        _ensure_column(conn, "tickets", "invoice_status", "TEXT")
+
+        updates = []
+        params = []
+        if inv_no:
+            updates.append("invoice_no=?")
+            params.append(inv_no)
+        if inv_id:
+            updates.append("invoice_id=?")
+            params.append(inv_id)
+        if wo and not (ticket.get("work_order") or "").strip():
+            updates.append("work_order=?")
+            params.append(wo)
+        if sap_status:
+            updates.append("sap_status=?")
+            params.append(sap_status)
+
+        inv_status = ticket.get("invoice_status") or ""
+        if inv_no or inv_id:
+            if not inv_status or inv_status in ("لم يرفع", "—"):
+                updates.append("invoice_status=?")
+                params.append("فاتورة صادرة")
+            elif sap_status in ("مرفوع", "مقبول"):
+                updates.append("invoice_status=?")
+                params.append("مرفوع SAP")
+
+        if updates:
+            params.append(tno)
+            conn.execute(f"UPDATE tickets SET {', '.join(updates)} WHERE ticket_no=?", params)
+            if own:
+                conn.commit()
+            return True
+        return False
+    finally:
+        if own:
+            conn.close()
+
+
+def sync_primary_team_order_to_invoices(pto_data: dict, *, conn=None) -> bool:
+    """ينقل معاملة الفرق الأولية التي تحتوي على رقم مستخلص إلى المتابعات المالية."""
+    ext_no = (pto_data.get("extract_no") or "").strip()
+    if not ext_no:
+        return False
+    own = conn is None
+    conn = conn or connect()
+    try:
+        wo = (pto_data.get("work_order") or "").strip()
+        amt = pto_data.get("amount")
+        val = float(amt) if amt not in (None, "") else None
+        dt = (pto_data.get("order_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+        period = dt[:7]
+        notes = (pto_data.get("notes") or "").strip() or f"أمر عمل فرقة أولية: {wo}"
+
+        _ensure_column(conn, "invoices", "invoice_id", "TEXT")
+        _ensure_column(conn, "invoices", "invoice_no", "TEXT")
+        _ensure_column(conn, "invoices", "work_order", "TEXT")
+        _ensure_column(conn, "invoices", "value", "REAL")
+
+        existing = conn.execute(
+            "SELECT id FROM invoices WHERE invoice_id=? OR (work_order=? AND work_order<>'') LIMIT 1",
+            (ext_no, wo),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                """
+                UPDATE invoices
+                SET invoice_id=?,
+                    invoice_no=COALESCE(NULLIF(invoice_no, ''), ?),
+                    work_order=?,
+                    value=COALESCE(?, value),
+                    invoice_date=COALESCE(NULLIF(invoice_date, ''), ?)
+                WHERE id=?
+                """,
+                (ext_no, ext_no, wo, val, dt, existing["id"]),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO invoices(invoice_id, invoice_no, work_order, value, period, invoice_date, notes)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (ext_no, ext_no, wo, val, period, dt, notes),
+            )
+        if own:
+            conn.commit()
+        return True
+    finally:
+        if own:
+            conn.close()
+
+
+def backfill_tickets_to_invoices(conn=None) -> int:
+    """ينقل جميع الأعطال والمعاملات الموجودة في النظام التي تحتوي على رقم مستخلص/فاتورة
+    إلى المتابعات المالية (invoices) لضمان ربط كل السجلات السابقة فوراً."""
+    own = conn is None
+    conn = conn or connect()
+    count = 0
+    try:
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "tickets" not in tables or "invoices" not in tables:
+            return 0
+
+        _ensure_column(conn, "tickets", "invoice_id", "TEXT")
+        _ensure_column(conn, "tickets", "invoice_no", "TEXT")
+
+        rows = conn.execute(
+            """
+            SELECT ticket_no FROM tickets
+            WHERE (invoice_no IS NOT NULL AND trim(invoice_no) != '')
+               OR (invoice_id IS NOT NULL AND trim(invoice_id) != '')
+            """
+        ).fetchall()
+        for r in rows:
+            res = sync_ticket_to_invoices(r["ticket_no"], conn=conn)
+            if res.get("synced"):
+                count += 1
+
+        if "primary_team_orders" in tables:
+            pto_rows = conn.execute(
+                """
+                SELECT * FROM primary_team_orders
+                WHERE extract_no IS NOT NULL AND trim(extract_no) != ''
+                """
+            ).fetchall()
+            for p in pto_rows:
+                if sync_primary_team_order_to_invoices(dict(p), conn=conn):
+                    count += 1
+        if own:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return count
 
 
 def next_warehouse_voucher_no(conn=None) -> str:
@@ -4446,24 +4778,90 @@ def _is_ticket_identifier(value: str, conn, row: dict | None = None) -> bool:
     return True
 
 
+PROTECTED_WAREHOUSE_USERS = {
+    "عبدالله", "عبد الله", "نصير", "عارف",
+    "abdullah", "naseer", "aref", "arif"
+}
+
+
+def is_protected_warehouse_user(user_name: str | None, row: dict | None = None) -> bool:
+    """
+    يحدد ما إذا كانت الحركة أو السجل مدخلاً/معدلاً بواسطة مستخدم رئيسي من المستودع
+    (مثل عبدالله أو نصير أو عارف أو أي مستخدم داخلي غير المورد).
+    الموردون والمقاولون فقط هم المستثنون من الحماية التلقائية.
+    """
+    def _matches_staff_name(val: str) -> bool:
+        v = (val or "").strip().lower()
+        if not v:
+            return False
+        for p in PROTECTED_WAREHOUSE_USERS:
+            if p in v:
+                return True
+        return False
+
+    # 1. مطابقة صريحة بالاسم
+    if _matches_staff_name(user_name):
+        return True
+    if row:
+        for k in ("created_by", "updated_by", "sender", "recipient"):
+            if _matches_staff_name(str(row.get(k) or "")):
+                return True
+
+    # 2. فحص صفة المستخدم (أي مستخدم داخلي في النظام غير المورد)
+    u = (user_name or "").strip().lower()
+    if u:
+        if any(w in u for w in ("مورد", "supplier", "مقاول")):
+            return False
+        return True
+
+    # 3. فحص جهات الحركة في السجل
+    if row:
+        s = str(row.get("sender") or "").strip().lower()
+        rec = str(row.get("recipient") or "").strip().lower()
+        if "المستودع" in s or "المستودع" in rec or "مستودع" in s or "مستودع" in rec:
+            return True
+
+    return False
+
+
 def resolve_tx_work_order(row: dict, conn=None) -> str:
-    """يستخرج أمر العمل الحقيقي فقط — لا يُرجع رقم العطل أو كود ER."""
+    """
+    يستخرج أمر العمل الحقيقي من كافة المصادر (الأعطال، الفرق الأولية، المقاولين، الإنشاءات، المشاريع، التعزيز، الفواتير).
+    يستبعد أي قيمة تطابق رقم العطل أو كود ER منعاً للخلط.
+    """
     own = conn is None
     conn = conn or connect()
     try:
         ref = (row.get("source_ref") or "").strip()
         tno = (row.get("ticket_no") or "").strip()
         stored = (row.get("work_order") or "").strip()
+        notes = (row.get("notes") or "").strip()
+        sec = (row.get("source_section") or "").strip().lower()
+        sender = (row.get("sender") or "").strip()
+        tx_date = (row.get("tx_date") or "").strip()
+
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
 
         def _ok(wo: str) -> str:
             wo = (wo or "").strip()
             if not wo or _is_ticket_identifier(wo, conn, row):
                 return ""
+            wo = re.sub(r'^(أمر\s*عمل|امر\s*عمل|WO|أمر)\s*[:#-]?\s*', '', wo, flags=re.IGNORECASE).strip()
             return wo
 
-        # 1) أمر العمل من بطاقة العطل المرتبطة
+        # 0) المخزّن إذا كان صحيحاً وليس رقم عطل
+        cand = _ok(stored)
+        if cand:
+            return cand
+
+        # 1) أمر العمل من بطاقة العطل المرتبطة مباشرة (ticket_no أو rekaz_code)
         lookup = tno or ""
-        if lookup:
+        if lookup and "tickets" in tables:
             ticket = conn.execute(
                 "SELECT work_order FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
                 (lookup, lookup),
@@ -4473,38 +4871,187 @@ def resolve_tx_work_order(row: dict, conn=None) -> str:
                 if wo:
                     return wo
 
-        # 2) المرجع أمر عمل فرق أولية
-        if ref:
-            tables = {
-                r[0]
-                for r in conn.execute(
-                    "SELECT name FROM sqlite_master WHERE type='table'"
-                ).fetchall()
-            }
-            if "primary_team_orders" in tables:
-                pto = conn.execute(
-                    "SELECT work_order FROM primary_team_orders WHERE work_order=? LIMIT 1",
-                    (ref,),
+        # 2) التوريدات ومواد المقاولين (contractor_supplies)
+        if "contractor_supplies" in tables:
+            supp_candidates = []
+            if ref:
+                supp_candidates.append(ref)
+            if lookup:
+                supp_candidates.append(lookup)
+            for sc in supp_candidates:
+                cs = conn.execute(
+                    "SELECT work_no, ticket_no FROM contractor_supplies WHERE supply_no=? OR id=? OR ticket_no=? LIMIT 1",
+                    (sc, sc, sc),
                 ).fetchone()
-                if pto:
-                    return _ok(pto["work_order"] or "")
+                if cs:
+                    wo = _ok(cs["work_no"] or "")
+                    if wo:
+                        return wo
+                    cs_tno = (cs["ticket_no"] or "").strip()
+                    if cs_tno and "tickets" in tables:
+                        t_row = conn.execute(
+                            "SELECT work_order FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
+                            (cs_tno, cs_tno),
+                        ).fetchone()
+                        if t_row:
+                            wo = _ok(t_row["work_order"] or "")
+                            if wo:
+                                return wo
 
-            # 3) المرجع من الإنشاءات/المشاريع — ليس رقم عطل
-            if not _is_ticket_identifier(ref, conn, row):
-                return ref
-
-            # المرجع رقم عطل: خذ أمر العمل من ذلك العطل إن وُجد
-            ticket_as_ref = conn.execute(
-                "SELECT work_order FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
-                (ref, ref),
-            ).fetchone()
-            if ticket_as_ref:
-                wo = _ok(ticket_as_ref["work_order"] or "")
+        # 3) أعمال المقاولين (contractor_works)
+        if "contractor_works" in tables:
+            cw_hits = []
+            if ref:
+                cw_hits.extend(conn.execute(
+                    "SELECT work_no FROM contractor_works WHERE work_no=? OR ticket_no=? LIMIT 1",
+                    (ref, ref),
+                ).fetchall())
+            if lookup and not cw_hits:
+                cw_hits.extend(conn.execute(
+                    "SELECT work_no FROM contractor_works WHERE ticket_no=? LIMIT 1",
+                    (lookup,),
+                ).fetchall())
+            if sender and tx_date and not cw_hits:
+                cw_hits.extend(conn.execute(
+                    "SELECT work_no FROM contractor_works WHERE contractor=? AND work_date=? LIMIT 1",
+                    (sender, tx_date),
+                ).fetchall())
+            for h in cw_hits:
+                wo = _ok(h["work_no"] or "")
                 if wo:
                     return wo
 
-        # 4) المخزّن فقط إن لم يكن رقم عطل
-        return _ok(stored)
+        # 4) المرجع أمر عمل فرق أولية (أوامر عمل الكهرباء)
+        if ref and "primary_team_orders" in tables:
+            pto = conn.execute(
+                "SELECT work_order FROM primary_team_orders WHERE work_order=? OR extract_no=? LIMIT 1",
+                (ref, ref),
+            ).fetchone()
+            if pto:
+                wo = _ok(pto["work_order"] or "")
+                if wo:
+                    return wo
+
+        # 5) أعمال الإنشاءات (construction_works)
+        if "construction_works" in tables:
+            con_hits = []
+            if ref:
+                con_hits.extend(conn.execute(
+                    "SELECT work_no FROM construction_works WHERE work_no=? OR ticket_no=? LIMIT 1",
+                    (ref, ref),
+                ).fetchall())
+            if lookup and not con_hits:
+                con_hits.extend(conn.execute(
+                    "SELECT work_no FROM construction_works WHERE ticket_no=? LIMIT 1",
+                    (lookup,),
+                ).fetchall())
+            for h in con_hits:
+                wo = _ok(h["work_no"] or "")
+                if wo:
+                    return wo
+
+        # 6) أعمال التعزيز والاسكيمات (reinforcement_works)
+        if "reinforcement_works" in tables:
+            rw_hits = []
+            if ref:
+                rw_hits.extend(conn.execute(
+                    "SELECT coalesce(nullif(trim(work_order),''), work_no) AS wo FROM reinforcement_works WHERE work_order=? OR work_no=? OR ticket_no=? OR rekaz_code=? LIMIT 1",
+                    (ref, ref, ref, ref),
+                ).fetchall())
+            if lookup and not rw_hits:
+                rw_hits.extend(conn.execute(
+                    "SELECT coalesce(nullif(trim(work_order),''), work_no) AS wo FROM reinforcement_works WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
+                    (lookup, lookup),
+                ).fetchall())
+            for h in rw_hits:
+                wo = _ok(h["wo"] or "")
+                if wo:
+                    return wo
+
+        # 7) المشاريع (projects)
+        if "projects" in tables:
+            if ref:
+                p_row = conn.execute(
+                    "SELECT project_code FROM projects WHERE project_code=? OR ticket_no=? LIMIT 1",
+                    (ref, ref),
+                ).fetchone()
+                if p_row:
+                    wo = _ok(p_row["project_code"] or "")
+                    if wo:
+                        return wo
+            if lookup:
+                p_row = conn.execute(
+                    "SELECT project_code FROM projects WHERE ticket_no=? LIMIT 1",
+                    (lookup,),
+                ).fetchone()
+                if p_row:
+                    wo = _ok(p_row["project_code"] or "")
+                    if wo:
+                        return wo
+
+        # 8) المتابعات المالية والفواتير (invoices)
+        if "invoices" in tables:
+            if ref:
+                inv = conn.execute(
+                    "SELECT work_order FROM invoices WHERE (invoice_id=? OR invoice_no=? OR work_order=?) AND coalesce(trim(work_order),'')<>'' LIMIT 1",
+                    (ref, ref, ref),
+                ).fetchone()
+                if inv:
+                    wo = _ok(inv["work_order"] or "")
+                    if wo:
+                        return wo
+            if lookup:
+                inv = conn.execute(
+                    "SELECT work_order FROM invoices WHERE ticket_no=? AND coalesce(trim(work_order),'')<>'' LIMIT 1",
+                    (lookup,),
+                ).fetchone()
+                if inv:
+                    wo = _ok(inv["work_order"] or "")
+                    if wo:
+                        return wo
+
+        # 9) حركات مستودع شقيقة بنفس السند أو المرجع ولديها أمر عمل مؤكد
+        row_id = row.get("id")
+        if "warehouse_tx" in tables and row_id:
+            voucher = (row.get("voucher_no") or "").strip()
+            if voucher:
+                sis = conn.execute(
+                    "SELECT work_order FROM warehouse_tx WHERE voucher_no=? AND id<>? AND coalesce(trim(work_order),'')<>'' LIMIT 1",
+                    (voucher, row_id),
+                ).fetchone()
+                if sis:
+                    wo = _ok(sis["work_order"] or "")
+                    if wo:
+                        return wo
+            if ref:
+                sis = conn.execute(
+                    "SELECT work_order FROM warehouse_tx WHERE source_ref=? AND id<>? AND coalesce(trim(work_order),'')<>'' LIMIT 1",
+                    (ref, row_id),
+                ).fetchone()
+                if sis:
+                    wo = _ok(sis["work_order"] or "")
+                    if wo:
+                        return wo
+
+        # 10) إذا كان المرجع نفسه ليس رقم عطل ويصلح كأمر عمل
+        if ref and not _is_ticket_identifier(ref, conn, row):
+            if not any(ref.lower().startswith(p) for p in ("er-", "rr-", "pr-", "rf-", "rn-", "tc-")):
+                return _ok(ref)
+
+        # 11) استخراج ذكي من الملاحظات
+        if notes:
+            m = re.search(r'(?:أمر\s*عمل|امر\s*عمل|أمر|work[-_ ]?order|WO)\s*[:#-]?\s*([A-Za-z0-9_-]{4,20})', notes, re.IGNORECASE)
+            if m:
+                wo = _ok(m.group(1))
+                if wo:
+                    return wo
+            m_num = re.search(r'\b(4\d{7,9}|5\d{7,9}|1\d{7,9})\b', notes)
+            if m_num:
+                wo = _ok(m_num.group(1))
+                if wo:
+                    return wo
+
+        return ""
     finally:
         if own:
             conn.close()
@@ -4520,6 +5067,283 @@ def enrich_warehouse_txs_work_order(rows: list[dict], conn=None) -> list[dict]:
     finally:
         if own:
             conn.close()
+
+
+def reconcile_and_repair_warehouse_work_orders(conn=None) -> dict:
+    """
+    إصلاح شامل من الجذر لجميع المعاملات وحركات المستودع التي ليس لها أمر عمل:
+    1. جلب أمر العمل من الصفحات الرئيسية للمستودع (الأعطال، المقاولين، الفرق، الإنشاءات، المشاريع، التعزيز، الفواتير).
+    2. معالجة وتحديث جدول مواد موردة من مقاول (contractor_supplies) وملء work_no الناقص.
+    3. تحديث حركات المستودع (warehouse_tx) وربطها تلقائياً مع توثيق آخر تحديث.
+    """
+    own = conn is None
+    conn = conn or connect()
+    stats = {"repaired_supplies": 0, "repaired_tx": 0, "total_repaired": 0}
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    try:
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+
+        # 1. إصلاح وتعبئة أمر العمل في مواد موردة من مقاول (contractor_supplies)
+        if "contractor_supplies" in tables:
+            _ensure_column(conn, "contractor_supplies", "work_no")
+            _ensure_column(conn, "contractor_supplies", "updated_at")
+            _ensure_column(conn, "contractor_supplies", "last_action")
+            missing_supplies = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT id, supply_no, supply_date, contractor, ticket_no, work_no, notes
+                    FROM contractor_supplies
+                    WHERE work_no IS NULL OR trim(work_no) = ''
+                    """
+                ).fetchall()
+            )
+            for s in missing_supplies:
+                wo = ""
+                tno = (s.get("ticket_no") or "").strip()
+                if tno and "tickets" in tables:
+                    t_row = conn.execute(
+                        "SELECT work_order FROM tickets WHERE ticket_no=? OR rekaz_code=? LIMIT 1",
+                        (tno, tno),
+                    ).fetchone()
+                    if t_row and (t_row["work_order"] or "").strip():
+                        wo = str(t_row["work_order"]).strip()
+                if not wo and "contractor_works" in tables:
+                    if tno:
+                        cw = conn.execute(
+                            "SELECT work_no FROM contractor_works WHERE ticket_no=? AND coalesce(trim(work_no),'')<>'' LIMIT 1",
+                            (tno,),
+                        ).fetchone()
+                        if cw:
+                            wo = str(cw["work_no"]).strip()
+                    if not wo and s.get("contractor") and s.get("supply_date"):
+                        cw = conn.execute(
+                            "SELECT work_no FROM contractor_works WHERE contractor=? AND work_date=? AND coalesce(trim(work_no),'')<>'' LIMIT 1",
+                            (s["contractor"], s["supply_date"]),
+                        ).fetchone()
+                        if cw:
+                            wo = str(cw["work_no"]).strip()
+                if not wo and tno and "construction_works" in tables:
+                    con = conn.execute(
+                        "SELECT work_no FROM construction_works WHERE ticket_no=? AND coalesce(trim(work_no),'')<>'' LIMIT 1",
+                        (tno,),
+                    ).fetchone()
+                    if con:
+                        wo = str(con["work_no"]).strip()
+
+                if wo and not _is_ticket_identifier(wo, conn):
+                    conn.execute(
+                        """
+                        UPDATE contractor_supplies
+                        SET work_no=?, updated_at=?, last_action=?
+                        WHERE id=?
+                        """,
+                        (wo, now_str, "إصلاح وجلب أمر العمل من الجذر", s["id"]),
+                    )
+                    stats["repaired_supplies"] += 1
+
+        # 2. إصلاح حركات المستودع (warehouse_tx)
+        if "warehouse_tx" in tables:
+            _ensure_column(conn, "warehouse_tx", "work_order")
+            _ensure_column(conn, "warehouse_tx", "updated_at")
+            _ensure_column(conn, "warehouse_tx", "last_action")
+
+            # مزامنة سريعة أولاً من contractor_supplies المحدثة
+            if "contractor_supplies" in tables:
+                cur_sync = conn.execute(
+                    """
+                    UPDATE warehouse_tx
+                    SET work_order = (
+                        SELECT cs.work_no FROM contractor_supplies cs
+                        WHERE (cs.supply_no = warehouse_tx.source_ref OR cs.id = warehouse_tx.source_ref)
+                          AND cs.work_no IS NOT NULL AND trim(cs.work_no) <> ''
+                        LIMIT 1
+                    ),
+                    updated_at = ?,
+                    last_action = ?
+                    WHERE (warehouse_tx.work_order IS NULL OR trim(warehouse_tx.work_order) = '')
+                      AND lower(coalesce(warehouse_tx.source_section, '')) = 'contractors'
+                      AND EXISTS (
+                        SELECT 1 FROM contractor_supplies cs
+                        WHERE (cs.supply_no = warehouse_tx.source_ref OR cs.id = warehouse_tx.source_ref)
+                          AND cs.work_no IS NOT NULL AND trim(cs.work_no) <> ''
+                      )
+                    """,
+                    (now_str, "مزامنة أمر العمل من توريد المقاول"),
+                )
+                stats["repaired_tx"] += int(cur_sync.rowcount or 0)
+
+            # معالجة كل الحركات المتبقية بدون أمر عمل
+            missing_txs = rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT id, voucher_no, tx_date, tx_type, item_no, item_name,
+                           qty, source_section, source_ref, ticket_no, rekaz_code,
+                           work_order, recipient, sender, notes, created_by
+                    FROM warehouse_tx
+                    WHERE work_order IS NULL OR trim(work_order) = ''
+                    """
+                ).fetchall()
+            )
+            for r in missing_txs:
+                wo = resolve_tx_work_order(r, conn)
+                if wo and not _is_ticket_identifier(wo, conn, r):
+                    conn.execute(
+                        """
+                        UPDATE warehouse_tx
+                        SET work_order=?, updated_at=?, last_action=?
+                        WHERE id=?
+                        """,
+                        (wo, now_str, "إصلاح وجلب أمر العمل من الجذر", r["id"]),
+                    )
+                    stats["repaired_tx"] += 1
+
+        stats["total_repaired"] = stats["repaired_supplies"] + stats["repaired_tx"]
+        if own:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return stats
+
+
+def add_missing_disbursed_movements(
+    conn=None,
+    *,
+    force_staff: bool = False,
+    current_user: str = "",
+) -> dict:
+    """
+    إضافة آخر تحديث: إضافة حركات المنصرف للمعاملات التي لم يدخل لها منصرف.
+    قاعدة الأمان الصارمة:
+    الحركات التي تم إدخالها من المستخدم الرئيسي من المستودع (مثل عبدالله أو نصير أو عارف أو أي مستخدم غير المورد)
+    لا يتم تعديل أو توليد أي منصرف أو وارد لها تلقائياً إلا بإذن صريح (force_staff=True).
+    """
+    own = conn is None
+    conn = conn or connect()
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    stats = {"scanned": 0, "added_disbursed": 0, "skipped_protected": 0}
+
+    try:
+        tables = {
+            r[0]
+            for r in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            ).fetchall()
+        }
+        if "warehouse_tx" not in tables:
+            return stats
+
+        _ensure_column(conn, "warehouse_tx", "created_by")
+        _ensure_column(conn, "warehouse_tx", "updated_by")
+        _ensure_column(conn, "warehouse_tx", "updated_at")
+        _ensure_column(conn, "warehouse_tx", "last_action")
+
+        # التأكد أولاً من إصلاح وربط أوامر العمل
+        reconcile_and_repair_warehouse_work_orders(conn)
+
+        inbound_rows = rows_to_dicts(
+            conn.execute(
+                """
+                SELECT * FROM warehouse_tx
+                WHERE (lower(coalesce(source_section,'')) = 'contractors' OR tx_type LIKE '%موردة من مقاول%')
+                  AND (tx_type LIKE '%وارد%' OR tx_type LIKE '%استلام%')
+                ORDER BY id
+                """
+            ).fetchall()
+        )
+        stats["scanned"] = len(inbound_rows)
+
+        for r in inbound_rows:
+            item_no = (r.get("item_no") or "").strip()
+            wo = (r.get("work_order") or "").strip()
+            sref = (r.get("source_ref") or "").strip()
+            vouch = (r.get("voucher_no") or "").strip()
+            qty = float(r.get("qty") or 0)
+            if qty <= 0 or not item_no:
+                continue
+
+            out_exist = conn.execute(
+                """
+                SELECT id FROM warehouse_tx
+                WHERE item_no = ?
+                  AND (tx_type LIKE '%منصرف%' OR tx_type LIKE '%صرف%')
+                  AND (
+                    (work_order = ? AND work_order <> '')
+                    OR (source_ref = ? AND source_ref <> '')
+                    OR (voucher_no = ? AND voucher_no <> '')
+                  )
+                LIMIT 1
+                """,
+                (item_no, wo, sref, vouch),
+            ).fetchone()
+
+            if out_exist:
+                continue
+
+            is_protected = is_protected_warehouse_user(r.get("created_by"), r)
+            if is_protected and not force_staff:
+                stats["skipped_protected"] += 1
+                continue
+
+            new_voucher = next_warehouse_voucher_no(conn)
+            conn.execute(
+                """
+                INSERT INTO warehouse_tx(
+                  voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+                  recipient, sender, ticket_no, rekaz_code, source_section, source_ref,
+                  work_order, region, notes, created_by, updated_by, updated_at, last_action
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    new_voucher,
+                    r.get("tx_date") or datetime.now().strftime("%Y-%m-%d"),
+                    "منصرف للمعاملة",
+                    item_no,
+                    r.get("item_name") or "",
+                    normalize_warehouse_unit(r.get("unit") or ""),
+                    qty,
+                    r.get("sender") or r.get("contractor") or "المقاول",
+                    "المستودع",
+                    r.get("ticket_no") or "",
+                    r.get("rekaz_code") or "",
+                    "contractors",
+                    sref or vouch,
+                    wo,
+                    r.get("region") or "",
+                    f"منصرف للمعاملة مقابل وارد التوريد {vouch}".strip(),
+                    current_user or "تحديث المنصرف التلقائي",
+                    current_user or "تحديث المنصرف التلقائي",
+                    now_str,
+                    "تم إضافة المنصرف للتي لم يدخل لها",
+                ),
+            )
+            conn.execute(
+                """
+                UPDATE warehouse_tx
+                SET updated_by=?, updated_at=?, last_action=?
+                WHERE id=?
+                """,
+                (
+                    current_user or "النظام",
+                    now_str,
+                    f"تم إضافة المنصرف المقابل بسند {new_voucher}",
+                    r["id"],
+                ),
+            )
+            stats["added_disbursed"] += 1
+
+        if own:
+            conn.commit()
+    finally:
+        if own:
+            conn.close()
+    return stats
+
 
 
 def scrub_ticket_numbers_from_warehouse_work_orders(conn=None) -> int:
@@ -5895,6 +6719,24 @@ def receive_contractor_supply_to_warehouse(supply_id: int, conn=None) -> dict:
     voucher = next_warehouse_voucher_no(conn)
     tx_date = (header.get("supply_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
     tx_type = "وارد مواد موردة من مقاول"
+    now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # جلب أمر العمل الحقيقي إن لم يكن موجوداً على رأس التوريد
+    work_order = (header.get("work_no") or "").strip()
+    if not work_order:
+        work_order = resolve_tx_work_order({
+            "source_ref": header.get("supply_no") or str(supply_id),
+            "ticket_no": header.get("ticket_no") or "",
+            "source_section": "contractors",
+            "sender": header.get("contractor") or "",
+            "tx_date": tx_date,
+        }, conn)
+        if work_order:
+            conn.execute(
+                "UPDATE contractor_supplies SET work_no=?, updated_at=?, last_action=? WHERE id=?",
+                (work_order, now_str, "جلب أمر العمل عند الترحيل للمستودع", supply_id),
+            )
+
     created = 0
     for ln in lines:
         if ln.get("warehouse_tx_id"):
@@ -5903,8 +6745,9 @@ def receive_contractor_supply_to_warehouse(supply_id: int, conn=None) -> dict:
             """
             INSERT INTO warehouse_tx(
               voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
-              recipient, sender, ticket_no, rekaz_code, source_section, source_ref, work_order, region, notes
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+              recipient, sender, ticket_no, rekaz_code, source_section, source_ref,
+              work_order, region, notes, created_by, updated_by, updated_at, last_action
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
             """,
             (
                 voucher,
@@ -5920,9 +6763,13 @@ def receive_contractor_supply_to_warehouse(supply_id: int, conn=None) -> dict:
                 "",
                 "contractors",
                 header.get("supply_no") or str(supply_id),
-                header.get("work_no") or "",
+                work_order or "",
                 "",
                 (ln.get("notes") or header.get("notes") or "").strip(),
+                header.get("created_by") or header.get("contractor") or "ترحيل توريد مقاول",
+                header.get("created_by") or "ترحيل توريد مقاول",
+                now_str,
+                "ترحيل توريد مقاول للمستودع",
             ),
         )
         conn.execute(
@@ -5933,17 +6780,336 @@ def receive_contractor_supply_to_warehouse(supply_id: int, conn=None) -> dict:
     conn.execute(
         """
         UPDATE contractor_supplies
-        SET received_voucher_no=?, status=CASE
+        SET received_voucher_no=?,
+            status=CASE
               WHEN status IS NULL OR trim(status)='' OR status='جديد' OR status='معتمد' THEN 'تم التوريد'
-              ELSE status END
+              ELSE status END,
+            updated_at=?,
+            last_action=?
         WHERE id=?
         """,
-        (voucher, supply_id),
+        (voucher, now_str, f"تم الترحيل للمستودع بسند {voucher}", supply_id),
     )
     if own:
         conn.commit()
         conn.close()
     return {"already": False, "voucher_no": voucher, "created": created}
+
+
+def disburse_contractor_supply_from_warehouse(supply_id: int, conn=None, current_user: str = "المستودع") -> dict:
+    """ينشئ حركة خروج (منصرف للمعاملة) لتوريد المقاول مباشرة داخل الصفحة."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        row = conn.execute("SELECT * FROM contractor_supplies WHERE id=?", (supply_id,)).fetchone()
+        if not row:
+            raise ValueError("سجل التوريد غير موجود")
+        header = dict(row)
+
+        # إذا لم تكن واردة للمستودع بعد، نرحّلها كوارد أولاً
+        if not (header.get("received_voucher_no") or "").strip():
+            receive_contractor_supply_to_warehouse(supply_id, conn=conn)
+            header = dict(conn.execute("SELECT * FROM contractor_supplies WHERE id=?", (supply_id,)).fetchone())
+
+        # التأكد من وجود أمر العمل وجلبه من الجذور إن كان ناقصاً
+        work_order = (header.get("work_no") or "").strip()
+        if not work_order:
+            work_order = resolve_tx_work_order({
+                "source_ref": header.get("supply_no") or str(supply_id),
+                "ticket_no": header.get("ticket_no") or "",
+                "source_section": "contractors",
+                "sender": header.get("contractor") or "",
+                "tx_date": header.get("supply_date") or "",
+            }, conn)
+            if work_order:
+                conn.execute(
+                    "UPDATE contractor_supplies SET work_no=?, updated_at=?, updated_by=?, last_action=? WHERE id=?",
+                    (work_order, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), current_user, "ربط أمر العمل قبل الصرف", supply_id),
+                )
+
+        # جلب بنود التوريد
+        lines = list_contractor_supply_lines(supply_id, conn=conn)
+        if not lines:
+            rec_v = (header.get("received_voucher_no") or "").strip()
+            in_txs = rows_to_dicts(conn.execute("SELECT * FROM warehouse_tx WHERE voucher_no=?", (rec_v,)).fetchall())
+            lines = [
+                {"item_no": tx.get("item_no"), "item_name": tx.get("item_name"), "unit": tx.get("unit"), "qty": tx.get("qty")}
+                for tx in in_txs
+            ]
+        if not lines:
+            raise ValueError("لا توجد أصناف أو كميات واردة لصرفها")
+
+        out_voucher = next_warehouse_voucher_no(conn)
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        tx_date = header.get("supply_date") or datetime.now().strftime("%Y-%m-%d")
+
+        created = 0
+        for ln in lines:
+            qty = float(ln.get("qty") or 0)
+            if qty <= 0:
+                continue
+            conn.execute(
+                """
+                INSERT INTO warehouse_tx(
+                  voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+                  recipient, sender, ticket_no, rekaz_code, source_section, source_ref,
+                  work_order, region, notes, created_by, updated_by, updated_at, last_action
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                """,
+                (
+                    out_voucher,
+                    tx_date,
+                    "منصرف للمعاملة",
+                    ln.get("item_no") or "",
+                    ln.get("item_name") or "",
+                    normalize_warehouse_unit(ln.get("unit") or ""),
+                    qty,
+                    header.get("contractor") or "المقاول",
+                    "المستودع",
+                    header.get("ticket_no") or "",
+                    "",
+                    "contractors",
+                    work_order or header.get("supply_no") or str(supply_id),
+                    work_order or "",
+                    "",
+                    f"صرف خروج مباشر للمعاملة مقابل توريد رقم {header.get('supply_no') or supply_id}",
+                    current_user,
+                    current_user,
+                    now_str,
+                    f"صرف فوري مباشر للمعاملة بسند {out_voucher}",
+                ),
+            )
+            created += 1
+
+        conn.execute(
+            """
+            UPDATE contractor_supplies
+            SET updated_at=?, updated_by=?, last_action=?
+            WHERE id=?
+            """,
+            (now_str, current_user, f"تم صرف المعاملة بالكامل بسند {out_voucher}", supply_id),
+        )
+        if own:
+            conn.commit()
+        return {"voucher_no": out_voucher, "created": created}
+    finally:
+        if own:
+            conn.close()
+
+
+def enrich_contractor_supplies_in_out(supplies: list[dict], conn=None) -> list[dict]:
+    """يدمج بيانات الدخول (الوارد) والخروج (المنصرف) في كل سجل توريد مقاول."""
+    if not supplies:
+        return supplies
+    own = conn is None
+    conn = conn or connect()
+    try:
+        supply_ids = [int(s["id"]) for s in supplies if s.get("id")]
+        lines_map = {}
+        if supply_ids:
+            for i in range(0, len(supply_ids), 400):
+                chunk = supply_ids[i:i+400]
+                q_marks = ",".join("?" for _ in chunk)
+                rows = conn.execute(
+                    f"""
+                    SELECT supply_id, sum(qty) as total_qty, count(*) as items_count
+                    FROM contractor_supply_lines
+                    WHERE supply_id IN ({q_marks})
+                    GROUP BY supply_id
+                    """,
+                    chunk,
+                ).fetchall()
+                for r in rows:
+                    lines_map[int(r["supply_id"])] = {
+                        "qty": float(r["total_qty"] or 0),
+                        "count": int(r["items_count"] or 0),
+                    }
+
+        tx_rows = rows_to_dicts(
+            conn.execute(
+                """
+                SELECT id, voucher_no, tx_date, tx_type, qty, source_ref, work_order, ticket_no, notes
+                FROM warehouse_tx
+                WHERE lower(coalesce(source_section,''))='contractors'
+                   OR tx_type LIKE '%موردة من مقاول%'
+                   OR tx_type LIKE '%منصرف%'
+                """
+            ).fetchall()
+        )
+
+        out_by_ref = {}
+        out_by_wo = {}
+        in_by_voucher = {}
+
+        for tx in tx_rows:
+            tt = (tx.get("tx_type") or "").strip()
+            qty = float(tx.get("qty") or 0)
+            v_no = (tx.get("voucher_no") or "").strip()
+            w_no = (tx.get("work_order") or "").strip()
+            s_ref = (tx.get("source_ref") or "").strip()
+            t_date = (tx.get("tx_date") or "").strip()
+
+            is_out = "منصرف" in tt
+            is_in = "وارد" in tt
+
+            if is_in and v_no:
+                if v_no not in in_by_voucher:
+                    in_by_voucher[v_no] = {"qty": 0.0, "dates": set(), "count": 0}
+                in_by_voucher[v_no]["qty"] += qty
+                in_by_voucher[v_no]["count"] += 1
+                if t_date:
+                    in_by_voucher[v_no]["dates"].add(t_date)
+
+            if is_out:
+                if s_ref:
+                    if s_ref not in out_by_ref:
+                        out_by_ref[s_ref] = {"qty": 0.0, "vouchers": set(), "dates": set()}
+                    out_by_ref[s_ref]["qty"] += qty
+                    if v_no:
+                        out_by_ref[s_ref]["vouchers"].add(v_no)
+                    if t_date:
+                        out_by_ref[s_ref]["dates"].add(t_date)
+
+                if w_no:
+                    if w_no not in out_by_wo:
+                        out_by_wo[w_no] = {"qty": 0.0, "vouchers": set(), "dates": set()}
+                    out_by_wo[w_no]["qty"] += qty
+                    if v_no:
+                        out_by_wo[w_no]["vouchers"].add(v_no)
+                    if t_date:
+                        out_by_wo[w_no]["dates"].add(t_date)
+
+        for s in supplies:
+            s_id = int(s.get("id") or 0)
+            s_no = (s.get("supply_no") or "").strip()
+            w_no = (s.get("work_no") or "").strip()
+            rec_v = (s.get("received_voucher_no") or "").strip()
+
+            in_info = lines_map.get(s_id, {"qty": 0.0, "count": 0})
+            in_qty = in_info["qty"]
+            if in_qty == 0 and rec_v and rec_v in in_by_voucher:
+                in_qty = in_by_voucher[rec_v]["qty"]
+
+            s["in_qty"] = round(in_qty, 2)
+            s["in_voucher"] = rec_v or ""
+            s["in_date"] = s.get("supply_date") or ""
+
+            out_qty = 0.0
+            out_vouchers = set()
+            out_dates = set()
+
+            candidates = [s_no, str(s_id)]
+            for cand in candidates:
+                if cand and cand in out_by_ref:
+                    out_qty += out_by_ref[cand]["qty"]
+                    out_vouchers.update(out_by_ref[cand]["vouchers"])
+                    out_dates.update(out_by_ref[cand]["dates"])
+
+            if out_qty == 0 and w_no and w_no in out_by_wo:
+                out_qty = out_by_wo[w_no]["qty"]
+                out_vouchers.update(out_by_wo[w_no]["vouchers"])
+                out_dates.update(out_by_wo[w_no]["dates"])
+
+            s["out_qty"] = round(out_qty, 2)
+            s["out_voucher"] = ", ".join(sorted(out_vouchers)) if out_vouchers else ""
+            s["out_date"] = max(out_dates) if out_dates else ""
+
+            balance = round(in_qty - out_qty, 2)
+            s["balance_qty"] = balance
+
+            if not rec_v and in_qty == 0:
+                s["mv_status"] = "unreceived"
+                s["mv_label"] = "لم يُستلم بالمستودع 📥"
+                s["mv_class"] = "secondary"
+            elif in_qty > 0 and out_qty >= in_qty:
+                s["mv_status"] = "completed"
+                s["mv_label"] = "مكتمل (دخول وخروج) ✅"
+                s["mv_class"] = "success"
+            elif in_qty > 0 and out_qty == 0:
+                s["mv_status"] = "pending_out"
+                s["mv_label"] = "بانتظار الصرف ⏳"
+                s["mv_class"] = "warning"
+            elif in_qty > 0 and out_qty < in_qty:
+                s["mv_status"] = "partial_out"
+                s["mv_label"] = f"صرف جزئي (باقي {balance:.2f}) ⚠️"
+                s["mv_class"] = "info"
+            else:
+                s["mv_status"] = "completed"
+                s["mv_label"] = "مكتمل ✅"
+                s["mv_class"] = "success"
+
+        return supplies
+    finally:
+        if own:
+            conn.close()
+
+
+def quick_create_warehouse_movement(data: dict, conn=None, current_user: str = "المستودع") -> dict:
+    """تسجيل حركة دخول أو خروج سريعة مباشرة داخل نفس الصفحة."""
+    own = conn is None
+    conn = conn or connect()
+    try:
+        tx_type = (data.get("tx_type") or "").strip() or "وارد مواد موردة من مقاول"
+        work_order = (data.get("work_order") or "").strip()
+        ticket_no = (data.get("ticket_no") or "").strip()
+        source_ref = (data.get("source_ref") or "").strip() or work_order or ticket_no
+        item_no = (data.get("item_no") or "").strip()
+        item_name = (data.get("item_name") or "").strip()
+        qty = float(data.get("qty") or 0)
+        unit = normalize_warehouse_unit((data.get("unit") or "").strip())
+        voucher = (data.get("voucher_no") or "").strip() or next_warehouse_voucher_no(conn)
+        tx_date = (data.get("tx_date") or "").strip() or datetime.now().strftime("%Y-%m-%d")
+        sender = (data.get("sender") or "").strip() or ("المستودع" if "منصرف" in tx_type else "المقاول")
+        recipient = (data.get("recipient") or "").strip() or ("المقاول" if "منصرف" in tx_type else "المستودع")
+        notes = (data.get("notes") or "").strip()
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        if not work_order:
+            work_order = resolve_tx_work_order({
+                "source_ref": source_ref,
+                "ticket_no": ticket_no,
+                "source_section": "contractors",
+                "notes": notes,
+                "tx_date": tx_date,
+            }, conn)
+
+        cur = conn.execute(
+            """
+            INSERT INTO warehouse_tx(
+              voucher_no, tx_date, tx_type, item_no, item_name, unit, qty,
+              recipient, sender, ticket_no, rekaz_code, source_section, source_ref,
+              work_order, region, notes, created_by, updated_by, updated_at, last_action
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            """,
+            (
+                voucher,
+                tx_date,
+                tx_type,
+                item_no,
+                item_name,
+                unit,
+                qty,
+                recipient,
+                sender,
+                ticket_no,
+                "",
+                "contractors",
+                source_ref,
+                work_order,
+                "",
+                notes or f"حركة سريعة داخل الصفحة ({tx_type})",
+                current_user,
+                current_user,
+                now_str,
+                f"إضافة سريعة داخل الصفحة ({tx_type})",
+            ),
+        )
+        if own:
+            conn.commit()
+        return {"id": cur.lastrowid, "voucher_no": voucher, "work_order": work_order}
+    finally:
+        if own:
+            conn.close()
 
 
 def enrich_warehouse_tx_from_item(data: dict) -> dict:

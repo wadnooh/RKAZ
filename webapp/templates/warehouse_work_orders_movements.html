@@ -9,7 +9,13 @@
       <div class="meta">{{ _('استخراج وتحليل حركات المواد (وارد / منصرف / مرتجع) لجميع أوامر العمل في العمليات والإنشاءات والمشاريع.') }}</div>
     </div>
     <div class="actions" style="flex-wrap:wrap;gap:8px;">
-      <a class="btn primary" href="{{ url_for('warehouse_work_orders_movements_excel', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode=view_mode or 'detail') }}">📥 {{ _('تصدير Excel') }}</a>
+      {% if can('modules.write') %}
+      <form method="post" action="{{ url_for('warehouse_repair_work_orders') }}" style="display:inline;" onsubmit="return confirm('{{ _('هل تريد فحص وإصلاح المعاملات التي ليس لها أمر عمل وجلب الأوامر تلقائياً من الجذور؟') }}');">
+        <input type="hidden" name="next" value="{{ request.full_path }}">
+        <button class="btn primary" type="submit" title="{{ _('جلب وربط أوامر العمل من الجذور') }}">🔧 {{ _('إصلاح وربط أوامر العمل') }}</button>
+      </form>
+      {% endif %}
+      <a class="btn primary" href="{{ url_for('warehouse_work_orders_movements_excel', q=q or '', work_order=wo_filter or '', wo_status=wo_status or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode=view_mode or 'detail') }}">📥 {{ _('تصدير Excel') }}</a>
       <button class="btn ghost" onclick="window.print()">🖨️ {{ _('طباعة') }}</button>
       <a class="btn ghost" href="{{ url_for('warehouse_materials_report') }}">📋 {{ _('كشف أرصدة المواد') }}</a>
       <a class="btn ghost" href="{{ url_for('warehouse_balances') }}">⚖️ {{ _('أرصدة المواد') }}</a>
@@ -19,6 +25,7 @@
   <!-- فلاتر البحث والاستخراج المتقدم -->
   <form method="get" style="display:flex;flex-wrap:wrap;gap:10px;align-items:end;margin:14px 0;background:var(--bg-subtle, #f8fafc);padding:14px;border-radius:12px;border:1px solid var(--border,#e2e8f0);">
     <input type="hidden" name="view_mode" value="{{ view_mode or 'detail' }}">
+    <input type="hidden" name="wo_status" value="{{ wo_status or '' }}">
     <div class="field" style="flex:1;min-width:180px;">
       <label style="font-weight:600;font-size:0.85rem;">{{ _('بحث عام') }}</label>
       <input type="search" name="q" value="{{ q or '' }}" placeholder="{{ _('أمر عمل، مادة، سند، عطل...') }}" style="padding:8px 12px;border:1px solid var(--border);border-radius:8px;width:100%;box-sizing:border-box;">
@@ -73,13 +80,24 @@
   {% include "_summary_cards.html" %}
 
   <!-- أشرطة التبويب الداخلي: تفصيلي / ملخص حسب أمر العمل -->
-  <div class="actions" style="margin-bottom:12px;border-bottom:1px solid var(--border);padding-bottom:10px;gap:8px;">
-    <a class="btn ghost{% if view_mode != 'summary' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode='detail') }}">
+  <div class="actions" style="margin-bottom:8px;border-bottom:1px solid var(--border);padding-bottom:10px;gap:8px;flex-wrap:wrap;">
+    <a class="btn ghost{% if view_mode != 'summary' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', wo_status=wo_status or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode='detail') }}">
       📑 {{ _('كشف الحركات التفصيلي') }} ({{ rows|length }})
     </a>
-    <a class="btn ghost{% if view_mode == 'summary' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode='summary') }}">
+    <a class="btn ghost{% if view_mode == 'summary' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', wo_status=wo_status or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode='summary') }}">
       📊 {{ _('ملخص المواد حسب أمر العمل') }} ({{ wo_summaries|length }})
     </a>
+  </div>
+
+  <!-- تصفية أوامر العمل وعزل المعاملات غير المربوطة لعدم الزحمة -->
+  <div class="actions" style="margin-bottom:12px;gap:8px;align-items:center;flex-wrap:wrap;">
+    <span class="meta" style="font-weight:600;">{{ _('حالة أمر العمل:') }}</span>
+    <a class="btn ghost{% if not wo_status or wo_status == 'all' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode=view_mode or 'detail', wo_status='all') }}">{{ _('الكل') }}</a>
+    <a class="btn ghost{% if wo_status == 'has_wo' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode=view_mode or 'detail', wo_status='has_wo') }}">✅ {{ _('لها أمر عمل') }}</a>
+    <a class="btn ghost{% if wo_status == 'no_wo' %} primary{% endif %}" href="{{ url_for('warehouse_work_orders_movements', q=q or '', work_order=wo_filter or '', tx_type=tx_type_filter or '', source=source_filter or '', from_date=from_date or '', to_date=to_date or '', view_mode=view_mode or 'detail', wo_status='no_wo') }}">⚠️ {{ _('بدون أمر عمل') }}{% if no_wo_count %} ({{ no_wo_count }}){% endif %}</a>
+    {% if no_wo_count and wo_status != 'no_wo' %}
+    <span class="badge warning" style="margin-inline-start:auto;">💡 {{ _('يوجد %s حركة بدون أمر عمل — تم عزلها لعدم الزحمة', no_wo_count) }}</span>
+    {% endif %}
   </div>
 
   {% if view_mode == 'summary' %}
@@ -180,7 +198,8 @@
           <th>{{ _('رقم المادة') }}</th>
           <th class="col-item-name">{{ _('اسم المادة') }}</th>
           <th>{{ _('الوحدة') }}</th>
-          <th>{{ _('الكمية') }}</th>
+          <th style="color:#059669;">📥 {{ _('دخول (وارد)') }}</th>
+          <th style="color:#d97706;">📤 {{ _('خروج (منصرف)') }}</th>
           <th>{{ _('القسم') }}</th>
           <th>{{ _('العطل / المرجع') }}</th>
           <th>{{ _('المستلم / المسلم') }}</th>
@@ -218,8 +237,21 @@
           <td><strong>{{ r.item_no }}</strong></td>
           <td class="col-item-name" title="{{ r.item_name or '' }}">{{ r.item_name }}</td>
           <td>{{ r.unit or '—' }}</td>
-          <td style="font-weight:700;font-size:0.95rem;{% if r.direction == 'out' %}color:#d97706;{% elif r.direction == 'return' %}color:#2563eb;{% else %}color:#059669;{% endif %}">
-            {{ "%.2f"|format(r.qty or 0) }}
+          <td>
+            {% if r.direction == 'in' %}
+            <strong style="color:#059669;font-size:0.95rem;">{{ "%.2f"|format(r.qty or 0) }}</strong>
+            {% elif r.direction == 'return' %}
+            <span style="color:#2563eb;font-weight:600;">{{ "%.2f"|format(r.qty or 0) }} <small class="badge info">{{ _('مرتجع') }}</small></span>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r.direction == 'out' %}
+            <strong style="color:#d97706;font-size:0.95rem;">{{ "%.2f"|format(r.qty or 0) }}</strong>
+            {% else %}
+            <span class="meta">—</span>
+            {% endif %}
           </td>
           <td>
             <span class="badge ghost" style="font-size:0.75rem;">{{ r.source_label or r.source_section or '—' }}</span>

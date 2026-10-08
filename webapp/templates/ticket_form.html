@@ -98,7 +98,11 @@
       <label>{{ _('حالة المستخلص') }}</label>
       <select name="invoice_status"><option value="">—</option>{% for x in lists.invoice_status %}<option value="{{ x }}" {% if row.invoice_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>
     </div>
-    <div class="field"><label>{{ _('رقم الفاتورة') }}</label><input name="invoice_no" value="{{ row.invoice_no or '' }}"></div>
+    <div class="field">
+      <label>{{ _('رقم المستخلص') }}</label>
+      <input name="invoice_id" value="{{ row.invoice_id or row.invoice_no or '' }}" placeholder="{{ _('مثال: 8501715635') }}">
+      <div class="meta" style="color:var(--primary, #0284c7);font-size:0.78rem;margin-top:3px;">{{ _('إدخال رقم المستخلص ينقل المعاملة إجبارياً إلى المتابعات المالية') }}</div>
+    </div>
     <div class="field">
       <label>{{ _('حالة SAP') }}</label>
       <select name="sap_status"><option value="">—</option>{% for x in lists.sap_status %}<option value="{{ x }}" {% if row.sap_status==x %}selected{% endif %}>{{ tv(x) }}</option>{% endfor %}</select>

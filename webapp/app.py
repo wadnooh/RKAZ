@@ -2331,7 +2331,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
     db.backfill_warehouse_tx_sources()
     db.ensure_schema()
     view = (request.args.get("view") or "").strip().lower()
-    # التبويبات الداخلية حسب التخصص (أعطال / الفرق الأولية / حركات)
+    # التبويبات الداخلية حسب التخصص (أعطال / الفرق الأولية / حركات / توريد مقاولين)
     if view == "work_orders":
         view = "teams"
     if source == "ops" and view not in ("tickets", "teams", "reinforcement", "movements"):
@@ -2342,30 +2342,61 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         view = "projects"
     if source == "reinforcement" and view not in ("works", "movements"):
         view = "works"
+    if source == "contractors" and view not in ("supplies", "works", "movements"):
+        view = "supplies"
 
     q = (request.args.get("q") or "").strip()
     status = (request.args.get("status") or "").strip()
+    wo_status = (request.args.get("wo_status") or "").strip().lower()
     department_filter = (request.args.get("department") or "").strip()
     conn = db.connect()
     tx_count = db.count_warehouse_tx_by_source(source, conn)
     tx_rows = []
     rows = []
     reinforcement_departments = []
+    no_wo_count = 0
+    has_wo_count = 0
+    total_supplies_all = 0
+    no_wo_tx_count = 0
+    has_wo_tx_count = 0
+
     if view == "reinforcement" or source == "reinforcement":
         reinforcement_departments = db.list_reinforcement_departments(active_only=False, conn=conn)
 
     if view == "movements":
-        tx_rows = db.rows_to_dicts(
-            conn.execute(
-                """
-                SELECT * FROM warehouse_tx
-                WHERE lower(coalesce(source_section,''))=?
-                ORDER BY id DESC
-                """,
-                (source,),
-            ).fetchall()
-        )
+        if source == "contractors":
+            tx_rows = db.rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT * FROM warehouse_tx
+                    WHERE lower(coalesce(source_section,''))='contractors'
+                       OR tx_type LIKE '%موردة من مقاول%'
+                    ORDER BY id DESC
+                    """
+                ).fetchall()
+            )
+        else:
+            tx_rows = db.rows_to_dicts(
+                conn.execute(
+                    """
+                    SELECT * FROM warehouse_tx
+                    WHERE lower(coalesce(source_section,''))=?
+                    ORDER BY id DESC
+                    """,
+                    (source,),
+                ).fetchall()
+            )
         db.enrich_warehouse_txs_work_order(tx_rows, conn)
+        for r in tx_rows:
+            r["unit"] = db.normalize_warehouse_unit(r.get("unit"))
+        total_tx_all = len(tx_rows)
+        no_wo_tx_count = sum(1 for r in tx_rows if not (r.get("work_order") or "").strip())
+        has_wo_tx_count = total_tx_all - no_wo_tx_count
+        if wo_status == "has_wo":
+            tx_rows = [r for r in tx_rows if (r.get("work_order") or "").strip()]
+        elif wo_status == "no_wo":
+            tx_rows = [r for r in tx_rows if not (r.get("work_order") or "").strip()]
+
         if q:
             ql = q.lower()
             tx_rows = [
@@ -2378,6 +2409,41 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 or ql in (r.get("ticket_no") or "").lower()
                 or ql in (r.get("work_order") or "").lower()
             ]
+    elif view == "supplies":
+        all_supplies = db.rows_to_dicts(
+            conn.execute("SELECT * FROM contractor_supplies ORDER BY id DESC").fetchall()
+        )
+        total_supplies_all = len(all_supplies)
+        no_wo_count = sum(1 for r in all_supplies if not (r.get("work_no") or "").strip())
+        has_wo_count = total_supplies_all - no_wo_count
+        db.enrich_contractor_supplies_in_out(all_supplies, conn)
+        total_in_qty = sum(float(r.get("in_qty") or 0) for r in all_supplies)
+        total_out_qty = sum(float(r.get("out_qty") or 0) for r in all_supplies)
+        completed_mv_count = sum(1 for r in all_supplies if r.get("mv_status") == "completed")
+        pending_out_count = sum(1 for r in all_supplies if r.get("mv_status") == "pending_out")
+        cmap = _warehouse_tx_count_map("contractors", conn)
+        for r in all_supplies:
+            ref_keys = [str(r.get("supply_no") or "").strip(), str(r.get("id") or "").strip()]
+            r["wh_count"] = max((cmap.get(k, 0) for k in ref_keys if k), default=0)
+        rows = all_supplies
+        if wo_status == "has_wo":
+            rows = [r for r in rows if (r.get("work_no") or "").strip()]
+        elif wo_status == "no_wo":
+            rows = [r for r in rows if not (r.get("work_no") or "").strip()]
+        if q:
+            ql = q.lower()
+            rows = [
+                r for r in rows
+                if ql in (r.get("supply_no") or "").lower()
+                or ql in (r.get("contractor") or "").lower()
+                or ql in (r.get("work_no") or "").lower()
+                or ql in (r.get("ticket_no") or "").lower()
+                or ql in (r.get("notes") or "").lower()
+                or ql in (r.get("status") or "").lower()
+                or ql in (r.get("received_voucher_no") or "").lower()
+            ]
+        if status:
+            rows = [r for r in rows if (r.get("status") or "").strip() == status]
     elif view == "teams":
         # الفرق الأولية = أوامر عمل الكهرباء (منفصلة تماماً عن الأعطال و tickets.team)
         rows = db.rows_to_dicts(
@@ -2433,7 +2499,12 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         for r in rows:
             r["wh_count"] = cmap.get(str(r.get("work_no") or ""), 0)
     elif view in ("works", "reinforcement"):
-        table = "reinforcement_works" if source == "reinforcement" else "construction_works"
+        if source == "contractors":
+            table = "contractor_works"
+        elif source == "reinforcement":
+            table = "reinforcement_works"
+        else:
+            table = "construction_works"
         rows = db.rows_to_dicts(conn.execute(f"SELECT * FROM {table} ORDER BY id DESC").fetchall())
         if q:
             ql = q.lower()
@@ -2445,6 +2516,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 or ql in (r.get("location") or "").lower()
                 or ql in (r.get("site") or "").lower()
                 or ql in (r.get("work_type") or "").lower()
+                or ql in (r.get("contractor") or "").lower()
             ]
         cmap = _warehouse_tx_count_map(source, conn)
         for r in rows:
@@ -2466,7 +2538,16 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
     conn.close()
 
     summary_cards = []
-    if view == "tickets":
+    if source == "contractors" and view == "supplies":
+        summary_cards = [
+            _summary_card(_t("إجمالي التوريدات"), total_supplies_all, _t("جميع سجلات التوريد")),
+            _summary_card(_t("إجمالي الدخول (الوارد)"), f"{total_in_qty:.2f}", _t("مجموع الكميات الواردة")),
+            _summary_card(_t("إجمالي الخروج (المنصرف)"), f"{total_out_qty:.2f}", _t("مجموع الكميات المنصرفة")),
+            _summary_card(_t("مكتملة (دخول وخروج)"), completed_mv_count, _t("مسوّاة بالكامل")),
+            _summary_card(_t("بانتظار الصرف"), pending_out_count, _t("تحتاج تسجيل خروج")),
+            _summary_card(_t("بدون أمر عمل"), no_wo_count, _t("معزولة لعدم الزحمة")),
+        ]
+    elif view == "tickets":
         summary_cards = [
             _summary_card(_t("عدد الأعطال"), len(rows), _t("حسب الفلتر الحالي")),
             _summary_card(
@@ -2544,9 +2625,9 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
                 _t("مجموع كميات الحركات المعروضة"),
             ),
             _summary_card(
-                _t("آخر سجل"),
-                ((_latest_row(tx_rows, "tx_date") or {}).get("voucher_no") or "—"),
-                _t("تفاصيل أحدث حركة"),
+                _t("حركات بدون أمر عمل"),
+                no_wo_tx_count,
+                _t("تم عزلها لعدم الزحمة"),
             ),
             _summary_card(
                 _t("تاريخ آخر حركة"),
@@ -2564,6 +2645,9 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
         view=view,
         q=q,
         status=status,
+        wo_status=wo_status,
+        no_wo_count=no_wo_count if view == "supplies" else no_wo_tx_count,
+        has_wo_count=has_wo_count if view == "supplies" else has_wo_tx_count,
         department_filter=department_filter,
         reinforcement_departments=reinforcement_departments,
         rows=rows,
@@ -2576,6 +2660,7 @@ def _warehouse_specialty_page(source: str, active: str, title: str, subtitle: st
             "constructions": "wh_constructions",
             "projects": "wh_projects",
             "reinforcement": "wh_reinforcement",
+            "contractors": "wh_contractors",
         }.get(source, "warehouses"),
     )
 
@@ -2593,7 +2678,11 @@ def _warehouse_specialty_pdf_payload(source: str):
         view = "works"
     if source == "projects" and view not in ("projects", "movements"):
         view = "projects"
-    if source not in ("ops", "constructions", "projects"):
+    if source == "reinforcement" and view not in ("works", "movements"):
+        view = "works"
+    if source == "contractors" and view not in ("supplies", "works", "movements"):
+        view = "supplies"
+    if source not in ("ops", "constructions", "projects", "contractors", "reinforcement"):
         abort(404)
 
     q = (request.args.get("q") or "").strip()
@@ -2603,16 +2692,28 @@ def _warehouse_specialty_pdf_payload(source: str):
     try:
         rows = []
         if view == "movements":
-            rows = db.rows_to_dicts(
-                conn.execute(
-                    """
-                    SELECT * FROM warehouse_tx
-                    WHERE lower(coalesce(source_section,''))=?
-                    ORDER BY id DESC
-                    """,
-                    (source,),
-                ).fetchall()
-            )
+            if source == "contractors":
+                rows = db.rows_to_dicts(
+                    conn.execute(
+                        """
+                        SELECT * FROM warehouse_tx
+                        WHERE lower(coalesce(source_section,''))='contractors'
+                           OR tx_type LIKE '%موردة من مقاول%'
+                        ORDER BY id DESC
+                        """
+                    ).fetchall()
+                )
+            else:
+                rows = db.rows_to_dicts(
+                    conn.execute(
+                        """
+                        SELECT * FROM warehouse_tx
+                        WHERE lower(coalesce(source_section,''))=?
+                        ORDER BY id DESC
+                        """,
+                        (source,),
+                    ).fetchall()
+                )
             db.enrich_warehouse_txs_work_order(rows, conn)
             if q:
                 ql = q.lower()
@@ -2629,6 +2730,22 @@ def _warehouse_specialty_pdf_payload(source: str):
             headers = [_t("السند"), _t("التاريخ"), _t("النوع"), _t("رقم أمر العمل"), _t("المادة"), _t("الكمية"), _t("رقم العطل"), _t("المستلم"), _t("المسلم")]
             fields = ["voucher_no", "tx_date", "tx_type", "work_order", "item_name", "qty", "ticket_no", "recipient", "sender"]
             title = _t("حركات المواد")
+        elif view == "supplies" or (source == "contractors" and view != "movements"):
+            rows = db.rows_to_dicts(conn.execute("SELECT * FROM contractor_supplies ORDER BY id DESC").fetchall())
+            if q:
+                ql = q.lower()
+                rows = [
+                    r for r in rows
+                    if ql in (r.get("supply_no") or "").lower()
+                    or ql in (r.get("contractor") or "").lower()
+                    or ql in (r.get("work_no") or "").lower()
+                    or ql in (r.get("ticket_no") or "").lower()
+                    or ql in (r.get("status") or "").lower()
+                    or ql in (r.get("received_voucher_no") or "").lower()
+                ]
+            headers = [_t("رقم التوريد"), _t("المقاول"), _t("التاريخ"), _t("رقم أمر العمل"), _t("رقم العطل"), _t("السند"), _t("الحالة")]
+            fields = ["supply_no", "contractor", "supply_date", "work_no", "ticket_no", "received_voucher_no", "status"]
+            title = _t("مواد موردة من مقاول")
         elif view == "teams":
             rows = db.rows_to_dicts(conn.execute("SELECT * FROM primary_team_orders ORDER BY id DESC").fetchall())
             if q:
@@ -2809,6 +2926,92 @@ def warehouse_reinforcement():
         _t("عرض معاملات التعزيز/الاسكيمات داخل المستودع مع ربط تلقائي برقم المعاملة."),
         "warehouse_reinforcement",
     )
+
+
+@app.route("/warehouses/contractors")
+@login_required
+def warehouse_contractors():
+    return _warehouse_specialty_page(
+        "contractors",
+        "contractors",
+        _t("مواد موردة من مقاول"),
+        _t("عرض معاملات التوريد والمقاولين داخل المستودع مع إصلاح وربط أوامر العمل من الجذور"),
+        "warehouse_contractors",
+    )
+
+
+@app.route("/warehouses/repair-work-orders", methods=["POST"])
+@login_required
+def warehouse_repair_work_orders():
+    next_url = request.form.get("next") or request.referrer or url_for("warehouse_contractors")
+    res = db.reconcile_and_repair_warehouse_work_orders()
+    flash(
+        _t(
+            "تم فحص وإصلاح المعاملات من الجذور بنجاح: تم ربط {repaired_tx} حركة بأمر العمل وتحديث {repaired_supplies} توريد مقاول.",
+            repaired_tx=res.get("repaired_tx", 0),
+            repaired_supplies=res.get("repaired_supplies", 0),
+        ),
+        "success",
+    )
+    return redirect(next_url)
+
+
+@app.route("/warehouses/add-disbursed", methods=["POST"])
+@login_required
+def warehouse_add_disbursed():
+    next_url = request.form.get("next") or request.referrer or url_for("warehouse_contractors")
+    force_staff = (request.form.get("force_staff") or "").strip() in ("1", "true", "yes")
+    username = current_user_name() or "المستودع"
+    res = db.add_missing_disbursed_movements(force_staff=force_staff, current_user=username)
+    added = res.get("added_disbursed", 0)
+    skipped = res.get("skipped_protected", 0)
+    if added > 0:
+        msg = _t("تمت إضافة المنصرف تلقائياً لـ {added} معاملة لم يكن لها منصرف مع تسجيل وقت وتفاصيل التحديث.", added=added)
+        if skipped > 0:
+            msg += " " + _t("تم تخطي {skipped} معاملة مدخلة من موظفي المستودع (عبدالله/نصير/عارف) حمايةً لبياناتهم.", skipped=skipped)
+        flash(msg, "success")
+    elif skipped > 0 and not force_staff:
+        flash(
+            _t("يوجد {skipped} معاملة مدخلة من موظفي المستودع الرئيسيين (عبدالله/نصير/عارف). لم يتم المساس بها حمايةً للبيانات. يمكنك التأكيد بخطوة واحدة إذا رغبت.", skipped=skipped),
+            "warning",
+        )
+    else:
+        flash(_t("جميع المعاملات مكتملة بالمنصرف ولا توجد نواقص بحاجة للإضافة."), "info")
+    return redirect(next_url)
+
+
+@app.route("/warehouses/contractor-supply/<int:supply_id>/disburse", methods=["POST"])
+@login_required
+def warehouse_contractor_supply_disburse(supply_id: int):
+    next_url = request.form.get("next") or request.referrer or url_for("warehouse_contractors")
+    username = current_user_name() or "المستودع"
+    try:
+        res = db.disburse_contractor_supply_from_warehouse(supply_id, current_user=username)
+        flash(
+            _t("تم تسجيل خروج (منصرف للمعاملة) بنجاح بسند رقم {voucher} لـ {count} بند.", voucher=res.get("voucher_no"), count=res.get("created")),
+            "success",
+        )
+    except Exception as exc:
+        flash(_t("تعذر صرف المعاملة: {err}", err=str(exc)), "danger")
+    return redirect(next_url)
+
+
+@app.route("/warehouses/quick-tx", methods=["POST"])
+@login_required
+def warehouse_quick_tx():
+    next_url = request.form.get("next") or request.referrer or url_for("warehouse_contractors")
+    username = current_user_name() or "المستودع"
+    data = request.form.to_dict()
+    try:
+        res = db.quick_create_warehouse_movement(data, current_user=username)
+        tx_type_str = data.get("tx_type") or "الحركة"
+        flash(
+            _t("تم تسجيل {tx_type} بنجاح داخل الصفحة بسند رقم {voucher} (أمر عمل: {wo}).", tx_type=tx_type_str, voucher=res.get("voucher_no"), wo=res.get("work_order") or "—"),
+            "success",
+        )
+    except Exception as exc:
+        flash(_t("تعذر حفظ الحركة: {err}", err=str(exc)), "danger")
+    return redirect(next_url)
 
 
 def _warehouse_tx_option_urls(form_from: str, *, ticket_no: str = "", source_ref: str = "", source: str = "ops") -> dict:
@@ -4682,6 +4885,8 @@ def _warehouse_form_ctx():
         return "wh_projects"
     if ctx in ("wh_reinforcement", "warehouse_reinforcement"):
         return "wh_reinforcement"
+    if ctx in ("wh_contractors", "warehouse_contractors"):
+        return "wh_contractors"
     if ctx in ("constructions", "projects", "warehouses", "contractors", "reinforcement"):
         return ctx
     return "warehouses"
@@ -4773,6 +4978,8 @@ def _redirect_after_module(name, data, form_ctx=None):
             return redirect(url_for("warehouse_projects"))
         if form_ctx == "wh_reinforcement":
             return redirect(url_for("warehouse_ops", view="reinforcement"))
+        if form_ctx in ("wh_contractors", "contractors"):
+            return redirect(url_for("warehouse_contractors", view="movements" if name == "warehouse_tx" else "supplies"))
         if form_ctx == "warehouses":
             source = (request.values.get("source") or data.get("source_section") or "").strip().lower()
             if source == "ops":
@@ -4783,6 +4990,8 @@ def _redirect_after_module(name, data, form_ctx=None):
                 return redirect(url_for("warehouse_projects", view="movements"))
             if source == "reinforcement":
                 return redirect(url_for("warehouse_ops", view="reinforcement"))
+            if source == "contractors":
+                return redirect(url_for("warehouse_contractors", view="movements"))
             return redirect(url_for("warehouses_home"))
         # من الصفحة الرئيسية (معالج العطل) — ابقَ في خطوة المستودع بدون قفز تلقائي
         if (
@@ -5366,6 +5575,19 @@ def module_new(name):
             boq_approved_total = _metering_boq_approved_total(prefill["ticket_no"], conn)
             if boq_approved_total is not None and prefill.get("approved_value") in ("", None):
                 prefill["approved_value"] = boq_approved_total
+        if name == "invoices":
+            if "invoice_no" in prefill and not prefill.get("invoice_no"):
+                prefill["invoice_no"] = ticket.get("invoice_no") or ticket.get("invoice_id") or request.args.get("invoice_no") or ""
+            if "invoice_id" in prefill and not prefill.get("invoice_id"):
+                prefill["invoice_id"] = ticket.get("invoice_id") or ticket.get("invoice_no") or request.args.get("invoice_id") or ""
+            if "value" in prefill and not prefill.get("value"):
+                prefill["value"] = ticket.get("final_value") or ticket.get("items_value") or ""
+            if "sap_status" in prefill and not prefill.get("sap_status"):
+                prefill["sap_status"] = ticket.get("sap_status") or ""
+            if "support_date" in prefill and not prefill.get("support_date"):
+                prefill["support_date"] = ticket.get("execution_date") or ticket.get("receive_date") or ""
+            if "invoice_date" in prefill and not prefill.get("invoice_date"):
+                prefill["invoice_date"] = ticket.get("execution_date") or datetime.now().strftime("%Y-%m-%d")
     if name == "quality_clearances" and request.args.get("clearance_stage") and "clearance_stage" in prefill:
         prefill["clearance_stage"] = (request.args.get("clearance_stage") or "").strip()
     if name == "new_coordinations" and "coord_kind" in prefill:
@@ -5625,6 +5847,10 @@ def module_new(name):
         transfer_res = None
         if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
             transfer_res = db.transfer_new_coordination_to_license(cur.lastrowid, conn=conn)
+        if name == "invoices" and (data.get("ticket_no") or "").strip():
+            db.sync_invoice_to_ticket(data["ticket_no"], data, conn=conn)
+        if name == "primary_team_orders" and (data.get("extract_no") or "").strip():
+            db.sync_primary_team_order_to_invoices(data, conn=conn)
         if name == "warehouse_items":
             op_qty = 0.0
             try:
@@ -5952,6 +6178,10 @@ def module_edit(name, row_id):
         transfer_res = None
         if name == "new_coordinations" and (data.get("status") or "").strip() == "تم الإصدار":
             transfer_res = db.transfer_new_coordination_to_license(row_id, conn=conn)
+        if name == "invoices" and (data.get("ticket_no") or "").strip():
+            db.sync_invoice_to_ticket(data["ticket_no"], data, conn=conn)
+        if name == "primary_team_orders" and (data.get("extract_no") or "").strip():
+            db.sync_primary_team_order_to_invoices(data, conn=conn)
         if name == "hr_leaves":
             emp_name = (data.get("employee_name") or "").strip()
             st = (data.get("status") or "").strip()
@@ -6935,6 +7165,7 @@ def _warehouse_work_orders_movements_data():
     """بيانات حركة المواد لجميع أوامر العمل مع الفلاتر والتجميع — مشترك بين العرض والتصدير."""
     q = (request.args.get("q") or "").strip().lower()
     wo_filter = (request.args.get("work_order") or "").strip()
+    wo_status = (request.args.get("wo_status") or "").strip().lower()
     tx_type_filter = (request.args.get("tx_type") or "").strip()
     source_filter = (request.args.get("source") or "").strip().lower()
     from_date = (request.args.get("from_date") or "").strip()
@@ -6991,9 +7222,16 @@ def _warehouse_work_orders_movements_data():
         code = str(r.get("rekaz_code") or "").strip().lower()
         r["ticket_id"] = ticket_map.get(tno) or ticket_map.get(code)
 
+    no_wo_count = sum(1 for r in txs if not (r.get("work_order") or "").strip())
+    has_wo_count = len(txs) - no_wo_count
+
     filtered = txs
     if wo_filter:
         filtered = [r for r in filtered if (r.get("work_order") or "").strip() == wo_filter]
+    if wo_status == "has_wo":
+        filtered = [r for r in filtered if (r.get("work_order") or "").strip()]
+    elif wo_status == "no_wo":
+        filtered = [r for r in filtered if not (r.get("work_order") or "").strip()]
     if tx_type_filter:
         filtered = [r for r in filtered if (r.get("tx_type") or "").strip() == tx_type_filter]
     if source_filter:
@@ -7029,6 +7267,8 @@ def _warehouse_work_orders_movements_data():
         "outbound_qty": out_qty,
         "inbound_qty": in_qty,
         "net_qty": out_qty - in_qty,
+        "no_wo_count": no_wo_count,
+        "has_wo_count": has_wo_count,
     }
 
     wo_groups = {}
@@ -7105,6 +7345,7 @@ def _warehouse_work_orders_movements_data():
         from_date,
         to_date,
         view_mode,
+        wo_status,
     )
 
 
@@ -7125,9 +7366,10 @@ def warehouse_work_orders_movements():
         from_date,
         to_date,
         view_mode,
+        wo_status,
     ) = _warehouse_work_orders_movements_data()
 
-    hint = _t("حسب الفلاتر المحددة") if (q or wo_filter or tx_type_filter or source_filter or from_date or to_date) else _t("جميع أوامر العمل")
+    hint = _t("حسب الفلاتر المحددة") if (q or wo_filter or wo_status or tx_type_filter or source_filter or from_date or to_date) else _t("جميع أوامر العمل")
     summary_cards = [
         _summary_card(_t("أوامر العمل"), totals["unique_work_orders"], hint),
         _summary_card(_t("إجمالي الحركات"), totals["tx_count"], hint),
@@ -7146,6 +7388,9 @@ def warehouse_work_orders_movements():
         tx_types=tx_types,
         q=q,
         wo_filter=wo_filter,
+        wo_status=wo_status,
+        no_wo_count=totals.get("no_wo_count", 0),
+        has_wo_count=totals.get("has_wo_count", 0),
         tx_type_filter=tx_type_filter,
         source_filter=source_filter,
         from_date=from_date,
@@ -7177,6 +7422,7 @@ def warehouse_work_orders_movements_excel():
         from_date,
         to_date,
         view_mode,
+        wo_status,
     ) = _warehouse_work_orders_movements_data()
 
     wb = Workbook()

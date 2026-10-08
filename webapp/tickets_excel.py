@@ -34,7 +34,7 @@ TICKET_HEADERS = [
     "اعتماد الاستشاري",
     "حالة المستخلص",
     "أمر العمل",
-    "رقم الفاتورة",
+    "رقم المستخلص",
     "حالة SAP",
     "قيمة البنود",
     "القيمة النهائية",
@@ -66,15 +66,45 @@ TICKET_FIELDS = [
     "invoice_status",
     "work_order",
     "invoice_no",
+    "invoice_id",
     "sap_status",
     "items_value",
     "final_value",
     "notes",
 ]
 
-# أعمدة التصدير الكامل = نفس قالب الاستيراد (للتوافق وإعادة الاستيراد)
+# أعمدة التصدير = متطابقة 1:1 مع TICKET_HEADERS (28 عموداً) بدون تكرار رقم الفاتورة
 EXPORT_HEADERS = TICKET_HEADERS
-EXPORT_FIELDS = TICKET_FIELDS
+EXPORT_FIELDS = [
+    "ticket_no",
+    "rekaz_code",
+    "receive_date",
+    "district",
+    "receive_time",
+    "agent",
+    "station_no",
+    "feeder_no",
+    "location",
+    "fault_type",
+    "classification",
+    "team",
+    "dispatch_time",
+    "arrival_time",
+    "status",
+    "execution_date",
+    "photographed",
+    "quantities_done",
+    "asphalt_clearance",
+    "metering_status",
+    "consultant_approval",
+    "invoice_status",
+    "work_order",
+    "invoice_id",
+    "sap_status",
+    "items_value",
+    "final_value",
+    "notes",
+]
 
 _COL_WIDTHS = {
     "رقم العطل": 14,
@@ -100,6 +130,7 @@ _COL_WIDTHS = {
     "اعتماد الاستشاري": 16,
     "حالة المستخلص": 14,
     "أمر العمل": 14,
+    "رقم المستخلص": 14,
     "رقم الفاتورة": 14,
     "حالة SAP": 12,
     "قيمة البنود": 12,
@@ -184,6 +215,8 @@ _TICKET_ALIASES = {
     "transaction number": "work_order",
     "رقم الفاتورة": "invoice_no",
     "invoice_no": "invoice_no",
+    "رقم المستخلص": "invoice_id",
+    "invoice_id": "invoice_id",
     "حالة sap": "sap_status",
     "حالة SAP": "sap_status",
     "sap_status": "sap_status",
@@ -412,6 +445,8 @@ def export_tickets(rows: list[dict] | None = None, title: str | None = None, fil
         r = start + offset
         for col, field in enumerate(EXPORT_FIELDS, start=1):
             val = t.get(field)
+            if field == "invoice_id":
+                val = val or t.get("invoice_no")
             if field in _DATE_FIELDS:
                 val = _format_date(val) if val else ""
             elif field in _TIME_FIELDS:
@@ -458,6 +493,10 @@ def import_tickets_from_excel(file_storage) -> dict:
                 continue
             data[field] = _cell(row, inv.get(field), field) if field in inv else ""
 
+        inv_val = (data.get("invoice_id") or data.get("invoice_no") or "").strip()
+        data["invoice_id"] = inv_val
+        data["invoice_no"] = inv_val
+
         if data.get("items_value") == "":
             data["items_value"] = None
         if not data.get("status"):
@@ -493,6 +532,8 @@ def import_tickets_from_excel(file_storage) -> dict:
                     [data[f] for f in TICKET_FIELDS],
                 )
                 created += 1
+            if data.get("invoice_no") or data.get("invoice_id"):
+                db.sync_ticket_to_invoices(ticket_no, conn=conn)
         except Exception as exc:
             errors.append(f"صف {i} ({ticket_no}): {exc}")
 
