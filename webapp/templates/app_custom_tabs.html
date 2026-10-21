@@ -116,7 +116,7 @@
               <form method="post" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف التبويب') }}" style="margin-top:8px;">
                 <input type="hidden" name="action" value="delete">
                 <input type="hidden" name="id" value="{{ r.id }}">
-                <input type="hidden" name="delete_password" value="">
+                <label class="delete-inline-password">{{ _("كلمة مرور الحذف") }}<input type="password" name="delete_password" autocomplete="off" data-keep-placeholder placeholder="{{ _('أدخل كلمة مرور الحذف') }}" aria-label="{{ _('كلمة مرور الحذف') }}" style="display:block;min-width:180px;padding:9px;border:1px solid #8a7349;border-radius:8px;" required></label>
                 {% if can('button.tabs.delete') %}<button class="btn danger" type="button" data-delete-confirm>{{ _('حذف التبويب') }}</button>{% endif %}
               </form>
             </details>

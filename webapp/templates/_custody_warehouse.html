@@ -126,9 +126,9 @@
           {% if (can('modules.delete') and can('button.module.custody.delete')) %}
           <td class="actions">
             {% if not ln.warehouse_tx_id and not ln.return_warehouse_tx_id %}
-            <form method="post" action="{{ url_for('custody_line_delete', line_id=ln.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كود تأكيد الحذف لحذف بند العهدة') }}">
-              <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+            <form method="post" action="{{ url_for('delete_confirm_page') }}" class="server-delete-guard" data-delete-msg="{{ _('أدخل كود تأكيد الحذف لحذف بند العهدة') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="_delete_target" value="{{ url_for('custody_line_delete', line_id=ln.id) }}">
+              
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
             {% else %}—{% endif %}
           </td>

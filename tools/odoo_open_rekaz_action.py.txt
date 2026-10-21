@@ -1,0 +1,11 @@
+# Paste into Odoo Studio > Execute Code. This opens the EXISTING Rekaz UI.
+# Replace the value below with your actual HTTPS Rekaz application URL.
+# This action does not sync data; rekaz_odoo_sync.py runs on the Rekaz server.
+rekaz_url = ''
+if not rekaz_url or not rekaz_url.startswith('https://'):
+    raise UserError('ضع رابط تطبيق ركاز الفعلي الذي يبدأ بـ https:// في rekaz_url')
+action = {
+    'type': 'ir.actions.act_url',
+    'url': rekaz_url,
+    'target': 'new',
+}

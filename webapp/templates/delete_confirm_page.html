@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<section style="max-width:520px;margin:32px auto;padding:24px;background:white;border:2px solid #8a7349;border-radius:14px;">
+<h2>تأكيد الحذف بكلمة المرور</h2>
+<p>راجع السجل قبل المتابعة. لا يمكن التراجع عن الحذف.</p>
+<form method="post" action="{{ delete_target }}">
+{% for key, value in delete_fields %}<input type="hidden" name="{{ key }}" value="{{ value }}">{% endfor %}
+<input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+<input type="hidden" name="delete_auth_mode" value="static">
+<label for="confirmedDeletePassword" style="display:block!important;font-weight:700;margin:16px 0 8px;">كلمة مرور الحذف</label>
+<input id="confirmedDeletePassword" type="password" name="delete_password" required autofocus autocomplete="off" aria-label="كلمة مرور الحذف" style="display:block!important;visibility:visible!important;opacity:1!important;width:100%;min-height:48px;padding:12px;background:#fff;color:#111;border:2px solid #8a7349;border-radius:8px;">
+<button type="submit" class="btn danger" style="margin-top:20px;">تأكيد الحذف نهائياً</button>
+<a class="btn ghost" href="/">إلغاء</a>
+</form>
+</section>
+{% endblock %}

@@ -73,6 +73,11 @@ def create_ticket():
 
             if not (data.get("rekaz_code") or "").strip():
                 data["rekaz_code"] = db.next_series_code("er", conn)
+            conflict = db.project_identifier_conflict(
+                "ticket", ticket_no=data.get("ticket_no") or "",
+                work_order=data.get("work_order") or "", conn=conn)
+            if conflict:
+                return jsonify({"ok": False, "error": conflict}), 409
 
             cols = ", ".join(TICKET_FIELDS)
             placeholders = ", ".join(["?"] * len(TICKET_FIELDS))

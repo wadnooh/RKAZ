@@ -123,27 +123,6 @@ def connect():
 
 
 
-def _drop_unique_index_for_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
-    """يلغي فهرس UNIQUE تلقائي/صريح إذا كان مرتبطاً بعمود واحد فقط."""
-    for idx in conn.execute(f"PRAGMA index_list('{table}')").fetchall():
-        idx_name = idx[1]
-        if not idx_name or idx[2] != 1:
-            continue
-        origin = idx[3] if len(idx) > 3 else ""
-        if origin and origin != "c":
-            continue
-        cols = [r[2] for r in conn.execute(f"PRAGMA index_info('{idx_name}')").fetchall()]
-        if cols == [column]:
-            try:
-                conn.execute(f'DROP INDEX IF EXISTS "{idx_name}"')
-                return True
-            except sqlite3.OperationalError as exc:
-                if "associated with UNIQUE or PRIMARY KEY constraint" in str(exc):
-                    return False
-                raise
-    return False
-
-
 def _dedupe_duplicate_work_orders(conn: sqlite3.Connection, table: str = "tickets") -> None:
     """يحافظ على أول قيمة work_order من أصل تكرارها ويُفرغ التكرارات الإضافية."""
     if table not in {"tickets", "primary_team_orders"}:
@@ -166,6 +145,173 @@ def _dedupe_duplicate_work_orders(conn: sqlite3.Connection, table: str = "ticket
             f"UPDATE {table} SET work_order='' WHERE trim(COALESCE(work_order, ''))=? AND id != ?",
             (work_order, keep_id),
         )
+
+
+def install_project_identifier_constraints(conn: sqlite3.Connection) -> None:
+    tables = {
+        row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if not {'tickets', 'reinforcement_works'} <= tables:
+        return
+    conn.executescript("""
+        CREATE TRIGGER IF NOT EXISTS tickets_fault_no_unique_insert
+        BEFORE INSERT ON tickets
+        WHEN trim(COALESCE(NEW.ticket_no, '')) <> ''
+          AND EXISTS (
+              SELECT 1 FROM tickets
+              WHERE lower(trim(COALESCE(ticket_no, ''))) =
+                    lower(trim(COALESCE(NEW.ticket_no, '')))
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'رقم العطل مسجل مسبقاً');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS tickets_fault_no_unique_update
+        BEFORE UPDATE OF ticket_no ON tickets
+        WHEN trim(COALESCE(NEW.ticket_no, '')) <> ''
+          AND EXISTS (
+              SELECT 1 FROM tickets
+              WHERE id <> OLD.id
+                AND lower(trim(COALESCE(ticket_no, ''))) =
+                    lower(trim(COALESCE(NEW.ticket_no, '')))
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'رقم العطل مسجل مسبقاً');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS tickets_work_order_unique_insert
+        BEFORE INSERT ON tickets
+        WHEN trim(COALESCE(NEW.work_order, '')) <> ''
+          AND (
+              EXISTS (
+                  SELECT 1 FROM tickets
+                  WHERE lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+              OR EXISTS (
+                  SELECT 1 FROM reinforcement_works
+                  WHERE lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'رقم أمر العمل مستخدم مسبقاً');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS tickets_work_order_unique_update
+        BEFORE UPDATE OF work_order ON tickets
+        WHEN trim(COALESCE(NEW.work_order, '')) <> ''
+          AND (
+              EXISTS (
+                  SELECT 1 FROM tickets
+                  WHERE id <> OLD.id
+                    AND lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+              OR EXISTS (
+                  SELECT 1 FROM reinforcement_works
+                  WHERE lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'رقم أمر العمل مستخدم مسبقاً');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS reinforcement_work_order_unique_insert
+        BEFORE INSERT ON reinforcement_works
+        WHEN trim(COALESCE(NEW.work_order, '')) <> ''
+          AND (
+              EXISTS (
+                  SELECT 1 FROM tickets
+                  WHERE lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+              OR EXISTS (
+                  SELECT 1 FROM reinforcement_works
+                  WHERE lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'رقم أمر العمل مستخدم مسبقاً');
+        END;
+
+        CREATE TRIGGER IF NOT EXISTS reinforcement_work_order_unique_update
+        BEFORE UPDATE OF work_order ON reinforcement_works
+        WHEN trim(COALESCE(NEW.work_order, '')) <> ''
+          AND (
+              EXISTS (
+                  SELECT 1 FROM tickets
+                  WHERE lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+              OR EXISTS (
+                  SELECT 1 FROM reinforcement_works
+                  WHERE id <> OLD.id
+                    AND lower(trim(COALESCE(work_order, ''))) =
+                        lower(trim(COALESCE(NEW.work_order, '')))
+              )
+          )
+        BEGIN
+            SELECT RAISE(ABORT, 'رقم أمر العمل مستخدم مسبقاً');
+        END;
+    """)
+
+
+def project_identifier_conflict(
+    record_type: str,
+    *,
+    ticket_no: str = "",
+    work_order: str = "",
+    record_id: int | None = None,
+    conn: sqlite3.Connection,
+) -> str | None:
+    """Validate primary fault numbers and work orders; reinforcement fault numbers are references."""
+    if record_type not in {"ticket", "reinforcement"}:
+        raise ValueError("Unsupported project record type")
+    ticket_no = (ticket_no or "").strip()
+    work_order = (work_order or "").strip()
+    tables = {
+        row[0] for row in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        ).fetchall()
+    }
+    if record_type == "ticket" and ticket_no:
+        if "tickets" not in tables:
+            return None
+        query = """
+            SELECT 1 FROM tickets
+            WHERE lower(trim(COALESCE(ticket_no, ''))) = lower(trim(?))
+        """
+        params: list[object] = [ticket_no]
+        if record_id is not None:
+            query += " AND id <> ?"
+            params.append(record_id)
+        if conn.execute(query + " LIMIT 1", params).fetchone():
+            return f"رقم العطل «{ticket_no}» مسجل مسبقاً؛ لا يمكن تكراره."
+    if work_order:
+        for table in ("tickets", "reinforcement_works"):
+            if table not in tables:
+                continue
+            query = f"""
+                SELECT 1 FROM {table}
+                WHERE lower(trim(COALESCE(work_order, ''))) = lower(trim(?))
+            """
+            params = [work_order]
+            if record_id is not None and (
+                    (record_type == "ticket" and table == "tickets")
+                    or (record_type == "reinforcement" and table == "reinforcement_works")):
+                query += " AND id <> ?"
+                params.append(record_id)
+            if conn.execute(query + " LIMIT 1", params).fetchone():
+                return (
+                    f"رقم أمر العمل «{work_order}» مستخدم مسبقاً؛ يجب أن يكون "
+                    "فريداً بين الأعطال والتحسينات في جميع المشاريع."
+                )
+    return None
 
 
 # جداول أُضيفت لاحقاً — تُضمن صراحة حتى بعد استعادة حفظة قديمة
@@ -699,8 +845,7 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
                 created.append("tickets.sap_status")
             if _ensure_column(conn, "tickets", "invoice_status"):
                 created.append("tickets.invoice_status")
-            # السماح بتكرار رقم العطل؛ لا يُسمح بتكرار أمر العمل
-            _drop_unique_index_for_column(conn, "tickets", "ticket_no")
+            # تبقى قيود أرقام الأعطال وأوامر العمل فعالة على مستوى قاعدة البيانات.
             _dedupe_duplicate_work_orders(conn, "tickets")
             conn.execute(
                 "CREATE UNIQUE INDEX IF NOT EXISTS idx_tickets_work_order_unique ON tickets(work_order) WHERE trim(COALESCE(work_order, '')) <> ''"
@@ -1015,6 +1160,7 @@ def ensure_schema(conn: sqlite3.Connection | None = None) -> list[str]:
             _ensure_column(conn, "construction_works", "value", "REAL DEFAULT 0")
         if "reinforcement_works" in existing or "reinforcement_works" in created:
             _ensure_column(conn, "reinforcement_works", "value", "REAL DEFAULT 0")
+        install_project_identifier_constraints(conn)
         if "transaction_boq_lines" in existing or "transaction_boq_lines" in created:
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_boq_module_record ON transaction_boq_lines(module_name, record_id)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_tx_boq_ref ON transaction_boq_lines(record_ref)")
@@ -2085,8 +2231,9 @@ def sync_ticket_to_invoices(
         ).fetchone()
         if not existing:
             existing = conn.execute(
-                "SELECT * FROM invoices WHERE (invoice_id=? AND invoice_id<>'') OR (invoice_no=? AND invoice_no<>'') LIMIT 1",
-                (inv_id, inv_no),
+                "SELECT * FROM invoices WHERE coalesce(trim(ticket_no),'')='' AND work_order=? AND work_order<>'' "
+                "AND ((invoice_id=? AND invoice_id<>'') OR (invoice_no=? AND invoice_no<>'')) LIMIT 1",
+                (wo, inv_id, inv_no),
             ).fetchone()
 
         if existing:
@@ -2226,8 +2373,9 @@ def sync_primary_team_order_to_invoices(pto_data: dict, *, conn=None) -> bool:
         _ensure_column(conn, "invoices", "value", "REAL")
 
         existing = conn.execute(
-            "SELECT id FROM invoices WHERE invoice_id=? OR (work_order=? AND work_order<>'') LIMIT 1",
-            (ext_no, wo),
+            "SELECT id FROM invoices WHERE work_order=? AND work_order<>'' "
+            "AND coalesce(trim(ticket_no),'')='' ORDER BY id DESC LIMIT 1",
+            (wo,),
         ).fetchone()
         if existing:
             conn.execute(
@@ -7887,4 +8035,3 @@ def get_hr_comprehensive_report(conn: sqlite3.Connection | None = None, filters:
     finally:
         if own:
             conn.close()
-

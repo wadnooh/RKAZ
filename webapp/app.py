@@ -2102,6 +2102,15 @@ def reinforcement_work_edit(row_id):
     if not (data.get("status") or "").strip():
         data["status"] = (dict(row).get("status") or "").strip() or "جديد"
 
+    conflict = db.project_identifier_conflict(
+        "reinforcement", work_order=data.get("work_order") or "",
+        record_id=row_id, conn=conn)
+    if conflict:
+        conn.close()
+        flash(_t(conflict), "danger")
+        return _reinforcement_edit_redirect(
+            row_id, (request.form.get("step") or request.args.get("step") or "data").strip())
+
     sets = ", ".join([f"{f}=?" for f in REINFORCEMENT_WORK_FIELDS])
     conn.execute(
         f"UPDATE reinforcement_works SET {sets} WHERE id=?",
@@ -5820,6 +5829,13 @@ def module_new(name):
                 section_modules=modules_for_section(section) if section else [],
                 form_ctx=None,
             )
+        if name == "reinforcement_works":
+            conflict = db.project_identifier_conflict(
+                "reinforcement", work_order=data.get("work_order") or "", conn=conn)
+            if conflict:
+                conn.close()
+                flash(_t(conflict), "danger")
+                return redirect(url_for("module_new", name=name))
         keys = [f[0] for f in module["fields"]]
         # transferred_license_id ليس في الحقول المعروضة — لا يُدرج من النموذج
         cur = conn.execute(
@@ -6154,6 +6170,14 @@ def module_edit(name, row_id):
                 section_modules=modules_for_section(section) if section else [],
                 form_ctx=None,
             )
+        if name == "reinforcement_works":
+            conflict = db.project_identifier_conflict(
+                "reinforcement", work_order=data.get("work_order") or "",
+                record_id=row_id, conn=conn)
+            if conflict:
+                conn.close()
+                flash(_t(conflict), "danger")
+                return redirect(url_for("module_edit", name=name, row_id=row_id))
         keys = [f[0] for f in module["fields"]]
         sets = ", ".join([f"{k}=?" for k in keys])
         conn.execute(
@@ -6460,6 +6484,10 @@ def ops_primary_teams():
                         (request.form.get("notes") or "").strip(),
                     ),
                 )
+                primary_finance_row = conn.execute(
+                    "SELECT * FROM primary_team_orders WHERE id=?", (cur.lastrowid,)
+                ).fetchone()
+                db.sync_primary_team_order_to_invoices(dict(primary_finance_row), conn=conn)
                 conn.commit()
                 db.log_audit(
                     current_user_name(),
@@ -8353,3 +8381,24 @@ register_payroll(app, login_required)
 
 if __name__ == "__main__":
     main()
+
+
+@app.route("/delete-confirm", methods=["POST"])
+@login_required
+def delete_confirm_page():
+    from urllib.parse import urlsplit
+    target = request.form.get("_delete_target", "")
+    parts = urlsplit(target)
+    if parts.scheme or parts.netloc or not target.startswith("/") or target.startswith("//") or "\\" in target:
+        abort(400)
+    try:
+        endpoint, args = app.url_map.bind_to_environ(request.environ).match(parts.path, method="POST")
+    except Exception:
+        abort(400)
+    if "delete" not in endpoint and endpoint != "warehouse_balances_clear":
+        abort(400)
+    if endpoint == "delete_confirm_page":
+        abort(400)
+    fields = [(key, value) for key, value in request.form.items(multi=True)
+              if key not in {"_delete_target", "delete_password", "delete_code", "delete_auth_mode"}]
+    return render_template("delete_confirm_page.html", delete_target=target, delete_fields=fields)

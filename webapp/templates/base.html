@@ -321,21 +321,21 @@
         <label class="field" style="display:block;margin-bottom:12px;" for="deleteAuthMode">
           <span style="display:block;margin-bottom:6px;font-weight:700;">{{ _('طريقة التأكيد') }}</span>
           <select id="deleteAuthMode" style="width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:10px;">
-            <option value="email">{{ _('كود البريد') }}</option>
-            <option value="static">{{ _('كلمة مرور ثابتة') }}</option>
+            <option value="email" {% if not delete_methods.static_ready %}selected{% endif %}>{{ _('كود البريد') }}</option>
+            <option value="static" {% if delete_methods.static_ready %}selected{% endif %}>{{ _('كلمة مرور ثابتة') }}</option>
           </select>
         </label>
         {% else %}
         <input type="hidden" id="deleteAuthMode" value="{% if delete_methods.static %}static{% else %}email{% endif %}">
         {% endif %}
         <label class="field" style="display:block;margin-bottom:12px;" for="deletePasswordInput">
-          <span id="deletePasswordLabel" style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كود / كلمة تأكيد الحذف') }}</span>
+          <span id="deletePasswordLabel" style="display:block;margin-bottom:6px;font-weight:700;">{{ _('كلمة مرور الحذف') }}</span>
           <input type="text" id="deletePasswordInput" name="delete_code_ui" autocomplete="one-time-code" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" dir="ltr" placeholder="{% if delete_methods.static and not delete_methods.email %}{{ _('كلمة المرور') }}{% else %}000000{% endif %}" tabindex="1" style="text-align:left;width:100%;padding:12px 14px;border:2px solid #8a7349;border-radius:10px;font-size:1.15rem;box-sizing:border-box;">
         </label>
         <p class="meta app-runtime-message" id="deletePasswordError" style="color:var(--danger);margin:0 0 10px;display:none;"></p>
         <div class="actions" style="justify-content:flex-end;gap:8px;">
           <button type="button" class="btn ghost" id="deletePasswordCancel" tabindex="3">{{ _('إلغاء') }}</button>
-          <button type="button" class="btn danger" id="deletePasswordConfirm" tabindex="2">{{ _('إرسال / تأكيد الحذف') }}</button>
+          <button type="button" class="btn danger" id="deletePasswordConfirm" tabindex="2">{{ _('تأكيد الحذف') }}</button>
         </div>
       </div>
     </div>
@@ -422,6 +422,8 @@
       }
       if (input) {
         input.value = "";
+        input.type = mode === "static" ? "password" : "text";
+        input.autocomplete = mode === "static" ? "off" : "one-time-code";
         input.inputMode = mode === "static" ? "text" : "numeric";
         if (mode === "static") {
           input.removeAttribute("maxlength");
@@ -445,7 +447,7 @@
       try {
         input.readOnly = false;
         input.disabled = false;
-        input.focus();
+        input.focus({preventScroll: true});
       } catch (e) {}
     }
 
@@ -477,7 +479,7 @@
       mountModalTop();
       if (modal) {
         modal.hidden = false;
-        modal.style.cssText = "display:flex !important;z-index:2147483646 !important;align-items:flex-start;padding-top:28px;";
+        modal.style.display = "flex";
       }
       lockBody(true);
       if (focusTimer) clearTimeout(focusTimer);
@@ -555,6 +557,14 @@
       ev.stopPropagation();
       // تحقق من الحقول المطلوبة (مثل كتابة «مسح») قبل فتح كود التأكيد
       if (typeof form.reportValidity === "function" && !form.reportValidity()) return;
+      var inlinePassword = form.querySelector('input[type="password"][name="delete_password"]');
+      if (inlinePassword) {
+        var review = form.getAttribute("data-delete-review");
+        if (review && !window.confirm(review)) return;
+        pendingForm = form;
+        submitPendingForm(String(inlinePassword.value || "").trim());
+        return;
+      }
       openModal(form, normalizeDeleteMessage(form.getAttribute("data-delete-msg") || emptyMsg));
     }, true);
 
@@ -614,6 +624,14 @@
     document.addEventListener("keydown", function (ev) {
       if (!modal || modal.hidden) return;
       if (ev.key === "Escape") closeModal();
+      if (ev.key === "Tab") {
+        var controls = Array.prototype.slice.call(modal.querySelectorAll('input:not([type="hidden"]), select, button'))
+          .filter(function (el) { return !el.disabled && el.getClientRects().length; });
+        if (!controls.length) return;
+        var first = controls[0], last = controls[controls.length - 1];
+        if (ev.shiftKey && document.activeElement === first) { ev.preventDefault(); last.focus(); }
+        else if (!ev.shiftKey && document.activeElement === last) { ev.preventDefault(); first.focus(); }
+      }
     }, true);
   })();
   </script>

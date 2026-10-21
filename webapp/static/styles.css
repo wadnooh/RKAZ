@@ -317,6 +317,7 @@ main.container .toolbar,
   outline-offset: 1px;
 }
 .delete-pw-backdrop {
+  box-sizing: border-box;
   position: fixed !important;
   top: 0 !important;
   right: 0 !important;
@@ -338,9 +339,12 @@ main.container .toolbar,
 .delete-pw-backdrop[hidden] { display: none !important; }
 body.delete-pw-open {
   overflow: hidden !important;
-  touch-action: none;
 }
 .delete-pw-dialog {
+  box-sizing: border-box;
+  flex-shrink: 0;
+  max-height: calc(100dvh - 52px);
+  overflow-y: auto;
   position: relative;
   z-index: 2147483647 !important;
   width: min(440px, 100%);

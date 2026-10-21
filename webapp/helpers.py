@@ -29,7 +29,7 @@ from webapp import permissions
 from webapp import whatsapp
 
 # Bump when layout/CSS must force clients past nginx/browser 7d static cache.
-_LAYOUT_ASSET_TAG = "delete-auth-methods-1"
+_LAYOUT_ASSET_TAG = "delete-password-only-20261014"
 DELETE_CODE_TTL_SECONDS = 10 * 60
 
 def lang():
@@ -95,8 +95,8 @@ def _static_delete_password() -> str:
 
 def delete_confirm_methods() -> dict:
     return {
-        "email": permissions.can("delete.email_code"),
-        "static": permissions.can("delete.static_password"),
+        "email": False,
+        "static": permissions.can("delete.static_password") or permissions.can("delete.email_code"),
         "static_ready": bool(_static_delete_password()),
     }
 
@@ -136,122 +136,29 @@ def _admin_delete_code_recipients() -> list[dict]:
 
 
 def _send_delete_code(scope: str) -> bool:
-    recipients = _admin_delete_code_recipients()
-    cfg = whatsapp.get_whatsapp_config()
-    admin_phones = [r["phone"] for r in recipients if r.get("phone")]
-    if cfg.get("admin_phone") and cfg["admin_phone"] not in admin_phones:
-        admin_phones.append(cfg["admin_phone"])
-    email_addrs = [r["email"] for r in recipients if r.get("email")]
-
-    if not email_addrs and not admin_phones:
-        g.delete_confirm_message = t("لا يمكن الحذف: لا يوجد بريد إلكتروني أو رقم جوال مسجل لحساب admin نشط.")
-        return False
-    code = f"{secrets.randbelow(1_000_000):06d}"
-    session["delete_email_confirm"] = {
-        "scope": scope,
-        "code_hash": _hash_delete_code(code),
-        "expires_at": time.time() + DELETE_CODE_TTL_SECONDS,
-    }
-    subject = "كود تأكيد الحذف - ركاز"
-    requester = current_user_name()
-    body = "\n".join(
-        [
-            "مرحباً مدير النظام,",
-            "",
-            "تم طلب تنفيذ عملية حذف في نظام ركاز.",
-            f"المستخدم الطالب للحذف: {requester}",
-            f"كود تأكيد الحذف: {code}",
-            "صلاحية الكود 10 دقائق، ولا يعمل إلا لهذه العملية فقط.",
-            "",
-            "إذا لم تطلب الحذف فتجاهل هذه الرسالة وراجع مدير النظام.",
-        ]
-    )
-    wa_body = "\n".join(
-        [
-            "🔐 *كود تأكيد الحذف — نظام ركاز*",
-            f"▫️ كود التأكيد: *{code}*",
-            f"▫️ الطالب: {requester}",
-            "▫️ الصلاحية: 10 دقائق لهذه العملية فقط.",
-            "⚠️ إذا لم تطلب الحذف تجاهل هذه الرسالة.",
-        ]
-    )
-    errors = []
-    sent_any = False
-    if mailer.smtp_configured() and email_addrs:
-        ok, err = mailer.send_email(to_addrs=email_addrs, subject=subject, body=body)
-        if ok:
-            sent_any = True
-        else:
-            errors.append(t("البريد: {err}", err=err))
-    elif not mailer.smtp_configured():
-        errors.append(t("البريد غير مفعل"))
-
-    if whatsapp.configured() and admin_phones:
-        for p in admin_phones:
-            ok, err = whatsapp.send_text(to_phone=p, body=wa_body)
-            if ok:
-                sent_any = True
-            else:
-                errors.append(t("واتساب: {err}", err=err))
-    elif not whatsapp.configured():
-        errors.append(t("واتساب غير مفعل"))
-
-    if sent_any:
-        g.delete_confirm_message = t("تم إرسال كود تأكيد الحذف (بالبريد / واتساب). أدخل الكود لإتمام الحذف.")
-        g.delete_confirm_category = "ok"
-        return False
-
+    # Retired: never dispatch deletion credentials through any channel.
     session.pop("delete_email_confirm", None)
-    if errors:
-        g.delete_confirm_message = t("تعذر إرسال كود تأكيد الحذف: {err}", err=" | ".join(errors))
-    else:
-        g.delete_confirm_message = t("تعذر إرسال كود تأكيد الحذف: {err}", err="لا توجد قناة إرسال مفعلة")
+    g.delete_confirm_message = t("أدخل كلمة مرور الحذف الثابتة لإتمام العملية.")
     return False
 
 
 def delete_password_ok() -> bool:
-    """يتحقق من طريقة تأكيد الحذف الممنوحة للمستخدم."""
-    code = (request.form.get("delete_code") or request.form.get("delete_password") or "").strip()
+    """Require the configured shared password and existing delete authorization."""
+    session.pop("delete_email_confirm", None)
     if not session.get("user_id"):
         return False
-    methods = delete_confirm_methods()
-    if not methods["email"] and not methods["static"]:
-        g.delete_confirm_message = t("لا تملك صلاحية طريقة تأكيد الحذف. اطلب منح صلاحية كود البريد أو كلمة المرور الثابتة.")
+    if not delete_confirm_methods()["static"]:
+        g.delete_confirm_message = t("لا تملك صلاحية تأكيد الحذف.")
         return False
-    static_password = _static_delete_password()
-    if code and methods["static"]:
-        if static_password and secrets.compare_digest(code, static_password):
-            return True
-        if not methods["email"]:
-            if not static_password:
-                g.delete_confirm_message = t("كلمة مرور الحذف الثابتة غير مضبوطة على السيرفر.")
-            else:
-                g.delete_confirm_message = t("كلمة مرور الحذف غير صحيحة.")
-            return False
-    scope = _delete_scope()
-    record = session.get("delete_email_confirm") or {}
-    if code:
-        expires_at = float(record.get("expires_at") or 0)
-        if methods["email"] and (
-            record.get("scope") == scope
-            and expires_at >= time.time()
-            and record.get("code_hash") == _hash_delete_code(code)
-        ):
-            session.pop("delete_email_confirm", None)
-            return True
-        g.delete_confirm_message = t("بيانات تأكيد الحذف غير صحيحة أو منتهية. تحقق من كلمة المرور أو اطلب كوداً جديداً.")
+    password = _static_delete_password()
+    if not password:
+        g.delete_confirm_message = t("كلمة مرور الحذف الثابتة غير مضبوطة على السيرفر.")
         return False
-    mode = (request.form.get("delete_auth_mode") or "").strip().lower()
-    if mode == "static" or (methods["static"] and not methods["email"]):
-        if not static_password:
-            g.delete_confirm_message = t("كلمة مرور الحذف الثابتة غير مضبوطة على السيرفر.")
-        else:
-            g.delete_confirm_message = t("أدخل كلمة مرور الحذف الثابتة لإتمام العملية.")
-        return False
-    if not methods["email"]:
-        g.delete_confirm_message = t("لا تملك صلاحية إرسال كود الحذف بالبريد.")
-        return False
-    return _send_delete_code(scope)
+    value = (request.form.get("delete_code") or request.form.get("delete_password") or "").strip()
+    if value and secrets.compare_digest(value.encode("utf-8"), password.encode("utf-8")):
+        return True
+    g.delete_confirm_message = t("كلمة مرور الحذف غير صحيحة.") if value else t("أدخل كلمة مرور الحذف الثابتة لإتمام العملية.")
+    return False
 
 
 def safe_local_redirect(raw: str | None, fallback: str) -> str:
@@ -274,7 +181,7 @@ def safe_local_redirect(raw: str | None, fallback: str) -> str:
 
 def reject_bad_delete_password(fallback_url: str):
     flash(
-        getattr(g, "delete_confirm_message", None) or t("أدخل كود تأكيد الحذف المرسل إلى بريد حسابات admin."),
+        getattr(g, "delete_confirm_message", None) or t("أدخل كلمة مرور الحذف الثابتة لإتمام العملية."),
         getattr(g, "delete_confirm_category", "danger"),
     )
     nxt = (request.form.get("next") or "").strip()

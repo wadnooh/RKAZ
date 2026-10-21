@@ -53,9 +53,9 @@
       {% endif %}
       <a class="btn {% if editing %}ghost{% else %}primary{% endif %}" href="{{ url_for('ticket_print', ticket_id=ticket.id) }}" target="_blank">{{ _('طباعة التقرير') }}</a>
       {% if editing and can('tickets.delete') %}
-      <form method="post" action="{{ url_for('ticket_delete', ticket_id=ticket.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف العطل') }}">
-        <input type="hidden" name="delete_password" value="">
-        <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+      <form method="post" action="{{ url_for('delete_confirm_page') }}" class="server-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف العطل') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="_delete_target" value="{{ url_for('ticket_delete', ticket_id=ticket.id) }}">
+        
+        <button class="btn danger" type="submit">{{ _('حذف') }}</button>
       </form>
       {% endif %}
     </div>
@@ -344,9 +344,9 @@
           <td>{% if line.work_class == 'طوارئ' %}{{ ((line.increase_ratio or 0) * 100)|round(1) }}٪{% else %}—{% endif %}</td>
           {% if editing and can('tickets.write') %}
           <td class="actions">
-            <form method="post" action="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف البند') }}">
-              <input type="hidden" name="delete_password" value="">
-              <button class="btn ghost" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+            <form method="post" action="{{ url_for('delete_confirm_page') }}" class="server-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لحذف البند') }}"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="_delete_target" value="{{ url_for('ticket_boq_delete', ticket_id=ticket.id, line_id=line.id) }}">
+              
+              <button class="btn ghost" type="submit">{{ _('حذف') }}</button>
             </form>
           </td>
           {% endif %}

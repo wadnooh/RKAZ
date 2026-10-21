@@ -475,6 +475,7 @@ def import_tickets_from_excel(file_storage) -> dict:
     inv = {v: k for k, v in mapping.items()}
     created = updated = 0
     errors: list[str] = []
+    seen_ticket_numbers: set[str] = set()
     conn = db.connect()
 
     for i, row in enumerate(rows[header_idx + 1 :], start=header_idx + 2):
@@ -484,6 +485,11 @@ def import_tickets_from_excel(file_storage) -> dict:
         if not ticket_no:
             errors.append(f"صف {i}: رقم العطل فارغ")
             continue
+        ticket_key = ticket_no.strip().casefold()
+        if ticket_key in seen_ticket_numbers:
+            errors.append(f"صف {i}: رقم العطل «{ticket_no}» مكرر في ملف الاستيراد")
+            continue
+        seen_ticket_numbers.add(ticket_key)
         # تجاهل صف المثال الافتراضي إن تُرك كما هو دون تعديل جاد — لا نمنع الاستيراد
 
         data = {}
@@ -514,9 +520,16 @@ def import_tickets_from_excel(file_storage) -> dict:
 
         try:
             existing = conn.execute(
-                "SELECT id FROM tickets WHERE ticket_no=?",
+                "SELECT id FROM tickets WHERE lower(trim(COALESCE(ticket_no, '')))=lower(trim(?)) LIMIT 1",
                 (ticket_no,),
             ).fetchone()
+            conflict = db.project_identifier_conflict(
+                "ticket", ticket_no=ticket_no,
+                work_order=data.get("work_order") or "",
+                record_id=existing["id"] if existing else None, conn=conn)
+            if conflict:
+                errors.append(f"صف {i} ({ticket_no}): {conflict}")
+                continue
             cols = ", ".join(TICKET_FIELDS)
             if existing:
                 sets = ", ".join([f"{f}=?" for f in TICKET_FIELDS])

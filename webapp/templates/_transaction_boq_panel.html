@@ -131,7 +131,9 @@
           <td style="font-size:0.85rem; color:var(--text-muted, #64748b);">{{ line.notes or '—' }}</td>
           {% if can('modules.write') %}
           <td style="text-align:center;">
-            <form method="post" action="{{ url_for('module_boq_delete', name=name, row_id=row.id, line_id=line.id) }}" onsubmit="return confirm('{{ _('هل أنت متأكد من حذف هذا البند وإعادة احتساب القيمة فورياً؟') }}');" style="display:inline;">
+            <form method="post" action="{{ url_for('delete_confirm_page') }}" class="server-delete-guard" style="display:inline;">
+              <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
+              <input type="hidden" name="_delete_target" value="{{ url_for('module_boq_delete', name=name, row_id=row.id, line_id=line.id) }}">
               <button type="submit" class="btn danger" style="padding:3px 8px; font-size:0.8rem;" title="{{ _('حذف البند') }}">
                 🗑️ {{ _('حذف') }}
               </button>

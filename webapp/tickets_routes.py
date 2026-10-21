@@ -201,12 +201,21 @@ def new():
         try:
             if not (data.get("rekaz_code") or "").strip():
                 data["rekaz_code"] = db.next_series_code("er", conn)
+            conflict = db.project_identifier_conflict(
+                "ticket", ticket_no=data.get("ticket_no") or "",
+                work_order=data.get("work_order") or "", conn=conn)
+            if conflict:
+                flash(helpers.t(conflict), "danger")
+                return redirect(url_for(".new"))
             cols = ", ".join(TICKET_FIELDS)
             placeholders = ", ".join(["?"] * len(TICKET_FIELDS))
             cur = conn.execute(
                 f"INSERT INTO tickets({cols}) VALUES ({placeholders})", [data[f] for f in TICKET_FIELDS],
             )
             db.ensure_excavation_safety_permits(conn)
+            inv_res = None
+            if data.get("invoice_no") or data.get("invoice_id"):
+                inv_res = db.sync_ticket_to_invoices(data["ticket_no"], conn=conn)
             conn.commit()
             db.log_audit(
                 helpers.current_user_name(), "إضافة", "عطل", cur.lastrowid,
@@ -214,7 +223,6 @@ def new():
             )
             new_id = cur.lastrowid
             if data.get("invoice_no") or data.get("invoice_id"):
-                inv_res = db.sync_ticket_to_invoices(data["ticket_no"], conn=conn)
                 if inv_res and inv_res.get("synced"):
                     flash(helpers.t("تم إجبار ونقل المعاملة إلى المتابعات المالية (المستخلصات و SAP) — رقم المستخلص: {no}", no=data.get("invoice_no") or data.get("invoice_id")), "ok")
             try:
@@ -373,6 +381,13 @@ def edit(ticket_id):
         if not (data.get("rekaz_code") or "").strip():
             existing_code = (dict(row).get("rekaz_code") or "").strip()
             data["rekaz_code"] = existing_code or db.next_series_code("er", conn)
+        conflict = db.project_identifier_conflict(
+            "ticket", ticket_no=data.get("ticket_no") or "",
+            work_order=data.get("work_order") or "", record_id=ticket_id, conn=conn)
+        if conflict:
+            conn.close()
+            flash(helpers.t(conflict), "danger")
+            return redirect(url_for(".edit", ticket_id=ticket_id))
         sets = ", ".join([f"{f}=?" for f in TICKET_FIELDS])
         conn.execute(
             f"UPDATE tickets SET {sets}, updated_at=CURRENT_TIMESTAMP WHERE id=?",

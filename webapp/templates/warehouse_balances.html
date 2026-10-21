@@ -40,10 +40,10 @@
     <a class="btn ghost" href="{{ url_for('warehouse_items_template') }}">📥 {{ _('قالب Excel للأصناف') }}</a>
     {% endif %}
     {% if view != 'items' and can('modules.write') %}
-    <form method="post" action="{{ url_for('warehouse_balances_clear') }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لمسح الأرصدة') }}" style="display:inline-flex;gap:6px;align-items:center;">
+    <form method="post" action="{{ url_for('delete_confirm_page') }}" class="server-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف لمسح الأرصدة') }}" style="display:inline-flex;gap:6px;align-items:center;"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="_delete_target" value="{{ url_for('warehouse_balances_clear') }}">
       <input type="hidden" name="confirm" value="مسح">
-      <input type="hidden" name="delete_password" value="">
-      <button class="btn danger ghost" type="button" data-delete-confirm style="font-size:0.85rem;padding:6px 12px;">🗑️ {{ _('مسح الأرصدة') }}</button>
+      
+      <button class="btn danger ghost" type="submit" style="font-size:0.85rem;padding:6px 12px;">🗑️ {{ _('مسح الأرصدة') }}</button>
     </form>
     {% endif %}
   </div>
@@ -92,9 +92,9 @@
             <a class="btn ghost" href="{{ url_for('module_edit', name='warehouse_items', row_id=r.id) }}">{{ _('تعديل') }}</a>
             {% endif %}
             {% if can('modules.delete') %}
-            <form method="post" action="{{ url_for('module_delete', name='warehouse_items', row_id=r.id) }}" class="js-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline">
-              <input type="hidden" name="delete_password" value="">
-              <button class="btn danger" type="button" data-delete-confirm>{{ _('حذف') }}</button>
+            <form method="post" action="{{ url_for('delete_confirm_page') }}" class="server-delete-guard" data-delete-msg="{{ _('أدخل كلمة سر الحذف') }}" style="display:inline"><input type="hidden" name="_csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="_delete_target" value="{{ url_for('module_delete', name='warehouse_items', row_id=r.id) }}">
+              
+              <button class="btn danger" type="submit">{{ _('حذف') }}</button>
             </form>
             {% endif %}
           </td>

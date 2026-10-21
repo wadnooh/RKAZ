@@ -1,0 +1,385 @@
+"""Contract BOQ catalogue, execution lines and separate quantity surveys."""
+import hashlib
+import json
+from pathlib import Path
+import odoo_native_claims as claims
+import odoo_project_inventory as inv
+import odoo_projects_copy as projects_copy
+import rekaz_odoo_sync as sync
+
+CONTRACT = 'x_rekaz_boq_contract'
+ITEM = 'x_rekaz_boq_item'
+LINE = 'x_rekaz_boq_line'
+TARGET_PROJECTS = ['ركاز — المعاملات والأعطال', 'ركاز — معاملات التعزيز / اسكيمات']
+DETAILS_VISIBLE_FIELD = 'x_rekaz_boq_details_visible'
+DETAILS_VISIBLE_STAGES = ('الإخلاء المبدئي', 'المستخلص', 'الإخلاء النهائي')
+
+
+def model(api, technical, label):
+    return api.ensure('ir.model', [('model', '=', technical)], {'model': technical, 'name': label, 'state': 'manual'})
+
+
+def access(api, mid, editable, creatable=False):
+    group = api.find('ir.model.data', [('module', '=', 'project'), ('name', '=', 'group_project_user')], ['res_id'])
+    if len(group) != 1: raise ValueError('Project users group missing')
+    if api.find('ir.model', [('model', '=', 'ir.access')], ['id']):
+        operation = 'cru' if editable else ('cr' if creatable else 'r')
+        access = {'name': 'rekaz_boq_' + str(mid), 'model_id': mid, 'group_id': group[0]['res_id'],
+                  'operation': operation, 'domain': False, 'active': True}
+        claims.upsert(api, 'ir.access', [('name', '=', access['name'])], access)
+        restriction = {'name': 'rekaz_boq_company_' + str(mid), 'model_id': mid, 'group_id': False,
+                       'operation': 'crud', 'domain': "[('x_company_id','in',company_ids)]", 'active': True}
+        claims.upsert(api, 'ir.access', [('name', '=', restriction['name'])], restriction)
+    else:
+        api.ensure('ir.model.access', [('name', '=', 'rekaz_boq_' + str(mid)), ('model_id', '=', mid)],
+                   {'name': 'rekaz_boq_' + str(mid), 'model_id': mid, 'group_id': group[0]['res_id'],
+                    'perm_read': True, 'perm_create': editable or creatable, 'perm_write': editable, 'perm_unlink': False})
+        api.ensure('ir.rule', [('name', '=', 'rekaz_boq_company_' + str(mid)), ('model_id', '=', mid)],
+                   {'name': 'rekaz_boq_company_' + str(mid), 'model_id': mid, 'domain_force': "[('x_company_id','in',company_ids)]"})
+
+
+def project_scope(api):
+    projects = api.call(
+        'project.project',
+        'search_read',
+        [[('company_id', '=', api.company_id), ('name', 'in', TARGET_PROJECTS)]],
+        fields=['id', 'name'],
+        limit=False,
+    )
+    names = [project['name'] for project in projects]
+    if len(projects) != len(TARGET_PROJECTS) or set(names) != set(TARGET_PROJECTS):
+        raise ValueError('Expected exactly these Rekaz projects before installing BOQ: ' + ', '.join(TARGET_PROJECTS))
+    return [project['id'] for project in projects]
+
+
+def project_scope_domain(company, project_ids):
+    return repr([('company_id', '=', company), ('project_id', 'in', project_ids)])
+
+
+def report_action_values(report_name):
+    return {
+        'name': 'طباعة المعاملة وبنود العقد',
+        'type': 'ir.actions.report',
+        'model': 'project.task',
+        'report_type': 'qweb-pdf',
+        'report_name': report_name,
+        'binding_model_id': False,
+        'binding_type': 'report',
+    }
+
+
+def details_visibility_compute():
+    return ("for rec in self:\n"
+            f"    rec['{DETAILS_VISIBLE_FIELD}'] = bool(rec.stage_id) and rec.stage_id.name in {list(DETAILS_VISIBLE_STAGES)!r}")
+
+
+def task_name_action_code(company):
+    return f'''for rec in records:
+    if rec.company_id.id == {company}:
+        fault = (rec.x_rekaz_fault_no or '').strip()
+        notification = (rec.x_rekaz_notification_no or '').strip()
+        work_order = (rec.x_rekaz_work_order or '').strip()
+        parts = []
+        if fault:
+            parts.append('رقم العطل: ' + fault)
+        elif notification:
+            parts.append('رقم الإشعار: ' + notification)
+        if work_order:
+            parts.append('أمر العمل: ' + work_order)
+        if parts:
+            name = ' — '.join(parts)
+            if rec.name != name:
+                rec.write({{'name': name}})
+'''
+
+
+def task_boq_view_arch():
+    return f'''<data><xpath expr="//sheet" position="inside"><field name="{DETAILS_VISIBLE_FIELD}" invisible="1"/></xpath><xpath expr="//notebook" position="inside"><page string="العقد وبنود الكميات" name="rekaz_boq"><field name="company_id" invisible="1"/><group string="إعدادات العقد والحساب"><field name="x_rekaz_boq_class" string="تصنيف المعاملة"/><field name="x_rekaz_boq_total" string="إجمالي التنفيذ" readonly="1"/></group><field name="x_rekaz_boq_lines" context="{{'default_x_task_id': id, 'default_x_company_id': company_id, 'default_x_contract_id': x_rekaz_boq_contract, 'default_x_kind': 'تنفيذ'}}"><list><field name="x_origin" column_invisible="True"/><field name="x_kind"/><field name="x_contract_id"/><field name="x_item_id"/><field name="x_qty"/><field name="x_unit"/><field name="x_price"/><field name="x_work_class"/><field name="x_ratio"/><field name="x_total"/></list></field><div>الحصر والتنفيذ سجلان منفصلان؛ لا تجمعهما في المستخلص. اختر العقد وتصنيف المعاملة ثم أضف البند بكوده والكمية. الاعتيادي بالسعر الأساسي؛ الطوارئ بزيادة 45% مرة واحدة. إجمالي التنفيذ لا يشمل سجلات الحصر مرة ثانية.</div></page></xpath></data>'''
+
+
+def task_transaction_search_arch():
+    domain = ("['|','|','|',('name','ilike',self),"
+              "('x_rekaz_fault_no','ilike',self),"
+              "('x_rekaz_notification_no','ilike',self),"
+              "('x_rekaz_work_order','ilike',self)]")
+    return ('<xpath expr="//field[@name=\'name\']" position="after">'
+            '<field name="x_rekaz_fault_no" string="بحث المعاملة" filter_domain="'
+            + domain + '"/></xpath>')
+
+
+def install_task_transaction_search(api, task_model_id):
+    search_parent = api.find(
+        'ir.model.data',
+        [('module', '=', 'project'), ('name', '=', 'view_task_search_form_base')],
+        ['res_id'])
+    project_root = api.find(
+        'ir.model.data',
+        [('module', '=', 'project'), ('name', '=', 'menu_main_pm')],
+        ['res_id'])
+    if len(search_parent) != 1 or len(project_root) != 1:
+        raise ValueError('Project task search view or menu is missing')
+    search_view_id = claims.upsert(
+        api, 'ir.ui.view',
+        [('name', '=', 'Rekaz transaction search'), ('model', '=', 'project.task')],
+        {'name': 'Rekaz transaction search', 'model': 'project.task', 'type': 'search',
+         'inherit_id': search_parent[0]['res_id'], 'arch_db': task_transaction_search_arch()})
+    action_name = 'بحث معاملات ركاز'
+    action_id = claims.upsert(
+        api, 'ir.actions.act_window',
+        [('name', '=', action_name), ('res_model', '=', 'project.task')],
+        {'name': action_name, 'res_model': 'project.task', 'view_mode': 'list,form',
+         'search_view_id': search_view_id,
+         'domain': "[('company_id','in',allowed_company_ids)]"})
+    claims.upsert(
+        api, 'ir.ui.menu',
+        [('name', '=', action_name), ('parent_id', '=', project_root[0]['res_id'])],
+        {'name': action_name, 'parent_id': project_root[0]['res_id'],
+         'action': 'ir.actions.act_window,' + str(action_id)})
+
+
+def install_task_numbers(api, task_model_id, task_form_id):
+    field_specs = [
+        ('x_rekaz_fault_no', 'رقم العطل'),
+        ('x_rekaz_notification_no', 'رقم الإشعار'),
+        ('x_rekaz_work_order', 'رقم أمر العمل'),
+    ]
+    for name, label in field_specs:
+        inv.field(api, 'project.task', name, 'char', label)
+    page = ('<xpath expr="//notebook" position="inside"><page string="أرقام المعاملة" '
+            'name="rekaz_task_numbers"><group><field name="x_rekaz_boq_contract" string="العقد" domain="[(\'x_company_id\',\'=\',company_id)]"/><field name="x_rekaz_fault_no"/>'
+            '<field name="x_rekaz_notification_no"/><field name="x_rekaz_work_order"/>'
+            '</group><div>يتحدث عنوان المعاملة تلقائيًا عند تعديل رقم العطل أو الإشعار أو أمر العمل.</div>'
+            '</page></xpath>')
+    claims.upsert(api, 'ir.ui.view', [('name', '=', 'Rekaz task numbers form'), ('model', '=', 'project.task')],
+                  {'name': 'Rekaz task numbers form', 'model': 'project.task', 'type': 'form',
+                   'inherit_id': task_form_id, 'arch_db': page})
+    field_rows = api.call(
+        'ir.model.fields', 'search_read',
+        [[('model', '=', 'project.task'), ('name', 'in', [name for name, _label in field_specs])]],
+        fields=['id', 'name'], limit=False)
+    field_ids = [field['id'] for field in field_rows]
+    if len(field_ids) != len(field_specs):
+        raise ValueError('Could not resolve Rekaz task number trigger fields')
+    action_name = 'Rekaz task title from fault and work order ' + str(api.company_id)
+    action = claims.upsert(
+        api, 'ir.actions.server', [('name', '=', action_name), ('model_id', '=', task_model_id)],
+        {'name': action_name, 'model_id': task_model_id, 'state': 'code',
+         'code': task_name_action_code(api.company_id)})
+    claims.upsert(
+        api, 'base.automation', [('name', '=', action_name), ('model_id', '=', task_model_id)],
+        {'name': action_name, 'model_id': task_model_id, 'trigger': 'on_create_or_write', 'active': True,
+         'filter_domain': repr([('company_id', '=', api.company_id)]),
+         'trigger_field_ids': [(6, 0, field_ids)], 'action_server_ids': [(6, 0, [action])]})
+
+    number_fields = [field for field, _label in field_specs]
+    tasks = api.call(
+        'project.task', 'search_read',
+        [[('company_id', '=', api.company_id), ('x_rekaz_origin', '=like', 'reportrek:rekaz-main:%')]],
+        fields=['id', 'name', 'description'] + number_fields, limit=False)
+    for task in tasks:
+        values = projects_copy.task_numbers_from_description(task.get('description') or '')
+        for field in number_fields:
+            values[field] = str(task.get(field) or values.get(field) or '').strip()
+        title = projects_copy.formatted_task_name(values)
+        updates = {field: values[field] for field in number_fields
+                   if values[field] and values[field] != str(task.get(field) or '').strip()}
+        if title and title != task['name']:
+            updates['name'] = title
+        if updates:
+            api.call('project.task', 'write', [[task['id']], updates])
+
+
+def guard_code(company, project_ids):
+    return f'''if not env.context.get('rekaz_boq_calculating'):
+    for rec in records:
+        if rec.x_company_id.id == {company} and rec.x_task_id.project_id.id in {project_ids} and not rec.x_origin:
+            if not rec.x_task_id or not rec.x_item_id or not rec.x_contract_id:
+                raise UserError('اختر المعاملة والعقد والبند.')
+            item = rec.x_item_id
+            if rec.x_task_id.company_id != rec.x_company_id or item.x_company_id != rec.x_company_id or item.x_contract_id != rec.x_contract_id:
+                raise UserError('العقد والبند والمعاملة لا تتطابق مع الشركة.')
+            if not item.x_billable:
+                raise UserError('هذا عنوان وصفي وليس بنداً قابلاً للاحتساب.')
+            if not (rec.x_qty > 0) or rec.x_qty == float('inf'):
+                raise UserError('أدخل كمية صحيحة أكبر من صفر.')
+            classification = rec.x_task_id.x_rekaz_boq_class
+            if classification not in ['اعتيادي', 'طوارئ'] or rec.x_kind not in ['تنفيذ', 'حصر']:
+                raise UserError('حدد تصنيف المعاملة: اعتيادي أو طوارئ، ونوع الكمية.')
+            ratio = 0.45 if classification == 'طوارئ' else 0.0
+            price = item.x_price
+            total = rec.x_company_id.currency_id.round(rec.x_qty * price * (1 + ratio))
+            rec.with_context(rekaz_boq_calculating=True).write({{'x_price': price, 'x_total': total, 'x_unit': item.x_unit, 'x_name': item.x_name, 'x_ratio': ratio, 'x_work_class': classification}})
+            if rec.x_task_id.x_rekaz_claim_no:
+                rec.x_task_id.write({{'x_rekaz_claim_amount': rec.x_task_id.x_rekaz_boq_total}})
+'''
+
+
+def install(api):
+    project_ids = project_scope(api)
+    groupspec = {
+        CONTRACT: [('x_number','char','رقم العقد',{}),('x_party','char','الجهة',{})],
+        ITEM: [('x_code','char','رقم البند',{}),('x_contract_id','many2one','العقد',{'relation':CONTRACT}),
+               ('x_description','text','التوصيف',{}),('x_unit','char','الوحدة',{}),('x_price','float','السعر الأساسي',{}),
+               ('x_billable','boolean','بند مسعّر',{}),('x_category','char','التصنيف',{}),('x_file','char','ملف البنود',{})],
+        LINE: [('x_task_id','many2one','المعاملة',{'relation':'project.task','required':True}),
+               ('x_contract_id','many2one','العقد',{'relation':CONTRACT,'required':True}),
+               ('x_item_id','many2one','البند',{'relation':ITEM,'required':True}),('x_kind','char','النوع: تنفيذ / حصر',{}),
+               ('x_qty','float','الكمية',{}),('x_unit','char','الوحدة',{}),('x_price','float','سعر الوحدة',{}),
+               ('x_work_class','char','اعتيادي / طوارئ',{}),('x_ratio','float','نسبة زيادة الطوارئ',{}),
+               ('x_total','float','القيمة النهائية',{}),('x_notes','text','ملاحظات',{})]}
+    mids={}
+    for technical,label in [(CONTRACT,'عقود ركاز'),(ITEM,'دليل بنود العقد'),(LINE,'كميات وبنود معاملات ركاز')]:
+        mids[technical]=model(api,technical,label)
+        for name,kind,title,extra in [('x_company_id','many2one','الشركة',{'relation':'res.company','required':True}),
+                                      ('x_origin','char','هوية المصدر',{'index':True}),('x_import_hash','char','بصمة النقل',{})]+groupspec[technical]:
+            inv.field(api,technical,name,kind,title,**extra)
+        access(api,mids[technical],technical==LINE,technical in (CONTRACT,ITEM))
+    inv.field(api,'project.task','x_rekaz_boq_class','selection','تصنيف المعاملة',selection_ids=[(0,0,{'value':'اعتيادي','name':'اعتيادي — بدون زيادة'}),(0,0,{'value':'طوارئ','name':'طوارئ — زيادة 45%'})])
+    inv.field(api,'project.task','x_rekaz_boq_contract','many2one','عقد الكميات',relation=CONTRACT)
+    inv.field(api,'project.task','x_rekaz_boq_lines','one2many','بنود العقد والكميات',relation=LINE,relation_field='x_task_id')
+    inv.field(api,'project.task','x_rekaz_boq_total','float','إجمالي بنود التنفيذ',
+              compute="for rec in self:\n    total = 0.0\n    for line in rec.x_rekaz_boq_lines:\n        if line.x_kind == 'تنفيذ':\n            total += line.x_total or 0.0\n    rec['x_rekaz_boq_total'] = total",depends='x_rekaz_boq_lines.x_total,x_rekaz_boq_lines.x_kind',store=True,readonly=True)
+    inv.field(api,'project.task',DETAILS_VISIBLE_FIELD,'boolean','إظهار تفاصيل المعاملة',
+              compute=details_visibility_compute(),depends='stage_id.name',store=True,readonly=True)
+    parent=api.find('ir.model.data',[('module','=','project'),('name','=','view_task_form2')],['res_id'])
+    if len(parent)!=1:raise ValueError('Project task form missing')
+    task_model = api.find('ir.model', [('model', '=', 'project.task')], ['id'])
+    if len(task_model) != 1:raise ValueError('Project task model missing')
+    install_task_numbers(api,task_model[0]['id'],parent[0]['res_id'])
+    install_task_transaction_search(api,task_model[0]['id'])
+    claims.upsert(api,'ir.ui.view',[('name','=','Rekaz contract quantities task'),('model','=','project.task')],
+                  {'name':'Rekaz contract quantities task','model':'project.task','type':'form','inherit_id':parent[0]['res_id'],'arch_db':task_boq_view_arch()})
+    form='''<form delete="0"><sheet><group><field name="x_origin" readonly="1"/><field name="x_company_id"/><field name="x_task_id"/><field name="x_contract_id"/><field name="x_item_id" domain="[('x_contract_id','=',x_contract_id),('x_company_id','=',x_company_id),('x_billable','=',True)]"/><field name="x_kind"/><field name="x_qty"/><field name="x_work_class"/><field name="x_ratio"/><field name="x_unit" readonly="1"/><field name="x_price" readonly="1"/><field name="x_total" readonly="1"/><field name="x_notes"/></group></sheet></form>'''
+    claims.upsert(api,'ir.ui.view',[('name','=','Rekaz quantity line form'),('model','=',LINE)],{'name':'Rekaz quantity line form','model':LINE,'type':'form','arch_db':form})
+    name='Rekaz contract quantity pricing '+str(api.company_id)
+    aid=claims.upsert(api,'ir.actions.server',[('name','=',name),('model_id','=',mids[LINE])],
+                      {'name':name,'model_id':mids[LINE],'state':'code','code':guard_code(api.company_id, project_ids)})
+    claims.upsert(api,'base.automation',[('name','=',name),('model_id','=',mids[LINE])],
+                  {'name':name,'model_id':mids[LINE],'trigger':'on_create_or_write','active':True,
+                   'filter_domain':repr([('x_company_id','=',api.company_id),('x_task_id.project_id','in',project_ids)]),
+                   'action_server_ids':[(6,0,[aid])]})
+    root=api.find('ir.model.data',[('module','=','project'),('name','=','menu_main_pm')],['res_id'])
+    if len(root)!=1:raise ValueError('Projects application menu missing')
+    for technical,label,columns in [(CONTRACT,'عقود ركاز',['x_number','x_name','x_party']),
+                                    (ITEM,'دليل بنود العقد',['x_code','x_name','x_contract_id','x_unit','x_price','x_billable']),
+                                    (LINE,'كميات معاملات ركاز',['x_task_id','x_contract_id','x_item_id','x_kind','x_qty','x_price','x_total'])]:
+        arch='<list delete="0">'+''.join('<field name="'+x+'"/>' for x in columns)+'</list>'
+        claims.upsert(api,'ir.ui.view',[('name','=','Rekaz boq list '+technical),('model','=',technical)],{'name':'Rekaz boq list '+technical,'model':technical,'type':'list','arch_db':arch})
+        action=claims.upsert(api,'ir.actions.act_window',[('name','=',label),('res_model','=',technical)],
+                             {'name':label,'res_model':technical,'view_mode':'list,form','domain':"[('x_company_id','in',allowed_company_ids)]"})
+        claims.upsert(api,'ir.ui.menu',[('name','=',label),('parent_id','=',root[0]['res_id'])],
+                      {'name':label,'parent_id':root[0]['res_id'],'action':'ir.actions.act_window,'+str(action)})
+    install_workflow_print(api, project_ids)
+    print('Contract BOQ schema and quantity pricing installed; no accounting or inventory posted.',flush=True)
+
+
+def save(api,technical,key,values,report):
+    values=dict(values,x_company_id=api.company_id,x_origin=key)
+    digest=hashlib.sha256(json.dumps(values,sort_keys=True,ensure_ascii=False).encode()).hexdigest()
+    found=api.find(technical,[('x_company_id','=',api.company_id),('x_origin','=',key)],['id','x_import_hash']+list(values))
+    if len(found)>1:raise ValueError('Duplicate BOQ source identity: '+key)
+    if found:
+        actual={k:(found[0].get(k)[0] if isinstance(found[0].get(k),list) else found[0].get(k)) for k in values}
+        if not all(sync.equivalent(actual[k],v) for k,v in values.items()):
+            report['review'].append({'source':key,'reason':'existing_record_differs'});return None
+        report['existing']+=1;return found[0]['id']
+    record=api.call(technical,'create',[dict(values,x_import_hash=digest)])
+    report['created']+=1;return record
+
+
+def copy(api,source):
+    report={'mode':'contract_boq_copy','created':0,'existing':0,'review':[]}
+    with sync.m.snapshot(source) as conn:
+        contracts=list(conn.execute('SELECT * FROM contracts ORDER BY id'))
+        if len(contracts)!=1:raise ValueError('Explicit contract/file mapping required for multiple source contracts')
+        contract=dict(contracts[0]);cid=save(api,CONTRACT,'contracts:'+str(contract['id']),{'x_name':contract['contract_name'] or contract['contract_no'],'x_number':contract['contract_no'],'x_party':contract['party'] or ''},report)
+        if not cid:raise ValueError('Contract changed in Odoo; review before importing lines')
+        report['contract_mapping']='single source contract; review before using prices'
+        items={}
+        for raw in conn.execute('SELECT b.*, f.filename FROM contract_boq_items b LEFT JOIN contract_boq_files f ON f.id=b.file_id ORDER BY b.id'):
+            row=dict(raw); iid=save(api,ITEM,'contract_boq_items:'+str(row['id']),{'x_name':row['item_no']+' — '+(row['short_desc'] or row['description'] or '')[:180],
+                'x_code':row['item_no'],'x_contract_id':cid,'x_description':row['long_desc'] or row['description'] or '',
+                'x_unit':row['unit'] or '', 'x_price':row['unit_price'] or 0.0,'x_billable':row['line_type']=='Breakdown' and row['unit_price'] is not None and bool(row['unit']),
+                'x_category':row['category'] or '', 'x_file':row['filename'] or ''},report)
+            items.setdefault((row['file_id'],row['item_no']),[]).append(iid)
+            if row['id']%20==0:print('BOQ catalogue: '+str(row['id']),flush=True)
+        tasks=api.call('project.task','search_read',[[('company_id','=',api.company_id),('x_rekaz_origin','=like','reportrek:rekaz-main:%')]],fields=['x_rekaz_origin'],limit=False)
+        exact={r['x_rekaz_origin']:r['id'] for r in tasks};index=inv.task_index(conn,api)
+        for table in ['ticket_boq_lines','transaction_boq_lines','quantities']:
+            for raw in conn.execute('SELECT * FROM '+table+' ORDER BY id'):
+                row=dict(raw);task=None
+                if table=='ticket_boq_lines': task=exact.get('reportrek:rekaz-main:tickets:['+str(row['ticket_id'])+']')
+                elif table=='transaction_boq_lines':task=exact.get('reportrek:rekaz-main:'+row['module_name']+':['+str(row['record_id'])+']')
+                else:
+                    match=inv.match_task(row,index);task=match['id'] if match else None
+                possible=items.get((row.get('file_id'),row['item_no']),[]) if row.get('file_id') else [iid for (fid,code),ids in items.items() if code==row['item_no'] for iid in ids]
+                if not task or len(possible)!=1 or not possible[0]:
+                    report['review'].append({'source':table+':'+str(row['id']),'reason':'task_or_item_mapping_unresolved'});continue
+                qty=float(row['qty'] or 0);price=float(row['unit_price'] or 0);ratio=float(row.get('increase_ratio') or 0)
+                total=row.get('final_total') if row.get('final_total') is not None else qty*price
+                save(api,LINE,table+':'+str(row['id']),{'x_name':row['item_no'],'x_task_id':task,'x_contract_id':cid,'x_item_id':possible[0],
+                     'x_kind':'حصر' if table=='quantities' else 'تنفيذ','x_qty':qty,'x_unit':row['unit'] or '', 'x_price':price,
+                     'x_work_class':row.get('work_class') or 'اعتيادي','x_ratio':ratio,'x_total':total,'x_notes':row.get('notes') or ''},report)
+            print('BOQ lines finished: '+table,flush=True)
+    sync.m.save_report(Path(__file__).resolve().parents[1]/'outputs/reportrek_boq_report.json',report)
+    print(sync.m.dump(report));return 2 if report['review'] else 0
+
+
+def install_workflow_print(api, project_ids):
+    task=api.find('ir.model',[('model','=','project.task')],['id'])[0]['id']
+    fields=api.call('project.task','fields_get',[],attributes=['type'])
+    if 'x_rekaz_claim_amount' in fields:
+        claim_action_name = 'Rekaz native claim guard company ' + str(api.company_id)
+        claim_actions = api.find('ir.actions.server', [('name','=',claim_action_name), ('model_id','=',task)], ['id'])
+        if len(claim_actions) != 1:
+            raise ValueError('Install the unique native claims guard before linking BOQ amounts')
+        financial_stages = api.call('project.task.type','search_read',[[('name','in',['المستخلصات','المالية','المستخلصات والمالية'])]],fields=['id'],limit=False)
+        api.call('ir.actions.server','write',[[claim_actions[0]['id']],{'code':claims.claim_code(api.company_id,[s['id'] for s in financial_stages],project_ids)}])
+    requested='rec.x_rekaz_claim_submit' if 'x_rekaz_claim_submit' in fields else 'False'
+    code=f'''for rec in records:
+    if rec.company_id.id == {api.company_id} and rec.project_id.id in {project_ids}:
+        stages = rec.project_id.type_ids.sorted('sequence')
+        advancing = stages and rec.stage_id != stages[:1]
+        if advancing or {requested}:
+            lines = rec.x_rekaz_boq_lines.filtered(lambda line: line.x_kind == 'تنفيذ')
+            if not rec.x_rekaz_boq_class or not rec.x_rekaz_boq_contract or not lines:
+                raise UserError('لا يمكن الترحيل: حدد العقد والتصنيف وأضف بنود التنفيذ والكميات أولاً.')
+            for line in lines:
+                if not line.x_item_id or not line.x_item_id.x_billable or not (line.x_qty > 0) or line.x_contract_id != rec.x_rekaz_boq_contract:
+                    raise UserError('لا يمكن الترحيل: توجد بنود ناقصة أو بعقد مختلف أو كمية غير صحيحة.')
+'''
+    name='Rekaz mandatory BOQ before transition '+str(api.company_id)
+    action=claims.upsert(api,'ir.actions.server',[('name','=',name),('model_id','=',task)],{'name':name,'model_id':task,'state':'code','code':code})
+    trigger_names=['stage_id']+(['x_rekaz_claim_submit'] if 'x_rekaz_claim_submit' in fields else [])
+    trigger_fields=api.call('ir.model.fields','search_read',[[('model','=','project.task'),('name','in',trigger_names)]],fields=['id'],limit=False)
+    claims.upsert(api,'base.automation',[('name','=',name),('model_id','=',task)],
+                  {'name':name,'model_id':task,'trigger':'on_create_or_write','active':True,
+                   'filter_domain':project_scope_domain(api.company_id, project_ids),
+                   'trigger_field_ids':[(6,0,[r['id'] for r in trigger_fields])],'action_server_ids':[(6,0,[action])]})
+    classification_name='Rekaz BOQ classification pricing '+str(api.company_id)
+    classification_code=f'''for rec in records:
+    if rec.company_id.id == {api.company_id} and rec.project_id.id in {project_ids} and rec.x_rekaz_boq_class:
+        for line in rec.x_rekaz_boq_lines:
+            if not line.x_origin:
+                line.write({{'x_work_class':rec.x_rekaz_boq_class}})
+'''
+    classification_action=claims.upsert(api,'ir.actions.server',[('name','=',classification_name),('model_id','=',task)],
+                                         {'name':classification_name,'model_id':task,'state':'code','code':classification_code})
+    classification_field=api.find('ir.model.fields',[('model','=','project.task'),('name','=','x_rekaz_boq_class')],['id'])
+    claims.upsert(api,'base.automation',[('name','=',classification_name),('model_id','=',task)],
+                  {'name':classification_name,'model_id':task,'trigger':'on_create_or_write','active':True,
+                   'filter_domain':project_scope_domain(api.company_id, project_ids),
+                   'trigger_field_ids':[(6,0,[classification_field[0]['id']])],
+                   'action_server_ids':[(6,0,[classification_action])]})
+    key='rekaz_boq.transaction_archive'
+    arch='''<t t-name="rekaz_boq.transaction_archive"><t t-call="web.html_container"><t t-foreach="docs" t-as="o"><t t-call="web.external_layout"><div class="page" dir="rtl" style="font-size:14px;"><h2>أرشيف المعاملة وبنود العقد</h2><h3 t-field="o.name"/><p>المشروع: <span t-field="o.project_id.name"/> — العقد: <span t-field="o.x_rekaz_boq_contract.x_number"/> — التصنيف: <span t-field="o.x_rekaz_boq_class"/></p><table class="table table-sm"><thead><tr><th>كود البند</th><th style="width:45%;">الوصف</th><th>النوع</th><th>الوحدة</th><th>الكمية</th><th>السعر الأساسي</th><th>الزيادة</th><th>القيمة</th></tr></thead><tbody><tr t-foreach="o.x_rekaz_boq_lines" t-as="line"><td><span t-field="line.x_item_id.x_code"/></td><td><span t-field="line.x_item_id.x_description"/></td><td><span t-field="line.x_kind"/></td><td><span t-field="line.x_unit"/></td><td><span t-field="line.x_qty"/></td><td><span t-field="line.x_price"/></td><td><span t-out="'%.0f' % (line.x_ratio * 100)"/>%</td><td><span t-field="line.x_total"/></td></tr></tbody></table><p>إجمالي التنفيذ فقط: <strong t-field="o.x_rekaz_boq_total"/> <span t-field="o.company_id.currency_id.name"/></p><p>حصر الكميات معروض للتوثيق ولا يدخل مرة ثانية في إجمالي التنفيذ. القيم قبل أي ضريبة غير مضافة في السجلات.</p><p>إعداد: __________________ اعتماد: __________________ تاريخ: __________________</p></div></t></t></t></t>'''
+    claims.upsert(api,'ir.ui.view',[('key','=',key)],{'name':'Rekaz transaction print','key':key,'type':'qweb','arch_db':arch})
+    report=claims.upsert(api,'ir.actions.report',[('report_name','=',key),('model','=','project.task')],
+                         report_action_values(key))
+    parent=api.find('ir.model.data',[('module','=','project'),('name','=','view_task_form2')],['res_id'])[0]['res_id']
+    claims.upsert(api,'ir.ui.view',[('name','=','Rekaz task print button'),('model','=','project.task')],
+                  {'name':'Rekaz task print button','model':'project.task','type':'form','inherit_id':parent,
+                   'arch_db':'<xpath expr="//header" position="inside"><button name="'+str(report)+'" type="action" string="طباعة المعاملة" invisible="not '+DETAILS_VISIBLE_FIELD+'"/></xpath>'})
+    claims.upsert(api,'ir.ui.view',[('name','=','Rekaz task claim form'),('model','=','project.task')],
+                  {'name':'Rekaz task claim form','model':'project.task','type':'form','inherit_id':parent,
+                   'arch_db':claims.claim_page_arch(details_visibility=True, auto_amount=True)})
