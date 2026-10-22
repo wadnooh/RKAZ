@@ -592,8 +592,8 @@
       <a class="btn ghost" href="{{ url_for('module_list', name='invoices', ticket_no=ticket.ticket_no) }}" target="_blank">{{ _('فتح شاشة المتابعات المالية') }}</a>
       {% endif %}
       {% if can('tickets.write') and can('modules.write') %}
-      <form method="post" action="{{ url_for('sync_financial', ticket_id=ticket.id) }}" style="display:inline;margin:0;">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <form method="post" action="{{ url_for('tickets.sync_financial', ticket_id=ticket.id) }}" style="display:inline;margin:0;">
+        <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
         <button class="btn primary" type="submit" title="{{ _('تحديث ونقل فوري لجدول المتابعات المالية') }}">⚡ {{ _('نقل وتحديث في المتابعات المالية') }}</button>
       </form>
       {% endif %}
@@ -637,8 +637,8 @@
           <td colspan="9" class="meta" style="padding:16px;text-align:center;">
             {% if ticket.invoice_id or ticket.invoice_no %}
               {{ _('يوجد رقم مستخلص للمعاملة (') }}{{ ticket.invoice_id or ticket.invoice_no }}{{ _(') لكن السجل لم يُنشأ بعد في جدول المالية.') }}
-              <form method="post" action="{{ url_for('sync_financial', ticket_id=ticket.id) }}" style="display:inline-block;margin-inline-start:8px;">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <form method="post" action="{{ url_for('tickets.sync_financial', ticket_id=ticket.id) }}" style="display:inline-block;margin-inline-start:8px;">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token() }}">
                 <button class="btn primary sm" type="submit">{{ _('اضغط هنا للنقل والربط التلقائي فوراً') }}</button>
               </form>
             {% else %}

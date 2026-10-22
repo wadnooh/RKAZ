@@ -230,6 +230,8 @@ def _register_legacy_ticket_endpoints() -> None:
         ("ticket_delete", "/tickets/<int:ticket_id>/delete", "tickets.delete", ["POST"]),
         ("ticket_boq_add", "/tickets/<int:ticket_id>/boq/add", "tickets.boq_add", ["POST"]),
         ("ticket_boq_delete", "/tickets/<int:ticket_id>/boq/<int:line_id>/delete", "tickets.boq_delete", ["POST"]),
+        ("sync_financial", "/tickets/<int:ticket_id>/sync-financial", "tickets.sync_financial", ["POST"]),
+        ("ticket_sync_financial", "/tickets/<int:ticket_id>/sync-financial", "tickets.sync_financial", ["POST"]),
         ("export_tickets_excel", "/tickets/export.xlsx", "tickets.export_excel", ["GET"]),
     ]
     for endpoint, rule, target, methods in aliases:
